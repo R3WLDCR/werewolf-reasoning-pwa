@@ -1662,8 +1662,8 @@ select:disabled {
 
   #reasoningView .player-row {
     width: max-content;
-    min-width: 1000px;
-    grid-template-columns: 116px max-content 56px 110px 76px 38px;
+    min-width: 850px;
+    grid-template-columns: 100px max-content 56px 110px 76px 38px;
     gap: 4px;
     min-height: 50px;
     padding: 3px 5px 3px 0;
@@ -1674,7 +1674,7 @@ select:disabled {
     left: 0;
     z-index: 5;
     display: block;
-    width: 116px;
+    width: 100px;
     height: 44px;
     padding: 0 8px 0 10px;
     border-right: 1px solid var(--line);
@@ -1701,13 +1701,13 @@ select:disabled {
 
   #reasoningView .player-info {
     width: max-content;
-    grid-template-columns: 280px max-content;
-    gap: 4px;
+    grid-template-columns: max-content max-content;
+    gap: 2px;
     min-height: 42px;
   }
 
   #reasoningView .player-main {
-    grid-template-columns: 175px;
+    grid-template-columns: max-content;
     align-items: center;
     gap: 4px;
   }
