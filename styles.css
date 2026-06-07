@@ -83,6 +83,11 @@ button {
   color: #8ff0b5;
 }
 
+.game-status-badge.finished {
+  background: #3b321c;
+  color: #ffd38b;
+}
+
 .kicker {
   margin: 0 0 3px;
   color: var(--accent-strong);
@@ -547,7 +552,8 @@ select:disabled {
   flex: 1 1 auto;
 }
 
-.role-guess-label {
+.role-guess-label,
+.true-role-label {
   flex: 0 0 auto;
   display: inline-grid;
   place-items: center;
@@ -558,6 +564,11 @@ select:disabled {
   font-weight: 900;
   line-height: 1;
   white-space: nowrap;
+}
+
+.true-role-label {
+  outline: 2px solid #eef6f4;
+  outline-offset: 1px;
 }
 
 .impression-label {
@@ -1590,6 +1601,90 @@ select:disabled {
     width: 100%;
   }
 
+  #reasoningView .table-panel {
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+  }
+
+  #reasoningView .player-rows {
+    width: max-content;
+    min-width: 100%;
+  }
+
+  #reasoningView .player-row {
+    width: max-content;
+    min-width: 880px;
+    grid-template-columns: 610px 58px 78px 40px;
+    gap: 5px;
+    min-height: 58px;
+    padding: 5px 6px 5px 10px;
+  }
+
+  #reasoningView .player-info {
+    grid-template-columns: 250px 355px;
+    gap: 5px;
+    min-height: 46px;
+  }
+
+  #reasoningView .player-main {
+    grid-template-columns: minmax(0, 1fr) 100px;
+    align-items: center;
+    gap: 5px;
+  }
+
+  #reasoningView .player-name-row {
+    flex-wrap: nowrap;
+    gap: 5px;
+  }
+
+  #reasoningView .player-name {
+    font-size: 0.92rem;
+  }
+
+  #reasoningView .role-guess-label,
+  #reasoningView .true-role-label {
+    min-height: 30px;
+    padding: 5px 8px;
+    font-size: 0.75rem;
+  }
+
+  #reasoningView .player-sub {
+    font-size: 0.7rem;
+  }
+
+  #reasoningView .seer-grid {
+    grid-column: auto;
+    height: 42px;
+    grid-template-columns: repeat(var(--seer-columns), minmax(105px, 1fr));
+    gap: 4px;
+    padding: 4px 5px;
+    overflow: hidden;
+  }
+
+  #reasoningView .seer-result-label {
+    min-height: 32px;
+    padding: 5px 7px;
+    font-size: 0.78rem;
+  }
+
+  #reasoningView .impression-button,
+  #reasoningView .status-button {
+    min-height: 34px;
+    padding: 4px;
+    font-size: 0.68rem;
+  }
+
+  #reasoningView .order-actions {
+    gap: 3px;
+  }
+
+  #reasoningView .order-button {
+    width: 34px;
+    height: 25px;
+    font-size: 0.82rem;
+  }
+
   .history-meta-grid,
   .history-player-edit,
   .history-result-edit {
@@ -1625,7 +1720,7 @@ select:disabled {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .player-name-row {
+  .participant-row .player-name-row {
     flex-wrap: wrap;
   }
 

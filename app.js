@@ -107,6 +107,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "startGameBtn",
     "returnSetupBtn",
     "finishGameBtn",
+    "nextGameBtn",
     "participantsView",
     "reasoningView",
     "exportView",
@@ -260,18 +261,18 @@ function bindEvents() {
   els.addTournamentBtn.addEventListener("click", addTournament);
   els.renameTournamentBtn.addEventListener("click", renameSelectedTournament);
   els.eventDateInput.addEventListener("change", () => {
-    if (isGameInProgress()) return render();
+    if (isGameLocked()) return render();
     state.eventDate = normalizeDateValue(els.eventDateInput.value);
     renderAndStore();
   });
   els.openDatePickerBtn.addEventListener("click", openDatePicker);
   els.clearDateBtn.addEventListener("click", () => {
-    if (isGameInProgress()) return toast("進行中は開催日を変更できません");
+    if (isGameLocked()) return toast("進行中・終了済みは開催日を変更できません");
     state.eventDate = "";
     renderAndStore();
   });
   els.gameNumberInput.addEventListener("change", () => {
-    if (isGameInProgress()) return render();
+    if (isGameLocked()) return render();
     state.gameNumber = normalizeGameNumber(els.gameNumberInput.value);
     renderAndStore();
   });
@@ -280,13 +281,14 @@ function bindEvents() {
     addPlayer();
   });
   els.wolfCountSelect.addEventListener("change", () => {
-    if (isGameInProgress()) return render();
+    if (isGameLocked()) return render();
     state.wolfCount = normalizeWolfCount(els.wolfCountSelect.value);
     renderAndStore();
   });
   els.startGameBtn.addEventListener("click", startGame);
   els.returnSetupBtn.addEventListener("click", returnToSetup);
   els.finishGameBtn.addEventListener("click", openFinishGameDialog);
+  els.nextGameBtn.addEventListener("click", prepareNextGame);
   els.copyExportBtn.addEventListener("click", copyExport);
   els.closeHistoryDetailBtn.addEventListener("click", closeHistoryDetail);
   els.editHistoryBtn.addEventListener("click", openHistoryEditDialog);
@@ -391,7 +393,7 @@ function openDatePicker() {
 }
 
 function addTournament() {
-  if (isGameInProgress()) return toast("進行中は大会を追加できません");
+  if (isGameLocked()) return toast("進行中・終了済みは大会を追加できません");
   const name = prompt("追加する大会名");
   if (!name?.trim()) return;
   const tournament = { id: crypto.randomUUID(), name: name.trim() };
@@ -400,7 +402,7 @@ function addTournament() {
 }
 
 function renameSelectedTournament() {
-  if (isGameInProgress()) return toast("進行中は大会名を変更できません");
+  if (isGameLocked()) return toast("進行中・終了済みは大会名を変更できません");
   const tournament = getSelectedTournament();
   if (!tournament) return;
   const name = prompt("大会名を変更", tournament.name);
@@ -414,7 +416,7 @@ function renameSelectedTournament() {
 function switchTournament(tournamentId, { skipConfirm = false } = {}) {
   if (!state.tournaments.some((tournament) => tournament.id === tournamentId)) return;
   if (tournamentId === state.selectedTournamentId) return;
-  if (isGameInProgress()) {
+  if (isGameLocked()) {
     render();
     toast("ゲーム終了または準備へ戻ってから大会を切り替えてください");
     return;
@@ -435,7 +437,7 @@ function switchTournament(tournamentId, { skipConfirm = false } = {}) {
 }
 
 function addPlayer() {
-  if (isGameInProgress()) return toast("進行中は参加者を変更できません");
+  if (isGameLocked()) return toast("進行中・終了済みは参加者を変更できません");
   const name = els.playerNameInput.value.trim();
   if (!name) return;
   const existing = state.players.find((player) => player.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase());
@@ -486,7 +488,7 @@ function startGame() {
 }
 
 function autoStartGameFromBoardInput() {
-  if (isGameInProgress() || !hasBoardProgress()) return false;
+  if (state.gameStatus !== "preparing" || !hasBoardProgress()) return false;
   const activeCount = getActivePlayers().length;
   if (!activeCount || !state.wolfCount || state.wolfCount >= activeCount) return false;
   state.gameStatus = "in_progress";
@@ -531,21 +533,34 @@ function closeFinishGameDialog() {
 }
 
 function finishGame() {
+  if (!isGameInProgress()) return;
   const selectedWinner = els.winnerSelect.value;
   const winner = selectedWinner === "その他" ? els.otherWinnerInput.value.trim() : selectedWinner;
   if (!winner) return toast("勝利陣営を選んでください");
   const trueRoles = getFinishTrueRoles();
   if (!trueRoles) return toast("参加者全員の真の役職を選んでください");
-  state.gameHistories.unshift(createGameHistory(winner, trueRoles));
+  const history = createGameHistory(winner, trueRoles);
+  state.gameHistories.unshift(history);
+  state.players.forEach((player) => {
+    player.trueRole = trueRoles.get(player.id) || "";
+  });
+  state.gameStatus = "finished";
+  state.activeView = "reasoning";
+  selectedHistoryId = state.gameHistories[0].id;
+  closeFinishGameDialog();
+  renderAndStore();
+  toast("ゲームを終了して盤面を保存しました");
+}
+
+function prepareNextGame() {
+  if (!isGameFinished() || !confirm("終了済み盤面を初期化して次試合の準備へ進みますか？")) return;
   state.gameStatus = "preparing";
   state.startedAt = "";
   state.gameNumber = normalizeGameNumber(state.gameNumber + 1);
   resetBoardState();
-  state.activeView = "export";
-  selectedHistoryId = state.gameHistories[0].id;
-  closeFinishGameDialog();
+  state.activeView = "participants";
   renderAndStore();
-  toast("ゲームを履歴へ保存しました");
+  toast("次試合の準備へ進みました");
 }
 
 function renderFinishTrueRoleFields() {
@@ -626,7 +641,7 @@ function applySelectedTournamentParticipation() {
 }
 
 function openMembershipDialog(playerId) {
-  if (isGameInProgress()) return toast("進行中は所属大会を変更できません");
+  if (isGameLocked()) return toast("進行中・終了済みは所属大会を変更できません");
   const player = findPlayer(playerId);
   if (!player) return;
   membershipPlayerId = playerId;
@@ -668,6 +683,7 @@ function saveMemberships() {
 }
 
 function openImpressionDialog(playerId) {
+  if (isGameFinished()) return toast("終了済み盤面は編集できません");
   const player = findPlayer(playerId);
   if (!player) return;
   impressionPlayerId = playerId;
@@ -791,6 +807,7 @@ function deleteCustomImpressionReason(reasonId) {
 }
 
 function openRoleGuessDialog(playerId) {
+  if (isGameFinished()) return toast("終了済み盤面は編集できません");
   const player = findPlayer(playerId);
   if (!player) return;
   roleGuessPlayerId = playerId;
@@ -891,6 +908,7 @@ function normalizePrimaryRoleGuess(value, candidates) {
 }
 
 function openEditDialog(playerId, seerId = "") {
+  if (isGameFinished()) return toast("終了済み盤面は編集できません");
   const player = findPlayer(playerId);
   if (!player) return;
   editingPlayerId = playerId;
@@ -909,6 +927,7 @@ function closeEditDialog() {
 }
 
 function openStatusDialog(playerId) {
+  if (isGameFinished()) return toast("終了済み盤面は編集できません");
   const player = findPlayer(playerId);
   if (!player) return;
   statusPlayerId = playerId;
@@ -1056,11 +1075,14 @@ function renderMatchMeta() {
 
 function renderGameLifecycle() {
   const inProgress = isGameInProgress();
-  els.gameStatusBadge.textContent = inProgress ? "進行中" : "準備中";
+  const finished = isGameFinished();
+  els.gameStatusBadge.textContent = finished ? "終了済み" : inProgress ? "進行中" : "準備中";
   els.gameStatusBadge.classList.toggle("in-progress", inProgress);
-  els.startGameBtn.hidden = inProgress;
+  els.gameStatusBadge.classList.toggle("finished", finished);
+  els.startGameBtn.hidden = inProgress || finished;
   els.returnSetupBtn.hidden = !inProgress;
   els.finishGameBtn.hidden = !inProgress;
+  els.nextGameBtn.hidden = !finished;
   [
     els.tournamentSelect,
     els.addTournamentBtn,
@@ -1072,10 +1094,10 @@ function renderGameLifecycle() {
     els.addPlayerForm.querySelector('button[type="submit"]'),
     els.wolfCountSelect,
   ].forEach((element) => {
-    element.disabled = inProgress;
+    element.disabled = inProgress || finished;
   });
   document.querySelectorAll("[data-roster-filter]").forEach((button) => {
-    button.disabled = inProgress;
+    button.disabled = inProgress || finished;
   });
 }
 
@@ -1162,7 +1184,7 @@ function renderParticipantRows() {
   players.forEach((player, index) => {
     const row = document.createElement("div");
     row.className = `participant-row player-status-${player.status || "alive"} ${isParticipating(player) ? "" : "participant-resting"}`;
-    row.draggable = !isGameInProgress();
+    row.draggable = !isGameLocked();
     row.dataset.playerId = player.id;
     row.addEventListener("dragstart", handlePlayerDragStart);
     row.addEventListener("dragover", handlePlayerDragOver);
@@ -1171,7 +1193,7 @@ function renderParticipantRows() {
     row.addEventListener("dragend", handlePlayerDragEnd);
     const participationButton =
       state.rosterFilter === "tournament"
-        ? `<button class="participation-button ${isParticipating(player) ? "active" : "resting"}" type="button" ${isGameInProgress() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}の参加状態を変更">${isParticipating(player) ? "参加" : "休憩"}</button>`
+        ? `<button class="participation-button ${isParticipating(player) ? "active" : "resting"}" type="button" ${isGameLocked() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}の参加状態を変更">${isParticipating(player) ? "参加" : "休憩"}</button>`
         : '<span class="membership-count"></span>';
     row.innerHTML = `
       <button class="participant-info" type="button">
@@ -1179,8 +1201,8 @@ function renderParticipantRows() {
       </button>
       ${participationButton}
       <span class="order-actions" aria-label="${escapeHtml(player.name)}の並び替え">
-        <button class="order-button" type="button" data-direction="-1" ${index === 0 || isGameInProgress() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を上へ">↑</button>
-        <button class="order-button" type="button" data-direction="1" ${index === players.length - 1 || isGameInProgress() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を下へ">↓</button>
+        <button class="order-button" type="button" data-direction="-1" ${index === 0 || isGameLocked() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を上へ">↑</button>
+        <button class="order-button" type="button" data-direction="1" ${index === players.length - 1 || isGameLocked() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を下へ">↓</button>
       </span>
     `;
     row.querySelector(".participant-info").addEventListener("click", () => openMembershipDialog(player.id));
@@ -1204,7 +1226,7 @@ function renderRows() {
   players.forEach((player, index) => {
     const row = document.createElement("div");
     row.className = `player-row player-status-${player.status || "alive"}`;
-    row.draggable = true;
+    row.draggable = !isGameFinished();
     row.dataset.playerId = player.id;
     row.addEventListener("dragstart", handlePlayerDragStart);
     row.addEventListener("dragover", handlePlayerDragOver);
@@ -1217,21 +1239,22 @@ function renderRows() {
     const impression = getPlayerImpression(player);
     const roleGuess = getRoleGuessDisplay(player);
     row.innerHTML = `
-      <button class="player-info" type="button">
+      <button class="player-info" type="button" ${isGameFinished() ? "disabled" : ""}>
         <span class="player-main">
           <span class="player-name-row">
             <span class="player-name">${escapeHtml(player.name)}</span>
+            ${isGameFinished() && player.trueRole ? `<span class="true-role-label ${getRoleGuessClass(player.trueRole)}">${escapeHtml(ROLE_GUESS_LABELS[player.trueRole] || player.trueRole)}</span>` : ""}
             <span class="role-guess-label ${getRoleGuessClass(roleGuess.value)}">${escapeHtml(roleGuess.label)}</span>
           </span>
           <span class="player-sub">${escapeHtml(memo)}</span>
         </span>
         ${seerGrid}
       </button>
-      <button class="impression-button impression-${impression.value}" type="button" aria-label="${escapeHtml(player.name)}の要素を変更">${escapeHtml(impression.label)}</button>
-      <button class="status-button status-${escapeHtml(player.status || "alive")}" type="button" aria-label="${escapeHtml(player.name)}の状態を変更">${escapeHtml(getStatusDisplay(player))}</button>
+      <button class="impression-button impression-${impression.value}" type="button" ${isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}の要素を変更">${escapeHtml(impression.label)}</button>
+      <button class="status-button status-${escapeHtml(player.status || "alive")}" type="button" ${isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}の状態を変更">${escapeHtml(getStatusDisplay(player))}</button>
       <span class="order-actions" aria-label="${escapeHtml(player.name)}の並び替え">
-        <button class="order-button" type="button" data-direction="-1" ${index === 0 ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を上へ">↑</button>
-        <button class="order-button" type="button" data-direction="1" ${index === state.players.length - 1 ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を下へ">↓</button>
+        <button class="order-button" type="button" data-direction="-1" ${index === 0 || isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を上へ">↑</button>
+        <button class="order-button" type="button" data-direction="1" ${index === state.players.length - 1 || isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を下へ">↓</button>
       </span>
     `;
     row.querySelector(".player-info").addEventListener("click", (event) => {
@@ -1314,6 +1337,7 @@ function normalizeImpressionReason(reason) {
 }
 
 function movePlayer(playerId, direction) {
+  if (isGameFinished()) return toast("終了済み盤面は並び替えできません");
   const fromIndex = state.players.findIndex((player) => player.id === playerId);
   const toIndex = fromIndex + direction;
   if (fromIndex < 0 || toIndex < 0 || toIndex >= state.players.length) return;
@@ -1323,7 +1347,7 @@ function movePlayer(playerId, direction) {
 }
 
 function toggleParticipation(playerId) {
-  if (isGameInProgress()) return toast("進行中は参加・休憩を変更できません");
+  if (isGameLocked()) return toast("進行中・終了済みは参加・休憩を変更できません");
   const player = findPlayer(playerId);
   if (!player) return;
   player.participating = !isParticipating(player);
@@ -1334,7 +1358,7 @@ function toggleParticipation(playerId) {
 }
 
 function moveRosterPlayer(visiblePlayers, playerId, direction) {
-  if (isGameInProgress()) return toast("進行中は名簿順を変更できません");
+  if (isGameLocked()) return toast("進行中・終了済みは名簿順を変更できません");
   const fromIndex = visiblePlayers.findIndex((player) => player.id === playerId);
   const target = visiblePlayers[fromIndex + direction];
   if (fromIndex < 0 || !target) return;
@@ -1343,7 +1367,7 @@ function moveRosterPlayer(visiblePlayers, playerId, direction) {
 
 function movePlayerToPosition(fromId, toId) {
   const fromParticipantView = state.activeView === "participants";
-  if (fromParticipantView && isGameInProgress()) return toast("進行中は名簿順を変更できません");
+  if (isGameFinished() || (fromParticipantView && isGameInProgress())) return toast("進行中・終了済みは並び替えできません");
   const fromIndex = state.players.findIndex((player) => player.id === fromId);
   const toIndex = state.players.findIndex((player) => player.id === toId);
   if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
@@ -1398,6 +1422,10 @@ function getNextStatusDayForStatus(status) {
 }
 
 function handlePlayerDragStart(event) {
+  if (isGameFinished()) {
+    event.preventDefault();
+    return;
+  }
   draggedPlayerId = event.currentTarget.dataset.playerId || "";
   event.currentTarget.classList.add("dragging");
   event.dataTransfer.effectAllowed = "move";
@@ -2054,6 +2082,14 @@ function isGameInProgress() {
   return state.gameStatus === "in_progress";
 }
 
+function isGameFinished() {
+  return state.gameStatus === "finished";
+}
+
+function isGameLocked() {
+  return isGameInProgress() || isGameFinished();
+}
+
 function renderAndStore() {
   render();
   store();
@@ -2099,8 +2135,8 @@ function applySavedState(saved) {
   state.customImpressionReasons = Array.isArray(saved.customImpressionReasons)
     ? saved.customImpressionReasons.map(normalizeImpressionReason).filter((reason) => reason?.custom)
     : [];
-  state.gameStatus = saved.gameStatus === "in_progress" ? "in_progress" : "preparing";
-  state.startedAt = state.gameStatus === "in_progress" ? String(saved.startedAt || "") : "";
+  state.gameStatus = ["in_progress", "finished"].includes(saved.gameStatus) ? saved.gameStatus : "preparing";
+  state.startedAt = state.gameStatus !== "preparing" ? String(saved.startedAt || "") : "";
   state.gameHistories = Array.isArray(saved.gameHistories) ? saved.gameHistories.map(normalizeGameHistory).filter(Boolean) : [];
   migrateLegacyRoster(saved.eventName);
   backfillStatusDays();
