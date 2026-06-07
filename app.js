@@ -9,6 +9,7 @@ const ROLE_LABELS = {
   villager: "市民",
   madman: "裏切り者",
   wolfSide: "狼狂",
+  werewolf: "人狼",
   other: "その他",
   hunter: "ハンター",
   fox: "妖狐",
@@ -769,7 +770,7 @@ function renderPrimaryRoleGuessOptions(currentValue = "") {
     '<option value="">不明</option>',
     ...primaryCandidates.map((value) => `<option value="${value}">${ROLE_GUESS_LABELS[value]}</option>`),
   ].join("");
-  els.primaryRoleGuessSelect.value = primaryCandidates.includes(currentValue) ? currentValue : "";
+  els.primaryRoleGuessSelect.value = primaryCandidates.includes(currentValue) ? currentValue : primaryCandidates[0] || "";
 }
 
 function getSelectedRoleGuessCandidates() {
