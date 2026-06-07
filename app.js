@@ -167,6 +167,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "winnerSelect",
     "otherWinnerField",
     "otherWinnerInput",
+    "finishTrueRoleFields",
     "historyEditDialog",
     "historyEditForm",
     "historyEditTitle",
@@ -466,6 +467,7 @@ function addPlayer() {
     impressionReasons: [],
     roleGuessCandidates: [],
     primaryRoleGuess: "",
+    trueRole: "",
     roleClaimOrder: null,
   });
   els.playerNameInput.value = "";
@@ -483,6 +485,28 @@ function startGame() {
   toast("ゲームを開始しました");
 }
 
+function autoStartGameFromBoardInput() {
+  if (isGameInProgress() || !hasBoardProgress()) return false;
+  const activeCount = getActivePlayers().length;
+  if (!activeCount || !state.wolfCount || state.wolfCount >= activeCount) return false;
+  state.gameStatus = "in_progress";
+  state.startedAt = new Date().toISOString();
+  return true;
+}
+
+function hasBoardProgress() {
+  if (state.results.length) return true;
+  return getActivePlayers().some(
+    (player) =>
+      Boolean(player.role) ||
+      Boolean(player.memo) ||
+      isInactiveStatus(player.status) ||
+      player.impressionReasons.length > 0 ||
+      player.roleGuessCandidates.some((value) => value !== "unknown") ||
+      Boolean(player.primaryRoleGuess),
+  );
+}
+
 function returnToSetup() {
   if (!isGameInProgress()) return;
   if (!confirm("盤面を残したまま準備中へ戻りますか？")) return;
@@ -498,6 +522,7 @@ function openFinishGameDialog() {
   els.winnerSelect.value = "";
   els.otherWinnerInput.value = "";
   els.otherWinnerField.hidden = true;
+  renderFinishTrueRoleFields();
   els.finishGameDialog.showModal();
 }
 
@@ -509,7 +534,9 @@ function finishGame() {
   const selectedWinner = els.winnerSelect.value;
   const winner = selectedWinner === "その他" ? els.otherWinnerInput.value.trim() : selectedWinner;
   if (!winner) return toast("勝利陣営を選んでください");
-  state.gameHistories.unshift(createGameHistory(winner));
+  const trueRoles = getFinishTrueRoles();
+  if (!trueRoles) return toast("参加者全員の真の役職を選んでください");
+  state.gameHistories.unshift(createGameHistory(winner, trueRoles));
   state.gameStatus = "preparing";
   state.startedAt = "";
   state.gameNumber = normalizeGameNumber(state.gameNumber + 1);
@@ -521,7 +548,43 @@ function finishGame() {
   toast("ゲームを履歴へ保存しました");
 }
 
-function createGameHistory(winner) {
+function renderFinishTrueRoleFields() {
+  els.finishTrueRoleFields.innerHTML = getActivePlayers()
+    .map(
+      (player) => `
+        <label class="finish-true-role-field">
+          <span>${escapeHtml(player.name)}</span>
+          <select data-true-role-player-id="${escapeHtml(player.id)}" required>
+            <option value="">役職を選択</option>
+            ${getTrueRoleOptionsHtml(player.primaryRoleGuess)}
+          </select>
+        </label>
+      `,
+    )
+    .join("");
+}
+
+function getTrueRoleOptionsHtml(selectedRole = "") {
+  return Object.entries(ROLE_GUESS_LABELS)
+    .filter(([role]) => role !== "unknown" && role !== "wolfSide")
+    .map(([role, label]) => `<option value="${role}" ${role === selectedRole ? "selected" : ""}>${label}</option>`)
+    .join("");
+}
+
+function getFinishTrueRoles() {
+  const entries = Array.from(els.finishTrueRoleFields.querySelectorAll("[data-true-role-player-id]")).map((select) => [
+    select.dataset.trueRolePlayerId,
+    select.value,
+  ]);
+  if (entries.length !== getActivePlayers().length || entries.some(([, role]) => !role)) return null;
+  return new Map(entries);
+}
+
+function createGameHistory(winner, trueRoles = new Map()) {
+  const players = structuredClone(state.players);
+  players.forEach((player) => {
+    player.trueRole = trueRoles.get(player.id) || "";
+  });
   return {
     id: crypto.randomUUID(),
     eventName: getSelectedTournament()?.name || state.eventName || "未設定",
@@ -531,7 +594,7 @@ function createGameHistory(winner) {
     winner,
     startedAt: state.startedAt,
     finishedAt: new Date().toISOString(),
-    players: structuredClone(state.players),
+    players,
     results: structuredClone(state.results),
     selectedTournamentId: state.selectedTournamentId,
   };
@@ -548,6 +611,7 @@ function resetBoardState() {
     impressionReasons: [],
     roleGuessCandidates: [],
     primaryRoleGuess: "",
+    trueRole: "",
     roleClaimOrder: null,
   }));
   state.results = [];
@@ -697,6 +761,7 @@ function saveImpressionSelection() {
   const player = findPlayer(impressionPlayerId);
   if (!player) return;
   player.impressionReasons = impressionDraftReasons.map((reason) => ({ ...reason }));
+  autoStartGameFromBoardInput();
   closeImpressionDialog();
   renderAndStore();
   toast("印象を保存しました");
@@ -795,6 +860,7 @@ function saveRoleGuess() {
     normalizePrimaryRoleGuess(els.primaryRoleGuessSelect.value, player.roleGuessCandidates) ||
     player.roleGuessCandidates.find((value) => value !== "unknown") ||
     "";
+  autoStartGameFromBoardInput();
   closeRoleGuessDialog();
   renderAndStore();
   toast("役職推理を保存しました");
@@ -872,6 +938,7 @@ function setPlayerStatus(status) {
   } else {
     reorderPlayersForBoard();
   }
+  autoStartGameFromBoardInput();
   closeStatusDialog();
   renderAndStore();
   toast(status === "alive" ? "生存に戻しました" : `${STATUS_LABELS[status]}にしました`);
@@ -888,6 +955,7 @@ function saveEditingPlayer() {
     reorderPlayersForBoard();
   }
   saveDivinationResult({ silent: true });
+  autoStartGameFromBoardInput();
   closeEditDialog();
   renderAndStore();
   toast("保存しました");
@@ -916,6 +984,7 @@ function saveDivinationResult({ silent = false } = {}) {
       value,
     });
   }
+  autoStartGameFromBoardInput();
   if (!silent) renderAndStore();
   return true;
 }
@@ -1088,7 +1157,7 @@ function formatSyncTime(value) {
 
 function renderParticipantRows() {
   els.participantRows.innerHTML = "";
-  const players = getRosterPlayers();
+  const players = getParticipantViewPlayers();
   els.participantEmptyState.hidden = players.length > 0;
   players.forEach((player, index) => {
     const row = document.createElement("div");
@@ -1111,7 +1180,7 @@ function renderParticipantRows() {
       ${participationButton}
       <span class="order-actions" aria-label="${escapeHtml(player.name)}の並び替え">
         <button class="order-button" type="button" data-direction="-1" ${index === 0 || isGameInProgress() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を上へ">↑</button>
-        <button class="order-button" type="button" data-direction="1" ${index === state.players.length - 1 || isGameInProgress() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を下へ">↓</button>
+        <button class="order-button" type="button" data-direction="1" ${index === players.length - 1 || isGameInProgress() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を下へ">↓</button>
       </span>
     `;
     row.querySelector(".participant-info").addEventListener("click", () => openMembershipDialog(player.id));
@@ -1507,6 +1576,12 @@ function getRosterPlayers() {
   return getSelectedTournamentPlayers();
 }
 
+function getParticipantViewPlayers() {
+  const players = getRosterPlayers();
+  if (state.rosterFilter !== "tournament") return players;
+  return players.slice().sort((a, b) => Number(isParticipating(b)) - Number(isParticipating(a)));
+}
+
 function isWolfSideDisplayTarget(player) {
   if (player.role === "wolfSide") return true;
   return player.role === "seer" && getSeers().some((seer) => seer.id !== player.id);
@@ -1656,6 +1731,10 @@ function renderHistoryEditor(history) {
           <label class="history-participation"><input data-field="participating" type="checkbox" ${player.participating !== false ? "checked" : ""} /><span>参加</span></label>
           <select data-field="role" aria-label="${escapeHtml(player.name)}の役職">
             ${getRoleOptionsHtml(player.role)}
+          </select>
+          <select data-field="trueRole" aria-label="${escapeHtml(player.name)}の真の役職">
+            <option value="">真役職未設定</option>
+            ${getTrueRoleOptionsHtml(player.trueRole)}
           </select>
           <select data-field="status" aria-label="${escapeHtml(player.name)}の状態">
             ${getStatusOptionsHtml(player.status)}
@@ -1830,6 +1909,7 @@ function saveHistoryEdits() {
     player.name = row.querySelector('[data-field="name"]').value.trim() || "名無し";
     player.participating = row.querySelector('[data-field="participating"]').checked;
     player.role = row.querySelector('[data-field="role"]').value;
+    player.trueRole = row.querySelector('[data-field="trueRole"]').value;
     if (previousRole !== player.role) {
       player.roleClaimOrder = player.role ? getNextRoleClaimOrder(history.players) : null;
     }
@@ -1883,70 +1963,63 @@ function showExportFallback(text) {
 }
 
 function buildExportText() {
-  const lines = [`人狼推理ノート`, getMatchSummary(), `人狼: ${state.wolfCount}`];
+  const lines = [getMatchSummary(), `人狼: ${state.wolfCount}`];
   lines.push(`残り縄: ${getRemainingRopeCount()}`);
   lines.push("", "参加者");
   getActivePlayers().forEach((player) => {
     lines.push(`- ${player.name} / ${getStatusDisplay(player)} / ${player.role ? ROLE_LABELS[player.role] : "COなし"} / ${formatRoleGuessForExport(player)} / ${formatImpressionForExport(player)}${player.memo ? ` / ${player.memo}` : ""}`);
   });
-  const restingPlayers = getSelectedTournamentPlayers().filter((player) => !isParticipating(player));
-  if (restingPlayers.length) {
-    lines.push("", "休憩");
-    restingPlayers.forEach((player) => lines.push(`- ${player.name}`));
-  }
-  lines.push("", "占い結果");
-  if (!state.results.length) {
-    lines.push("- なし");
-  } else {
-    state.results
-      .slice()
-      .sort((a, b) => getDivinationOrder(a) - getDivinationOrder(b))
-      .forEach((result) => {
-        const seer = findPlayer(result.seerId);
-        const target = findPlayer(result.targetId);
-        if (seer && target && isParticipating(seer) && isParticipating(target)) {
-          lines.push(`- 占い${getDivinationOrder(result)} ${seer.name} -> ${target.name}: ${RESULT_LABELS[result.value]}`);
-        }
-      });
-  }
   return lines.join("\n");
 }
 
 function buildHistoryText(history) {
   const lines = [
-    "人狼推理ノート",
     `${history.eventName || "未設定"} / ${history.eventDate || "日付未選択"} / 第${history.gameNumber}試合`,
     `勝利: ${history.winner || "未設定"}`,
     `人狼: ${history.wolfCount}`,
     "",
-    "参加者",
+    "真の役職",
   ];
   getHistoryActivePlayers(history).forEach((player) => {
-    const statusLabel = STATUS_LABELS[player.status] || "生存";
-    const status = isInactiveStatus(player.status) && player.statusDay ? `${player.statusDay}日目 ${statusLabel}` : statusLabel;
-    lines.push(`- ${player.name} / ${status} / ${player.role ? ROLE_LABELS[player.role] : "COなし"} / ${formatRoleGuessForExport(player)} / ${formatImpressionForExport(player)}${player.memo ? ` / ${player.memo}` : ""}`);
+    lines.push(`- ${player.name}: ${ROLE_GUESS_LABELS[player.trueRole] || "未設定"}`);
   });
-  const resting = history.players.filter(
-    (player) => player.tournamentIds.includes(history.selectedTournamentId) && player.participating === false,
+  lines.push("", "時系列");
+  lines.push(...buildHistoryTimeline(history));
+  return lines.join("\n");
+}
+
+function buildHistoryTimeline(history) {
+  const activePlayers = getHistoryActivePlayers(history);
+  const trueSeerIds = new Set(activePlayers.filter((player) => player.trueRole === "seer").map((player) => player.id));
+  const trueResults = history.results.filter((result) => trueSeerIds.has(result.seerId));
+  const maxDay = Math.max(
+    0,
+    ...trueResults.map(getDivinationOrder),
+    ...activePlayers.filter((player) => isInactiveStatus(player.status)).map((player) => Number(player.statusDay) || 1),
   );
-  if (resting.length) {
-    lines.push("", "休憩");
-    resting.forEach((player) => lines.push(`- ${player.name}`));
-  }
-  lines.push("", "占い結果");
-  if (!history.results.length) {
-    lines.push("- なし");
-  } else {
-    history.results
-      .slice()
-      .sort((a, b) => getDivinationOrder(a) - getDivinationOrder(b))
+  if (!maxDay) return ["- 出来事なし"];
+  const lines = [];
+  for (let day = 1; day <= maxDay; day += 1) {
+    const events = [];
+    trueResults
+      .filter((result) => getDivinationOrder(result) === day)
       .forEach((result) => {
         const seer = history.players.find((player) => player.id === result.seerId);
         const target = history.players.find((player) => player.id === result.targetId);
-        if (seer && target) lines.push(`- 占い${getDivinationOrder(result)} ${seer.name} -> ${target.name}: ${RESULT_LABELS[result.value]}`);
+        if (seer && target) events.push(`占い: ${seer.name} -> ${target.name} ${RESULT_LABELS[result.value]}`);
       });
+    activePlayers
+      .filter((player) => player.status === "exiled" && (Number(player.statusDay) || 1) === day)
+      .forEach((player) => events.push(`追放: ${player.name}`));
+    activePlayers
+      .filter((player) => player.status === "attacked" && (Number(player.statusDay) || 1) === day)
+      .forEach((player) => events.push(`襲撃: ${player.name}`));
+    if (events.length) {
+      lines.push(`${day}日目`);
+      events.forEach((event) => lines.push(`- ${event}`));
+    }
   }
-  return lines.join("\n");
+  return lines.length ? lines : ["- 出来事なし"];
 }
 
 function formatImpressionForExport(player) {
@@ -2513,6 +2586,7 @@ function normalizePlayer(player) {
       player.primaryRoleGuess,
       normalizeRoleGuessCandidates(player.roleGuessCandidates),
     ),
+    trueRole: Object.hasOwn(ROLE_GUESS_LABELS, player.trueRole) && player.trueRole !== "unknown" ? player.trueRole : "",
     roleClaimOrder:
       getRoleClaimOrder(player) < Number.MAX_SAFE_INTEGER ? Math.max(1, getRoleClaimOrder(player)) : null,
   };
