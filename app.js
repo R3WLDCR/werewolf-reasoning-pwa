@@ -1,4 +1,7 @@
 const STORAGE_KEY = "werewolf-reasoning-note-v1";
+const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
+const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
+const SYNC_DELAY_MS = 1200;
 const ROLE_LABELS = {
   seer: "預言者",
   medium: "霊媒師",
@@ -55,6 +58,15 @@ let selectedHistoryId = "";
 let editingHistoryId = "";
 let bulkDeleteHistoryScope = "";
 let toastTimer = null;
+let syncTimer = null;
+let supabaseClient = null;
+let syncUser = null;
+let syncChannel = null;
+let pendingCloudRecord = null;
+let applyingCloudState = false;
+let hadLocalDataAtStartup = Boolean(localStorage.getItem(STORAGE_KEY));
+let syncMeta = restoreSyncMeta();
+const deviceId = getOrCreateDeviceId();
 
 document.addEventListener("DOMContentLoaded", () => {
   [
@@ -65,6 +77,8 @@ document.addEventListener("DOMContentLoaded", () => {
     "participantsView",
     "reasoningView",
     "exportView",
+    "syncView",
+    "remoteUpdateBanner",
     "tournamentSelect",
     "addTournamentBtn",
     "renameTournamentBtn",
@@ -138,6 +152,32 @@ document.addEventListener("DOMContentLoaded", () => {
     "bulkDeleteConfirmInput",
     "confirmBulkDeleteHistoryBtn",
     "closeBulkDeleteHistoryBtn",
+    "syncStatusText",
+    "syncStatusBadge",
+    "syncConfigNotice",
+    "syncSignedOutPanel",
+    "syncSignedInPanel",
+    "syncAccountEmail",
+    "lastSyncText",
+    "loginForm",
+    "loginEmailInput",
+    "loginPasswordInput",
+    "signupForm",
+    "signupEmailInput",
+    "signupPasswordInput",
+    "passwordResetForm",
+    "resetEmailInput",
+    "passwordUpdateForm",
+    "newPasswordInput",
+    "manualSyncBtn",
+    "logoutBtn",
+    "syncConflictPanel",
+    "syncConflictTitle",
+    "syncConflictMessage",
+    "localUpdatedText",
+    "cloudUpdatedText",
+    "downloadCloudBtn",
+    "uploadLocalBtn",
     "toast",
   ].forEach((id) => {
     els[id] = document.getElementById(id);
@@ -148,6 +188,7 @@ document.addEventListener("DOMContentLoaded", () => {
   bindEvents();
   render();
   registerServiceWorker();
+  initializeSync();
 });
 
 function bindEvents() {
@@ -252,6 +293,22 @@ function bindEvents() {
   });
   els.bulkDeleteHistoryDialog.addEventListener("click", (event) => {
     if (event.target === els.bulkDeleteHistoryDialog) closeBulkDeleteHistoryDialog();
+  });
+  els.remoteUpdateBanner.addEventListener("click", () => {
+    state.activeView = "sync";
+    render();
+  });
+  els.loginForm.addEventListener("submit", handleLogin);
+  els.signupForm.addEventListener("submit", handleSignup);
+  els.passwordResetForm.addEventListener("submit", handlePasswordReset);
+  els.passwordUpdateForm.addEventListener("submit", handlePasswordUpdate);
+  els.manualSyncBtn.addEventListener("click", () => synchronizeNow({ manual: true }));
+  els.logoutBtn.addEventListener("click", logoutAndClearLocalData);
+  els.downloadCloudBtn.addEventListener("click", downloadPendingCloudState);
+  els.uploadLocalBtn.addEventListener("click", uploadLocalState);
+  window.addEventListener("online", () => synchronizeNow());
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") synchronizeNow();
   });
 }
 
@@ -583,6 +640,7 @@ function render() {
   renderActiveView();
   renderMatchMeta();
   renderGameLifecycle();
+  renderSyncStatus();
   els.wolfCountSelect.value = String(state.wolfCount);
   els.playerCountBadge.textContent = `参加${getActivePlayers().length}/${getSelectedTournamentPlayers().length}人`;
   renderParticipantRows();
@@ -598,6 +656,7 @@ function renderActiveView() {
     ["participants", els.participantsView],
     ["reasoning", els.reasoningView],
     ["export", els.exportView],
+    ["sync", els.syncView],
   ].forEach(([view, element]) => {
     element.hidden = view !== activeView;
   });
@@ -674,6 +733,57 @@ function renderHistories() {
   if (selected) els.historyDetailPreview.textContent = buildHistoryText(selected);
   els.deleteTournamentHistoriesBtn.disabled = getHistoriesForTournament(state.selectedTournamentId).length === 0;
   els.deleteAllHistoriesBtn.disabled = state.gameHistories.length === 0;
+}
+
+function renderSyncStatus() {
+  if (!els.syncStatusText) return;
+  const configured = Boolean(supabaseClient);
+  const signedIn = Boolean(syncUser);
+  els.syncConfigNotice.hidden = configured;
+  els.syncSignedOutPanel.hidden = signedIn || !configured;
+  els.syncSignedInPanel.hidden = !signedIn;
+  els.syncAccountEmail.textContent = syncUser?.email || "-";
+  els.lastSyncText.textContent = formatSyncTime(syncMeta.lastSyncedAt) || "未同期";
+  els.remoteUpdateBanner.hidden = !pendingCloudRecord;
+  els.syncConflictPanel.hidden = !pendingCloudRecord;
+  if (pendingCloudRecord) {
+    els.syncConflictTitle.textContent =
+      syncMeta.status === "conflict" ? "両方に変更があります" : "別端末の更新があります";
+    els.syncConflictMessage.textContent =
+      syncMeta.status === "conflict"
+        ? "残すデータを選択してください。"
+        : "クラウドの最新版を取得するか、この端末の状態で上書きできます。";
+    els.localUpdatedText.textContent = formatSyncTime(syncMeta.localUpdatedAt) || "未記録";
+    els.cloudUpdatedText.textContent = formatSyncTime(pendingCloudRecord.updated_at) || "未記録";
+  }
+  const statusMap = {
+    unconfigured: ["未設定", "Supabaseの接続設定が必要です"],
+    local: ["端末内", "端末内に保存中"],
+    offline: ["オフライン", "通信復帰後に同期します"],
+    syncing: ["同期中", syncMeta.error || "同期中"],
+    synced: ["同期済み", "クラウドと同期されています"],
+    remote: ["更新あり", "別端末の更新があります"],
+    conflict: ["競合", "残すデータを選択してください"],
+    error: ["エラー", syncMeta.error || "同期できませんでした"],
+  };
+  const [badge, text] = statusMap[syncMeta.status] || statusMap.local;
+  els.syncStatusBadge.textContent = signedIn ? badge : configured ? "未ログイン" : "未設定";
+  els.syncStatusBadge.className = `sync-status-badge status-${syncMeta.status}`;
+  els.syncStatusText.textContent = signedIn ? text : configured ? "ログインすると同期できます" : text;
+  els.manualSyncBtn.disabled = !signedIn || syncMeta.status === "syncing";
+}
+
+function formatSyncTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("ja-JP", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(date);
 }
 
 function renderParticipantRows() {
@@ -1370,34 +1480,422 @@ function renderAndStore() {
   store();
 }
 
-function store() {
+function store({ markDirty = true } = {}) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  const signature = getSyncPayloadSignature();
+  if (markDirty && !applyingCloudState && signature !== syncMeta.lastPayloadSignature) {
+    syncMeta.localUpdatedAt = new Date().toISOString();
+    syncMeta.dirty = true;
+    syncMeta.lastPayloadSignature = signature;
+    saveSyncMeta();
+    scheduleAutoSync();
+  } else if (!syncMeta.lastPayloadSignature) {
+    syncMeta.lastPayloadSignature = signature;
+    saveSyncMeta();
+  }
 }
 
 function restore() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return;
   try {
-    const saved = JSON.parse(raw);
-    state.day = Number.isFinite(Number(saved.day)) ? Math.max(1, Number(saved.day)) : 1;
-    state.eventName = normalizeEventName(saved.eventName);
-    state.eventDate = normalizeDateValue(saved.eventDate);
-    state.gameNumber = normalizeGameNumber(saved.gameNumber);
-    state.activeView = normalizeActiveView(saved.activeView);
-    state.rosterFilter = normalizeRosterFilter(saved.rosterFilter);
-    state.tournaments = Array.isArray(saved.tournaments) ? saved.tournaments.map(normalizeTournament).filter(Boolean) : [];
-    state.selectedTournamentId = String(saved.selectedTournamentId || "");
-    state.wolfCount = normalizeWolfCount(saved.wolfCount);
-    state.players = Array.isArray(saved.players) ? saved.players.map(normalizePlayer) : [];
-    state.results = Array.isArray(saved.results) ? saved.results.map(normalizeResult).filter(Boolean) : [];
-    state.gameStatus = saved.gameStatus === "in_progress" ? "in_progress" : "preparing";
-    state.startedAt = state.gameStatus === "in_progress" ? String(saved.startedAt || "") : "";
-    state.gameHistories = Array.isArray(saved.gameHistories) ? saved.gameHistories.map(normalizeGameHistory).filter(Boolean) : [];
-    migrateLegacyRoster(saved.eventName);
-    backfillStatusDays();
+    applySavedState(JSON.parse(raw));
   } catch {
     localStorage.removeItem(STORAGE_KEY);
   }
+}
+
+function applySavedState(saved) {
+  state.day = Number.isFinite(Number(saved.day)) ? Math.max(1, Number(saved.day)) : 1;
+  state.eventName = normalizeEventName(saved.eventName);
+  state.eventDate = normalizeDateValue(saved.eventDate);
+  state.gameNumber = normalizeGameNumber(saved.gameNumber);
+  state.activeView = normalizeActiveView(saved.activeView);
+  state.rosterFilter = normalizeRosterFilter(saved.rosterFilter);
+  state.tournaments = Array.isArray(saved.tournaments) ? saved.tournaments.map(normalizeTournament).filter(Boolean) : [];
+  state.selectedTournamentId = String(saved.selectedTournamentId || "");
+  state.wolfCount = normalizeWolfCount(saved.wolfCount);
+  state.players = Array.isArray(saved.players) ? saved.players.map(normalizePlayer) : [];
+  state.results = Array.isArray(saved.results) ? saved.results.map(normalizeResult).filter(Boolean) : [];
+  state.gameStatus = saved.gameStatus === "in_progress" ? "in_progress" : "preparing";
+  state.startedAt = state.gameStatus === "in_progress" ? String(saved.startedAt || "") : "";
+  state.gameHistories = Array.isArray(saved.gameHistories) ? saved.gameHistories.map(normalizeGameHistory).filter(Boolean) : [];
+  migrateLegacyRoster(saved.eventName);
+  backfillStatusDays();
+}
+
+function getSyncPayload() {
+  const payload = structuredClone(state);
+  delete payload.activeView;
+  delete payload.rosterFilter;
+  return payload;
+}
+
+function getSyncPayloadSignature() {
+  return JSON.stringify(getSyncPayload());
+}
+
+function restoreSyncMeta() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SYNC_META_KEY) || "{}");
+    return {
+      localUpdatedAt: String(saved.localUpdatedAt || ""),
+      lastSyncedAt: String(saved.lastSyncedAt || ""),
+      lastCloudUpdatedAt: String(saved.lastCloudUpdatedAt || ""),
+      lastPayloadSignature: String(saved.lastPayloadSignature || ""),
+      dirty: saved.dirty === true,
+      status: "local",
+      error: "",
+    };
+  } catch {
+    return {
+      localUpdatedAt: "",
+      lastSyncedAt: "",
+      lastCloudUpdatedAt: "",
+      lastPayloadSignature: "",
+      dirty: false,
+      status: "local",
+      error: "",
+    };
+  }
+}
+
+function saveSyncMeta() {
+  localStorage.setItem(
+    SYNC_META_KEY,
+    JSON.stringify({
+      localUpdatedAt: syncMeta.localUpdatedAt,
+      lastSyncedAt: syncMeta.lastSyncedAt,
+      lastCloudUpdatedAt: syncMeta.lastCloudUpdatedAt,
+      lastPayloadSignature: syncMeta.lastPayloadSignature,
+      dirty: syncMeta.dirty,
+    }),
+  );
+}
+
+function getOrCreateDeviceId() {
+  const existing = localStorage.getItem(DEVICE_ID_KEY);
+  if (existing) return existing;
+  const id = crypto.randomUUID();
+  localStorage.setItem(DEVICE_ID_KEY, id);
+  return id;
+}
+
+function scheduleAutoSync() {
+  if (!syncUser || !navigator.onLine) return;
+  window.clearTimeout(syncTimer);
+  syncTimer = window.setTimeout(() => synchronizeNow(), SYNC_DELAY_MS);
+}
+
+async function initializeSync() {
+  const config = window.SYNC_CONFIG || {};
+  if (!window.supabase?.createClient || !config.supabaseUrl || !config.supabaseAnonKey) {
+    syncMeta.status = "unconfigured";
+    renderSyncStatus();
+    return;
+  }
+  supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey, {
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+  });
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    if (event === "PASSWORD_RECOVERY") {
+      els.passwordUpdateForm.hidden = false;
+      state.activeView = "sync";
+      render();
+    }
+    const nextUser = session?.user || null;
+    if (nextUser?.id !== syncUser?.id) {
+      syncUser = nextUser;
+      if (syncUser) {
+        subscribeToCloudUpdates();
+        synchronizeNow({ initial: true });
+      } else {
+        unsubscribeFromCloudUpdates();
+      }
+      renderSyncStatus();
+    }
+  });
+  const { data, error } = await supabaseClient.auth.getSession();
+  if (error) {
+    setSyncError(error.message);
+    return;
+  }
+  syncUser = data.session?.user || null;
+  if (syncUser) {
+    subscribeToCloudUpdates();
+    await synchronizeNow({ initial: true });
+  }
+  renderSyncStatus();
+}
+
+async function handleLogin(event) {
+  event.preventDefault();
+  if (!ensureSyncConfigured()) return;
+  setSyncBusy("ログイン中");
+  const { error } = await supabaseClient.auth.signInWithPassword({
+    email: els.loginEmailInput.value.trim(),
+    password: els.loginPasswordInput.value,
+  });
+  if (error) return setSyncError(toJapaneseAuthError(error.message));
+  els.loginForm.reset();
+  toast("ログインしました");
+}
+
+async function handleSignup(event) {
+  event.preventDefault();
+  if (!ensureSyncConfigured()) return;
+  setSyncBusy("登録中");
+  const { error } = await supabaseClient.auth.signUp({
+    email: els.signupEmailInput.value.trim(),
+    password: els.signupPasswordInput.value,
+    options: { emailRedirectTo: getAuthRedirectUrl() },
+  });
+  if (error) return setSyncError(toJapaneseAuthError(error.message));
+  els.signupForm.reset();
+  syncMeta.status = "local";
+  renderSyncStatus();
+  toast("確認メールを送信しました");
+}
+
+async function handlePasswordReset(event) {
+  event.preventDefault();
+  if (!ensureSyncConfigured()) return;
+  setSyncBusy("送信中");
+  const { error } = await supabaseClient.auth.resetPasswordForEmail(els.resetEmailInput.value.trim(), {
+    redirectTo: getAuthRedirectUrl(),
+  });
+  if (error) return setSyncError(toJapaneseAuthError(error.message));
+  els.passwordResetForm.reset();
+  syncMeta.status = "local";
+  renderSyncStatus();
+  toast("再設定メールを送信しました");
+}
+
+async function handlePasswordUpdate(event) {
+  event.preventDefault();
+  if (!ensureSyncConfigured()) return;
+  setSyncBusy("更新中");
+  const { error } = await supabaseClient.auth.updateUser({ password: els.newPasswordInput.value });
+  if (error) return setSyncError(toJapaneseAuthError(error.message));
+  els.passwordUpdateForm.reset();
+  els.passwordUpdateForm.hidden = true;
+  syncMeta.status = "synced";
+  renderSyncStatus();
+  toast("パスワードを更新しました");
+}
+
+async function logoutAndClearLocalData() {
+  if (!syncUser || !confirm("ログアウトして、この端末内の名簿・盤面・履歴を削除しますか？")) return;
+  const { error } = await supabaseClient.auth.signOut();
+  if (error) return setSyncError(error.message);
+  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(SYNC_META_KEY);
+  resetStateToDefaults();
+  syncMeta = restoreSyncMeta();
+  hadLocalDataAtStartup = false;
+  pendingCloudRecord = null;
+  selectedHistoryId = "";
+  ensureMatchDefaults();
+  state.activeView = "sync";
+  render();
+  toast("ログアウトし、端末内データを削除しました");
+}
+
+function resetStateToDefaults() {
+  Object.assign(state, {
+    day: 1,
+    eventName: "",
+    eventDate: "",
+    gameNumber: 1,
+    activeView: "participants",
+    rosterFilter: "tournament",
+    tournaments: [],
+    selectedTournamentId: "",
+    wolfCount: 2,
+    players: [],
+    results: [],
+    gameStatus: "preparing",
+    startedAt: "",
+    gameHistories: [],
+  });
+}
+
+function ensureSyncConfigured() {
+  if (supabaseClient) return true;
+  toast("Supabaseの接続設定が必要です");
+  return false;
+}
+
+function getAuthRedirectUrl() {
+  return `${location.origin}${location.pathname}`;
+}
+
+async function synchronizeNow({ initial = false, manual = false } = {}) {
+  if (!supabaseClient || !syncUser) return;
+  if (!navigator.onLine) {
+    syncMeta.status = "offline";
+    renderSyncStatus();
+    return;
+  }
+  if (pendingCloudRecord && !manual) return;
+  setSyncBusy("同期中");
+  const cloudRecord = await fetchCloudRecord();
+  if (cloudRecord === undefined) return;
+  if (!cloudRecord) {
+    await uploadLocalState();
+    return;
+  }
+  const cloudIsNew = isAfter(cloudRecord.updated_at, syncMeta.lastCloudUpdatedAt);
+  if (initial && !syncMeta.lastCloudUpdatedAt) {
+    if (hadLocalDataAtStartup) {
+      showCloudConflict(cloudRecord, "initial");
+    } else {
+      await applyCloudRecord(cloudRecord);
+    }
+    return;
+  }
+  if (cloudIsNew && cloudRecord.updated_by_device !== deviceId) {
+    showCloudConflict(cloudRecord, syncMeta.dirty ? "conflict" : "remote");
+    return;
+  }
+  if (syncMeta.dirty) {
+    await uploadLocalState();
+    return;
+  }
+  syncMeta.status = "synced";
+  syncMeta.lastCloudUpdatedAt = cloudRecord.updated_at || syncMeta.lastCloudUpdatedAt;
+  syncMeta.lastSyncedAt = new Date().toISOString();
+  saveSyncMeta();
+  renderSyncStatus();
+}
+
+async function fetchCloudRecord() {
+  const { data, error } = await supabaseClient
+    .from("user_states")
+    .select("payload, updated_at, updated_by_device")
+    .eq("user_id", syncUser.id)
+    .maybeSingle();
+  if (error) {
+    setSyncError(error.message);
+    return undefined;
+  }
+  return data || null;
+}
+
+async function uploadLocalState() {
+  if (!supabaseClient || !syncUser || !navigator.onLine) return;
+  setSyncBusy("アップロード中");
+  const updatedAt = new Date().toISOString();
+  const { data, error } = await supabaseClient
+    .from("user_states")
+    .upsert({
+      user_id: syncUser.id,
+      payload: getSyncPayload(),
+      updated_at: updatedAt,
+      updated_by_device: deviceId,
+    })
+    .select("updated_at, updated_by_device")
+    .single();
+  if (error) return setSyncError(error.message);
+  pendingCloudRecord = null;
+  syncMeta.dirty = false;
+  syncMeta.status = "synced";
+  syncMeta.lastCloudUpdatedAt = data.updated_at || updatedAt;
+  syncMeta.lastSyncedAt = new Date().toISOString();
+  syncMeta.lastPayloadSignature = getSyncPayloadSignature();
+  saveSyncMeta();
+  renderSyncStatus();
+  toast("クラウドへ同期しました");
+}
+
+async function downloadPendingCloudState() {
+  if (!pendingCloudRecord) {
+    const record = await fetchCloudRecord();
+    if (!record) return;
+    pendingCloudRecord = record;
+  }
+  await applyCloudRecord(pendingCloudRecord);
+}
+
+async function applyCloudRecord(record) {
+  if (!record?.payload) return;
+  applyingCloudState = true;
+  const activeView = state.activeView;
+  const rosterFilter = state.rosterFilter;
+  applySavedState(record.payload);
+  state.activeView = activeView;
+  state.rosterFilter = rosterFilter;
+  ensureMatchDefaults();
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  applyingCloudState = false;
+  pendingCloudRecord = null;
+  hadLocalDataAtStartup = true;
+  syncMeta.dirty = false;
+  syncMeta.status = "synced";
+  syncMeta.localUpdatedAt = record.updated_at || new Date().toISOString();
+  syncMeta.lastCloudUpdatedAt = record.updated_at || "";
+  syncMeta.lastSyncedAt = new Date().toISOString();
+  syncMeta.lastPayloadSignature = getSyncPayloadSignature();
+  saveSyncMeta();
+  render();
+  toast("クラウドのデータを取得しました");
+}
+
+function showCloudConflict(record, type) {
+  pendingCloudRecord = record;
+  syncMeta.status = type === "remote" ? "remote" : "conflict";
+  state.activeView = type === "initial" ? "sync" : state.activeView;
+  render();
+}
+
+function subscribeToCloudUpdates() {
+  unsubscribeFromCloudUpdates();
+  if (!supabaseClient || !syncUser) return;
+  syncChannel = supabaseClient
+    .channel(`user-state-${syncUser.id}`)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "user_states", filter: `user_id=eq.${syncUser.id}` },
+      (message) => {
+        const record = message.new;
+        if (!record?.updated_at || record.updated_by_device === deviceId) return;
+        if (isAfter(record.updated_at, syncMeta.lastCloudUpdatedAt)) {
+          showCloudConflict(record, syncMeta.dirty ? "conflict" : "remote");
+        }
+      },
+    )
+    .subscribe();
+}
+
+function unsubscribeFromCloudUpdates() {
+  if (syncChannel && supabaseClient) supabaseClient.removeChannel(syncChannel);
+  syncChannel = null;
+}
+
+function isAfter(value, baseline) {
+  if (!value) return false;
+  if (!baseline) return true;
+  return new Date(value).getTime() > new Date(baseline).getTime();
+}
+
+function setSyncBusy(label) {
+  syncMeta.status = "syncing";
+  syncMeta.error = label;
+  renderSyncStatus();
+}
+
+function setSyncError(message) {
+  syncMeta.status = "error";
+  syncMeta.error = message;
+  renderSyncStatus();
+  toast("同期できませんでした");
+}
+
+function toJapaneseAuthError(message) {
+  if (/invalid login credentials/i.test(message)) return "メールアドレスまたはパスワードが違います";
+  if (/email not confirmed/i.test(message)) return "確認メール内のリンクを開いてください";
+  if (/user already registered/i.test(message)) return "このメールアドレスは登録済みです";
+  return message;
 }
 
 function ensureMatchDefaults() {
@@ -1458,7 +1956,7 @@ function normalizeGameNumber(value) {
 }
 
 function normalizeActiveView(value) {
-  return ["participants", "reasoning", "export"].includes(value) ? value : "participants";
+  return ["participants", "reasoning", "export", "sync"].includes(value) ? value : "participants";
 }
 
 function normalizeRosterFilter(value) {

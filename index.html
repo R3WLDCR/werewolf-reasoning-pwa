@@ -26,6 +26,10 @@
           <button id="finishGameBtn" class="danger-button" type="button" hidden>ゲーム終了</button>
         </div>
       </header>
+      <button id="remoteUpdateBanner" class="remote-update-banner" type="button" hidden>
+        別端末の更新があります
+        <span>同期画面で確認</span>
+      </button>
 
       <main class="main-stack">
         <section id="participantsView" class="view-stack" aria-label="参加者">
@@ -137,12 +141,86 @@
             </div>
           </section>
         </section>
+
+        <section id="syncView" class="view-stack" aria-label="同期">
+          <section class="sync-panel">
+            <div class="section-heading">
+              <div>
+                <strong>クラウド同期</strong>
+                <span id="syncStatusText" class="section-note">端末内に保存中</span>
+              </div>
+              <span id="syncStatusBadge" class="sync-status-badge">未ログイン</span>
+            </div>
+            <div id="syncConfigNotice" class="sync-notice" hidden>
+              Supabaseの接続設定が必要です。
+            </div>
+
+            <div id="syncSignedOutPanel" class="sync-auth-stack">
+              <form id="loginForm" class="sync-auth-form">
+                <strong>ログイン</strong>
+                <input id="loginEmailInput" type="email" autocomplete="email" placeholder="メールアドレス" required />
+                <input id="loginPasswordInput" type="password" autocomplete="current-password" placeholder="パスワード" required />
+                <button class="primary-button" type="submit">ログイン</button>
+              </form>
+              <form id="signupForm" class="sync-auth-form">
+                <strong>新規登録</strong>
+                <input id="signupEmailInput" type="email" autocomplete="email" placeholder="メールアドレス" required />
+                <input id="signupPasswordInput" type="password" autocomplete="new-password" minlength="6" placeholder="パスワード（6文字以上）" required />
+                <button class="secondary-button" type="submit">確認メールを送信</button>
+              </form>
+              <form id="passwordResetForm" class="sync-auth-form compact-form">
+                <strong>パスワードを忘れた場合</strong>
+                <input id="resetEmailInput" type="email" autocomplete="email" placeholder="メールアドレス" required />
+                <button class="secondary-button" type="submit">再設定メールを送信</button>
+              </form>
+            </div>
+
+            <form id="passwordUpdateForm" class="sync-auth-form" hidden>
+              <strong>新しいパスワード</strong>
+              <input id="newPasswordInput" type="password" autocomplete="new-password" minlength="6" placeholder="新しいパスワード（6文字以上）" required />
+              <button class="primary-button" type="submit">パスワードを更新</button>
+            </form>
+
+            <div id="syncSignedInPanel" class="sync-account-panel" hidden>
+              <div class="sync-account-row">
+                <span>ログイン中</span>
+                <strong id="syncAccountEmail">-</strong>
+              </div>
+              <div class="sync-account-row">
+                <span>最終同期</span>
+                <strong id="lastSyncText">未同期</strong>
+              </div>
+              <div class="sync-actions">
+                <button id="manualSyncBtn" class="primary-button" type="button">今すぐ同期</button>
+                <button id="logoutBtn" class="danger-button" type="button">ログアウト</button>
+              </div>
+            </div>
+          </section>
+
+          <section id="syncConflictPanel" class="sync-conflict-panel" hidden>
+            <div class="section-heading">
+              <div>
+                <strong id="syncConflictTitle">同期するデータを選択</strong>
+                <span id="syncConflictMessage" class="section-note"></span>
+              </div>
+            </div>
+            <div class="sync-conflict-times">
+              <span>この端末 <strong id="localUpdatedText">-</strong></span>
+              <span>クラウド <strong id="cloudUpdatedText">-</strong></span>
+            </div>
+            <div class="sync-actions">
+              <button id="downloadCloudBtn" class="secondary-button" type="button">クラウドから取得</button>
+              <button id="uploadLocalBtn" class="primary-button" type="button">この端末で上書き</button>
+            </div>
+          </section>
+        </section>
       </main>
 
       <nav class="bottom-bar" aria-label="操作">
         <button class="tab-button" type="button" data-view="participants">参加者</button>
         <button class="tab-button" type="button" data-view="reasoning">推理</button>
         <button class="tab-button" type="button" data-view="export">ログ</button>
+        <button class="tab-button" type="button" data-view="sync">同期</button>
       </nav>
     </div>
 
@@ -307,6 +385,8 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="./sync-config.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>
