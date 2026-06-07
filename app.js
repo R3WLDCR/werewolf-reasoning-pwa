@@ -44,6 +44,20 @@ const STANDARD_IMPRESSION_REASONS = [
   { id: "standard-werewolf-unnatural-view", label: "視点が不自然", side: "werewolf", custom: false },
   { id: "standard-werewolf-following", label: "便乗が多い", side: "werewolf", custom: false },
 ];
+const ROLE_GUESS_LABELS = {
+  unknown: "不明",
+  seer: "預言者",
+  medium: "霊媒師",
+  guard: "ボディガード",
+  villager: "市民",
+  madman: "裏切り者",
+  wolfSide: "狼狂",
+  werewolf: "人狼",
+  other: "その他",
+  hunter: "ハンター",
+  fox: "妖狐",
+  teruteru: "てるてる",
+};
 
 const state = {
   day: 1,
@@ -74,6 +88,7 @@ let editingHistoryId = "";
 let bulkDeleteHistoryScope = "";
 let impressionPlayerId = "";
 let impressionDraftReasons = [];
+let roleGuessPlayerId = "";
 let toastTimer = null;
 let syncTimer = null;
 let supabaseClient = null;
@@ -181,6 +196,12 @@ document.addEventListener("DOMContentLoaded", () => {
     "addCustomReasonBtn",
     "saveImpressionBtn",
     "closeImpressionBtn",
+    "roleGuessDialog",
+    "roleGuessPlayerName",
+    "roleGuessCandidateOptions",
+    "primaryRoleGuessSelect",
+    "saveRoleGuessBtn",
+    "closeRoleGuessBtn",
     "syncStatusText",
     "syncStatusBadge",
     "syncConfigNotice",
@@ -329,6 +350,11 @@ function bindEvents() {
   els.impressionDialog.addEventListener("click", (event) => {
     if (event.target === els.impressionDialog) closeImpressionDialog();
   });
+  els.closeRoleGuessBtn.addEventListener("click", closeRoleGuessDialog);
+  els.saveRoleGuessBtn.addEventListener("click", saveRoleGuess);
+  els.roleGuessDialog.addEventListener("click", (event) => {
+    if (event.target === els.roleGuessDialog) closeRoleGuessDialog();
+  });
   els.remoteUpdateBanner.addEventListener("click", () => {
     state.activeView = "sync";
     render();
@@ -431,6 +457,8 @@ function addPlayer() {
     statusDay: null,
     memo: "",
     impressionReasons: [],
+    roleGuessCandidates: [],
+    primaryRoleGuess: "",
   });
   els.playerNameInput.value = "";
   renderAndStore();
@@ -510,6 +538,8 @@ function resetBoardState() {
     statusDay: null,
     memo: "",
     impressionReasons: [],
+    roleGuessCandidates: [],
+    primaryRoleGuess: "",
   }));
   state.results = [];
 }
@@ -684,6 +714,102 @@ function deleteCustomImpressionReason(reasonId) {
   renderImpressionDialog();
   store();
   toast("候補から削除しました");
+}
+
+function openRoleGuessDialog(playerId) {
+  const player = findPlayer(playerId);
+  if (!player) return;
+  roleGuessPlayerId = playerId;
+  els.roleGuessPlayerName.textContent = player.name;
+  renderRoleGuessDialog(player);
+  els.roleGuessDialog.showModal();
+}
+
+function closeRoleGuessDialog() {
+  roleGuessPlayerId = "";
+  els.roleGuessDialog.close();
+}
+
+function renderRoleGuessDialog(player) {
+  const selected = new Set(player.roleGuessCandidates);
+  els.roleGuessCandidateOptions.innerHTML = Object.entries(ROLE_GUESS_LABELS)
+    .map(
+      ([value, label]) => `
+        <label class="role-guess-option ${getRoleGuessClass(value)}">
+          <input type="checkbox" value="${value}" ${selected.has(value) ? "checked" : ""} />
+          <span>${label}</span>
+        </label>
+      `,
+    )
+    .join("");
+  els.roleGuessCandidateOptions.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+    input.addEventListener("change", handleRoleGuessCandidateChange);
+  });
+  renderPrimaryRoleGuessOptions(player.primaryRoleGuess);
+}
+
+function handleRoleGuessCandidateChange(event) {
+  const input = event.currentTarget;
+  const checkboxes = Array.from(els.roleGuessCandidateOptions.querySelectorAll('input[type="checkbox"]'));
+  if (input.checked && input.value === "unknown") {
+    checkboxes.forEach((item) => {
+      item.checked = item.value === "unknown";
+    });
+  } else if (input.checked) {
+    const unknown = checkboxes.find((item) => item.value === "unknown");
+    if (unknown) unknown.checked = false;
+  }
+  renderPrimaryRoleGuessOptions(els.primaryRoleGuessSelect.value);
+}
+
+function renderPrimaryRoleGuessOptions(currentValue = "") {
+  const candidates = getSelectedRoleGuessCandidates();
+  const primaryCandidates = candidates.filter((value) => value !== "unknown");
+  els.primaryRoleGuessSelect.innerHTML = [
+    '<option value="">不明</option>',
+    ...primaryCandidates.map((value) => `<option value="${value}">${ROLE_GUESS_LABELS[value]}</option>`),
+  ].join("");
+  els.primaryRoleGuessSelect.value = primaryCandidates.includes(currentValue) ? currentValue : "";
+}
+
+function getSelectedRoleGuessCandidates() {
+  return Array.from(els.roleGuessCandidateOptions.querySelectorAll('input[type="checkbox"]:checked')).map(
+    (input) => input.value,
+  );
+}
+
+function saveRoleGuess() {
+  const player = findPlayer(roleGuessPlayerId);
+  if (!player) return;
+  player.roleGuessCandidates = normalizeRoleGuessCandidates(getSelectedRoleGuessCandidates());
+  player.primaryRoleGuess = normalizePrimaryRoleGuess(els.primaryRoleGuessSelect.value, player.roleGuessCandidates);
+  closeRoleGuessDialog();
+  renderAndStore();
+  toast("役職推理を保存しました");
+}
+
+function getRoleGuessDisplay(player) {
+  const primary = normalizePrimaryRoleGuess(player.primaryRoleGuess, player.roleGuessCandidates);
+  return {
+    value: primary || "unknown",
+    label: `推理: ${primary ? ROLE_GUESS_LABELS[primary] : ROLE_GUESS_LABELS.unknown}`,
+  };
+}
+
+function getRoleGuessClass(value) {
+  if (value === "werewolf") return "role-werewolf";
+  if (value === "unknown") return "role-unknown";
+  return Object.hasOwn(ROLE_LABELS, value) ? `role-${value}` : "role-unknown";
+}
+
+function normalizeRoleGuessCandidates(values) {
+  const candidates = [...new Set(Array.isArray(values) ? values.filter((value) => Object.hasOwn(ROLE_GUESS_LABELS, value)) : [])];
+  if (candidates.includes("unknown")) return ["unknown"];
+  return candidates;
+}
+
+function normalizePrimaryRoleGuess(value, candidates) {
+  return value && value !== "unknown" && candidates.includes(value) ? value : "";
 }
 
 function openEditDialog(playerId, seerId = "") {
@@ -1005,12 +1131,14 @@ function renderRows() {
     const memo = player.memo || "メモなし";
     const seerGrid = getSeerGridHtml(player);
     const impression = getPlayerImpression(player);
+    const roleGuess = getRoleGuessDisplay(player);
     row.innerHTML = `
       <button class="player-info" type="button">
         <span class="player-main">
           <span class="player-name-row">
             <span class="player-name">${escapeHtml(player.name)}</span>
             <span class="impression-label impression-${impression.value}">${escapeHtml(impression.label)}</span>
+            <span class="role-guess-label ${getRoleGuessClass(roleGuess.value)}">${escapeHtml(roleGuess.label)}</span>
           </span>
           <span class="player-sub">${escapeHtml(memo)}</span>
         </span>
@@ -1026,6 +1154,11 @@ function renderRows() {
       if (event.target.closest(".impression-label")) {
         event.stopPropagation();
         openImpressionDialog(player.id);
+        return;
+      }
+      if (event.target.closest(".role-guess-label")) {
+        event.stopPropagation();
+        openRoleGuessDialog(player.id);
         return;
       }
       const seerCell = event.target.closest("[data-seer-id]");
@@ -1473,6 +1606,16 @@ function renderHistoryEditor(history) {
             <span class="impression-label impression-${getPlayerImpression(player).value}">${getPlayerImpression(player).label}</span>
             <div class="history-impression-options">${getHistoryImpressionOptionsHtml(player)}</div>
           </div>
+          <div class="history-role-guess-edit">
+            <label class="field">
+              <span>役職推理候補</span>
+              <div class="history-role-guess-options">${getHistoryRoleGuessOptionsHtml(player)}</div>
+            </label>
+            <label class="field">
+              <span>本命役職</span>
+              <select data-field="primaryRoleGuess">${getPrimaryRoleGuessOptionsHtml(player.roleGuessCandidates, player.primaryRoleGuess)}</select>
+            </label>
+          </div>
         </div>
       `,
     )
@@ -1498,6 +1641,7 @@ function renderHistoryEditor(history) {
         .join("")
     : '<div class="empty-inline">占い結果なし</div>';
   bindHistoryResultDeleteButtons();
+  bindHistoryRoleGuessControls();
 }
 
 function getHistoryPlayerOptionsHtml(players, selectedId) {
@@ -1523,6 +1667,53 @@ function getHistoryImpressionOptionsHtml(player) {
       `,
     )
     .join("");
+}
+
+function getHistoryRoleGuessOptionsHtml(player) {
+  const selected = new Set(player.roleGuessCandidates);
+  return Object.entries(ROLE_GUESS_LABELS)
+    .map(
+      ([value, label]) => `
+        <label class="history-role-guess-option ${getRoleGuessClass(value)}">
+          <input type="checkbox" data-role-guess="${value}" ${selected.has(value) ? "checked" : ""} />
+          <span>${label}</span>
+        </label>
+      `,
+    )
+    .join("");
+}
+
+function getPrimaryRoleGuessOptionsHtml(candidates, primary) {
+  const normalized = normalizeRoleGuessCandidates(candidates).filter((value) => value !== "unknown");
+  return [
+    `<option value="" ${primary ? "" : "selected"}>不明</option>`,
+    ...normalized.map(
+      (value) => `<option value="${value}" ${value === primary ? "selected" : ""}>${ROLE_GUESS_LABELS[value]}</option>`,
+    ),
+  ].join("");
+}
+
+function bindHistoryRoleGuessControls() {
+  els.historyPlayerEditor.querySelectorAll("[data-player-id]").forEach((row) => {
+    row.querySelectorAll("[data-role-guess]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const checkboxes = Array.from(row.querySelectorAll("[data-role-guess]"));
+        if (input.checked && input.dataset.roleGuess === "unknown") {
+          checkboxes.forEach((item) => {
+            item.checked = item.dataset.roleGuess === "unknown";
+          });
+        } else if (input.checked) {
+          const unknown = checkboxes.find((item) => item.dataset.roleGuess === "unknown");
+          if (unknown) unknown.checked = false;
+        }
+        const candidates = normalizeRoleGuessCandidates(
+          checkboxes.filter((item) => item.checked).map((item) => item.dataset.roleGuess),
+        );
+        const select = row.querySelector('[data-field="primaryRoleGuess"]');
+        select.innerHTML = getPrimaryRoleGuessOptionsHtml(candidates, select.value);
+      });
+    });
+  });
 }
 
 function bindHistoryResultDeleteButtons() {
@@ -1593,6 +1784,13 @@ function saveHistoryEdits() {
       .map((input) => reasonMap.get(input.dataset.impressionReason))
       .filter(Boolean)
       .map((reason) => ({ ...reason }));
+    player.roleGuessCandidates = normalizeRoleGuessCandidates(
+      Array.from(row.querySelectorAll("[data-role-guess]:checked")).map((input) => input.dataset.roleGuess),
+    );
+    player.primaryRoleGuess = normalizePrimaryRoleGuess(
+      row.querySelector('[data-field="primaryRoleGuess"]').value,
+      player.roleGuessCandidates,
+    );
   });
   history.results = Array.from(els.historyResultEditor.querySelectorAll("[data-result-id]")).map((row) => ({
     id: row.dataset.resultId.startsWith("new-") ? crypto.randomUUID() : row.dataset.resultId,
@@ -1624,7 +1822,7 @@ function buildExportText() {
   lines.push(`残り縄: ${getRemainingRopeCount()}`);
   lines.push("", "参加者");
   getActivePlayers().forEach((player) => {
-    lines.push(`- ${player.name} / ${getStatusDisplay(player)} / ${player.role ? ROLE_LABELS[player.role] : "COなし"} / ${formatImpressionForExport(player)}${player.memo ? ` / ${player.memo}` : ""}`);
+    lines.push(`- ${player.name} / ${getStatusDisplay(player)} / ${player.role ? ROLE_LABELS[player.role] : "COなし"} / ${formatRoleGuessForExport(player)} / ${formatImpressionForExport(player)}${player.memo ? ` / ${player.memo}` : ""}`);
   });
   const restingPlayers = getSelectedTournamentPlayers().filter((player) => !isParticipating(player));
   if (restingPlayers.length) {
@@ -1661,7 +1859,7 @@ function buildHistoryText(history) {
   getHistoryActivePlayers(history).forEach((player) => {
     const statusLabel = STATUS_LABELS[player.status] || "生存";
     const status = isInactiveStatus(player.status) && player.statusDay ? `${player.statusDay}日目 ${statusLabel}` : statusLabel;
-    lines.push(`- ${player.name} / ${status} / ${player.role ? ROLE_LABELS[player.role] : "COなし"} / ${formatImpressionForExport(player)}${player.memo ? ` / ${player.memo}` : ""}`);
+    lines.push(`- ${player.name} / ${status} / ${player.role ? ROLE_LABELS[player.role] : "COなし"} / ${formatRoleGuessForExport(player)} / ${formatImpressionForExport(player)}${player.memo ? ` / ${player.memo}` : ""}`);
   });
   const resting = history.players.filter(
     (player) => player.tournamentIds.includes(history.selectedTournamentId) && player.participating === false,
@@ -1690,6 +1888,12 @@ function formatImpressionForExport(player) {
   const impression = getPlayerImpression(player);
   const reasons = formatImpressionReasons(player.impressionReasons);
   return reasons ? `${impression.label}: ${reasons}` : impression.label;
+}
+
+function formatRoleGuessForExport(player) {
+  const display = getRoleGuessDisplay(player);
+  const candidates = player.roleGuessCandidates.filter((value) => value !== "unknown").map((value) => ROLE_GUESS_LABELS[value]);
+  return candidates.length ? `${display.label}（候補: ${candidates.join("、")}）` : display.label;
 }
 
 function formatImpressionReasons(reasons = []) {
@@ -2240,6 +2444,11 @@ function normalizePlayer(player) {
     impressionReasons: Array.isArray(player.impressionReasons)
       ? player.impressionReasons.map(normalizeImpressionReason).filter(Boolean)
       : [],
+    roleGuessCandidates: normalizeRoleGuessCandidates(player.roleGuessCandidates),
+    primaryRoleGuess: normalizePrimaryRoleGuess(
+      player.primaryRoleGuess,
+      normalizeRoleGuessCandidates(player.roleGuessCandidates),
+    ),
   };
 }
 

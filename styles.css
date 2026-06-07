@@ -561,6 +561,19 @@ select:disabled {
   white-space: nowrap;
 }
 
+.role-guess-label {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  min-height: 28px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .impression-villager {
   background: #183755;
   color: #a9d7ff;
@@ -679,6 +692,16 @@ select:disabled {
 .role-other {
   background: #273233;
   color: #d4dedc;
+}
+
+.role-werewolf {
+  background: #5a1f27;
+  color: #ff9aa5;
+}
+
+.role-unknown {
+  background: #263637;
+  color: var(--muted);
 }
 
 .role-none {
@@ -1085,7 +1108,8 @@ select:disabled {
 .edit-dialog,
 .action-dialog,
 .history-edit-dialog,
-.impression-dialog {
+.impression-dialog,
+.role-guess-dialog {
   width: min(760px, 100%);
   max-width: 100%;
   margin: auto auto 0;
@@ -1100,7 +1124,8 @@ select:disabled {
 .edit-dialog::backdrop,
 .action-dialog::backdrop,
 .history-edit-dialog::backdrop,
-.impression-dialog::backdrop {
+.impression-dialog::backdrop,
+.role-guess-dialog::backdrop {
   background: rgba(22, 35, 38, 0.42);
 }
 
@@ -1109,7 +1134,8 @@ select:disabled {
 .edit-dialog form,
 .action-dialog form,
 .history-edit-dialog form,
-.impression-dialog form {
+.impression-dialog form,
+.role-guess-dialog form {
   display: grid;
   gap: 13px;
   max-height: min(84dvh, 720px);
@@ -1121,6 +1147,41 @@ select:disabled {
 
 .impression-dialog form {
   max-height: 92dvh;
+}
+
+.role-guess-options,
+.history-role-guess-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.role-guess-option,
+.history-role-guess-option {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.role-guess-option:has(input:checked),
+.history-role-guess-option:has(input:checked) {
+  border-color: currentColor;
+  filter: brightness(1.15);
+}
+
+.role-guess-option input,
+.history-role-guess-option input {
+  width: 18px;
+  min-height: 18px;
+  height: 18px;
+  padding: 0;
 }
 
 .impression-summary {
@@ -1272,6 +1333,21 @@ select:disabled {
   grid-column: 1 / -1;
   display: grid;
   gap: 7px;
+}
+
+.history-role-guess-edit {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+}
+
+.history-role-guess-options {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.history-role-guess-option {
+  min-height: 36px;
+  font-size: 0.74rem;
 }
 
 .history-impression-options {
@@ -1514,6 +1590,14 @@ select:disabled {
   }
 
   .history-impression-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .player-name-row {
+    flex-wrap: wrap;
+  }
+
+  .history-role-guess-options {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

@@ -418,6 +418,26 @@
       </form>
     </dialog>
 
+    <dialog id="roleGuessDialog" class="role-guess-dialog">
+      <form method="dialog">
+        <div class="sheet-handle" aria-hidden="true"></div>
+        <div class="sheet-heading">
+          <div>
+            <p class="kicker">Role Guess</p>
+            <h2 id="roleGuessPlayerName">プレイヤー</h2>
+          </div>
+          <button id="closeRoleGuessBtn" class="round-button" type="button" aria-label="閉じる">×</button>
+        </div>
+        <div class="field-title">役職候補</div>
+        <div id="roleGuessCandidateOptions" class="role-guess-options"></div>
+        <label class="field">
+          <span>本命役職</span>
+          <select id="primaryRoleGuessSelect"></select>
+        </label>
+        <button id="saveRoleGuessBtn" class="primary-button wide" type="button">役職推理を保存</button>
+      </form>
+    </dialog>
+
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
