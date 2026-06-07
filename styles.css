@@ -2,9 +2,9 @@
   color-scheme: dark;
   --ink: #eef6f4;
   --muted: #9fb0ad;
-  --line: #2c3a3c;
-  --paper: #182324;
-  --panel: #131d1f;
+  --line: #202829;
+  --paper: #080b0c;
+  --panel: #050708;
   --accent: #44b3a4;
   --accent-strong: #8ed8cc;
   --human: #85e1bd;
@@ -12,7 +12,7 @@
   --gray: #b4bfbd;
   --rival: #ffd38b;
   --inactive: #a9b2b0;
-  --shadow: 0 18px 42px rgba(0, 0, 0, 0.34);
+  --shadow: 0 12px 28px rgba(0, 0, 0, 0.42);
 }
 
 * {
@@ -21,15 +21,13 @@
 
 html {
   min-width: 320px;
-  background: #101718;
+  background: #000;
 }
 
 body {
   margin: 0;
   color: var(--ink);
-  background:
-    linear-gradient(180deg, rgba(29, 43, 45, 0.94), rgba(16, 23, 24, 0.98)),
-    #101718;
+  background: #000;
   font-family: "Yu Gothic UI", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
   -webkit-tap-highlight-color: transparent;
 }
@@ -128,7 +126,7 @@ h2 {
 .export-panel {
   border: 1px solid rgba(44, 58, 60, 0.95);
   border-radius: 8px;
-  background: rgba(19, 29, 31, 0.92);
+  background: var(--panel);
   box-shadow: var(--shadow);
 }
 
@@ -385,7 +383,7 @@ select:disabled {
   min-height: 70px;
   padding: 8px 8px 8px 12px;
   border-bottom: 1px solid var(--line);
-  background: rgba(19, 29, 31, 0.82);
+  background: #070a0b;
   color: var(--ink);
   text-align: left;
 }
@@ -398,7 +396,7 @@ select:disabled {
   min-height: 58px;
   padding: 8px 8px 8px 12px;
   border-bottom: 1px solid var(--line);
-  background: rgba(19, 29, 31, 0.82);
+  background: #070a0b;
   color: var(--ink);
 }
 
@@ -812,8 +810,7 @@ select:disabled {
   gap: 8px;
   padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--line);
-  background: rgba(16, 23, 24, 0.94);
-  backdrop-filter: blur(16px);
+  background: #000;
 }
 
 .bottom-bar button {
@@ -834,7 +831,7 @@ select:disabled {
   overflow: hidden;
   border: 1px solid rgba(44, 58, 60, 0.95);
   border-radius: 8px;
-  background: rgba(19, 29, 31, 0.92);
+  background: var(--panel);
   box-shadow: var(--shadow);
 }
 
@@ -864,7 +861,7 @@ select:disabled {
 .sync-conflict-panel {
   border: 1px solid rgba(44, 58, 60, 0.95);
   border-radius: 8px;
-  background: rgba(19, 29, 31, 0.92);
+  background: var(--panel);
   box-shadow: var(--shadow);
 }
 
@@ -978,7 +975,7 @@ select:disabled {
 .history-management-panel {
   border: 1px solid rgba(101, 57, 63, 0.9);
   border-radius: 8px;
-  background: rgba(35, 25, 27, 0.92);
+  background: #120a0c;
   box-shadow: var(--shadow);
 }
 
@@ -1485,7 +1482,7 @@ select:disabled {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #182324;
+  background: var(--paper);
 }
 
 .result-grid {

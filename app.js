@@ -1,7 +1,7 @@
 const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
-const SYNC_DELAY_MS = 1200;
+const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
   medium: "霊媒師",
@@ -95,7 +95,6 @@ let toastTimer = null;
 let syncTimer = null;
 let supabaseClient = null;
 let syncUser = null;
-let syncChannel = null;
 let pendingCloudRecord = null;
 let applyingCloudState = false;
 let hadLocalDataAtStartup = Boolean(localStorage.getItem(STORAGE_KEY));
@@ -369,9 +368,15 @@ function bindEvents() {
   els.logoutBtn.addEventListener("click", logoutAndClearLocalData);
   els.downloadCloudBtn.addEventListener("click", downloadPendingCloudState);
   els.uploadLocalBtn.addEventListener("click", uploadLocalState);
-  window.addEventListener("online", () => synchronizeNow());
-  document.addEventListener("visibilitychange", () => {
+  window.addEventListener("online", () => {
     if (document.visibilityState === "visible") synchronizeNow();
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      synchronizeNow();
+    } else {
+      cancelScheduledSync();
+    }
   });
 }
 
@@ -936,10 +941,12 @@ function render() {
   renderSyncStatus();
   els.wolfCountSelect.value = String(state.wolfCount);
   els.playerCountBadge.textContent = `参加${getActivePlayers().length}/${getSelectedTournamentPlayers().length}人`;
-  renderParticipantRows();
-  renderRopeCount();
-  renderRows();
-  renderHistories();
+  if (state.activeView === "participants") renderParticipantRows();
+  if (state.activeView === "reasoning") {
+    renderRopeCount();
+    renderRows();
+  }
+  if (state.activeView === "export") renderHistories();
 }
 
 function renderActiveView() {
@@ -2084,9 +2091,17 @@ function getOrCreateDeviceId() {
 }
 
 function scheduleAutoSync() {
-  if (!syncUser || !navigator.onLine) return;
+  cancelScheduledSync();
+  if (!syncUser || !navigator.onLine || document.visibilityState !== "visible") return;
+  syncTimer = window.setTimeout(() => {
+    syncTimer = null;
+    synchronizeNow();
+  }, SYNC_DELAY_MS);
+}
+
+function cancelScheduledSync() {
   window.clearTimeout(syncTimer);
-  syncTimer = window.setTimeout(() => synchronizeNow(), SYNC_DELAY_MS);
+  syncTimer = null;
 }
 
 async function initializeSync() {
@@ -2109,10 +2124,9 @@ async function initializeSync() {
     if (nextUser?.id !== syncUser?.id) {
       syncUser = nextUser;
       if (syncUser) {
-        subscribeToCloudUpdates();
         synchronizeNow({ initial: true });
       } else {
-        unsubscribeFromCloudUpdates();
+        cancelScheduledSync();
       }
       renderSyncStatus();
     }
@@ -2124,7 +2138,6 @@ async function initializeSync() {
   }
   syncUser = data.session?.user || null;
   if (syncUser) {
-    subscribeToCloudUpdates();
     await synchronizeNow({ initial: true });
   }
   renderSyncStatus();
@@ -2234,6 +2247,7 @@ function getAuthRedirectUrl() {
 }
 
 async function synchronizeNow({ initial = false, manual = false } = {}) {
+  cancelScheduledSync();
   if (!supabaseClient || !syncUser) return;
   if (!navigator.onLine) {
     syncMeta.status = "offline";
@@ -2349,30 +2363,6 @@ function showCloudConflict(record, type) {
   syncMeta.status = type === "remote" ? "remote" : "conflict";
   state.activeView = type === "initial" ? "sync" : state.activeView;
   render();
-}
-
-function subscribeToCloudUpdates() {
-  unsubscribeFromCloudUpdates();
-  if (!supabaseClient || !syncUser) return;
-  syncChannel = supabaseClient
-    .channel(`user-state-${syncUser.id}`)
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "user_states", filter: `user_id=eq.${syncUser.id}` },
-      (message) => {
-        const record = message.new;
-        if (!record?.updated_at || record.updated_by_device === deviceId) return;
-        if (isAfter(record.updated_at, syncMeta.lastCloudUpdatedAt)) {
-          showCloudConflict(record, syncMeta.dirty ? "conflict" : "remote");
-        }
-      },
-    )
-    .subscribe();
-}
-
-function unsubscribeFromCloudUpdates() {
-  if (syncChannel && supabaseClient) supabaseClient.removeChannel(syncChannel);
-  syncChannel = null;
 }
 
 function isAfter(value, baseline) {
