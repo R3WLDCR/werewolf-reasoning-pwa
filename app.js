@@ -1388,21 +1388,21 @@ function getSeerGridHtml(player) {
 
 function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
   if (!seers.length) {
-    const roleClaim = getWolfSideAwareRoleLabel(player);
+    const roleClaim = getSeerGridRoleLabel(player);
     return roleClaim ? `<span class="seer-result-label ${getWolfSideAwareRoleClass(player)}">${escapeHtml(roleClaim)}</span>` : "";
   }
   return seers
     .map((seer) => {
       if (player.id === seer.id) {
         const className = getWolfSideAwareRoleClass(player);
-        return `<span class="seer-result-label ${className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(getWolfSideAwareRoleLabel(player))}</span>`;
+        return `<span class="seer-result-label ${className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(getSeerGridRoleLabel(player))}</span>`;
       }
       if (isWolfSideDisplayTarget(player)) {
         const className = isInactiveStatus(player.status) ? "role-madman" : "judgement-rival";
         return `<span class="seer-result-label ${className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(getWolfSideDisplayLabel(player))}</span>`;
       }
       const result = state.results.find((item) => item.seerId === seer.id && item.targetId === player.id);
-      const roleClaim = getWolfSideAwareRoleLabel(player);
+      const roleClaim = getSeerGridRoleLabel(player);
       const autoVillagerClaim = roleClaim || getAutoVillagerClaimForSeer(player, seer.id);
       if (!result) {
         return autoVillagerClaim
@@ -1427,6 +1427,11 @@ function getRoleClaimLabel(player) {
 
 function getWolfSideAwareRoleLabel(player) {
   return player.role === "wolfSide" ? getWolfSideDisplayLabel(player) : getRoleClaimLabel(player);
+}
+
+function getSeerGridRoleLabel(player) {
+  if (RIVAL_DISPLAY_ROLES.has(player.role) && getRoleClaimants(player.role).length >= 2) return "";
+  return getWolfSideAwareRoleLabel(player);
 }
 
 function getWolfSideAwareRoleClass(player) {
