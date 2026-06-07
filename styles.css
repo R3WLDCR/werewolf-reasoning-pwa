@@ -1663,7 +1663,7 @@ select:disabled {
   #reasoningView .player-row {
     width: max-content;
     min-width: 850px;
-    grid-template-columns: 100px max-content 56px 110px 76px 38px;
+    grid-template-columns: 88px max-content 56px 110px 76px 38px;
     gap: 4px;
     min-height: 50px;
     padding: 3px 5px 3px 0;
@@ -1674,7 +1674,7 @@ select:disabled {
     left: 0;
     z-index: 5;
     display: block;
-    width: 100px;
+    width: 88px;
     height: 44px;
     padding: 0 8px 0 10px;
     border-right: 1px solid var(--line);
