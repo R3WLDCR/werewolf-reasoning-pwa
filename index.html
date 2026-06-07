@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#101718" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="人狼推理ノート" />
+    <title>人狼推理ノート</title>
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.svg" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div>
+          <p class="kicker">Werewolf Notes</p>
+          <h1>人狼推理ノート</h1>
+        </div>
+        <div class="game-controls">
+          <span id="gameStatusBadge" class="game-status-badge">準備中</span>
+          <button id="startGameBtn" class="primary-button" type="button">ゲーム開始</button>
+          <button id="returnSetupBtn" class="secondary-button" type="button" hidden>準備へ戻る</button>
+          <button id="finishGameBtn" class="danger-button" type="button" hidden>ゲーム終了</button>
+        </div>
+      </header>
+
+      <main class="main-stack">
+        <section id="participantsView" class="view-stack" aria-label="参加者">
+          <section class="setup-panel" aria-label="卓情報">
+            <div class="field">
+              <span>大会</span>
+              <div class="tournament-controls">
+                <select id="tournamentSelect" aria-label="大会を選択"></select>
+                <button id="addTournamentBtn" class="secondary-button" type="button">追加</button>
+                <button id="renameTournamentBtn" class="secondary-button" type="button">名称変更</button>
+              </div>
+            </div>
+            <label class="field date-field">
+              <span>開催日</span>
+              <span class="date-input-wrap">
+                <input id="eventDateInput" class="native-date-input" type="date" />
+                <button id="openDatePickerBtn" class="date-display-button" type="button">日付未選択</button>
+                <button id="clearDateBtn" class="date-clear-button" type="button" aria-label="開催日を未選択に戻す">×</button>
+              </span>
+            </label>
+            <label class="field">
+              <span>試合</span>
+              <input id="gameNumberInput" type="number" inputmode="numeric" min="1" step="1" />
+            </label>
+          </section>
+
+          <section class="setup-panel" aria-label="参加者登録">
+            <div class="roster-filter" role="group" aria-label="名簿表示">
+              <button type="button" data-roster-filter="tournament">大会名簿</button>
+              <button type="button" data-roster-filter="all">全員</button>
+              <button type="button" data-roster-filter="unassigned">未所属</button>
+            </div>
+            <form id="addPlayerForm" class="entry-form">
+              <input id="playerNameInput" type="text" inputmode="text" placeholder="参加者の名前" autocomplete="off" />
+              <button class="primary-button" type="submit">追加</button>
+            </form>
+            <span id="playerCountBadge" class="count-badge">0人</span>
+          </section>
+
+          <section class="table-panel" aria-label="参加者一覧">
+            <div id="participantRows" class="player-rows"></div>
+            <div id="participantEmptyState" class="empty-state">
+              <strong>参加者を追加</strong>
+              <span>ここで名前を登録してから推理画面へ進みます。</span>
+            </div>
+          </section>
+        </section>
+
+        <section id="reasoningView" class="view-stack" aria-label="推理">
+          <section class="setup-panel" aria-label="卓情報と人狼数">
+            <div id="matchSummary" class="match-summary">未設定 / 第1試合</div>
+          <label class="wolf-count-card">
+            <span>人狼</span>
+            <select id="wolfCountSelect" aria-label="人狼数">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+            </select>
+          </label>
+
+          <div id="ropeCountBadge" class="rope-count-badge" aria-label="残り縄数">残り0縄</div>
+        </section>
+
+        <section class="table-panel" aria-label="全プレイヤー一覧">
+          <div id="playerRows" class="player-rows"></div>
+          <div id="emptyState" class="empty-state">
+            <strong>参加者を選んで開始</strong>
+            <span>参加者タブで今回のゲームに参加する人を選べます。</span>
+          </div>
+        </section>
+        </section>
+
+        <section id="exportView" class="view-stack" aria-label="ログ">
+          <section class="setup-panel">
+            <div id="exportSummary" class="match-summary">未設定 / 第1試合</div>
+            <button id="copyExportBtn" class="secondary-button wide" type="button">現在の盤面をコピー</button>
+          </section>
+          <section class="history-panel" aria-label="終了済みゲーム">
+            <div class="section-heading">
+              <strong>終了済みゲーム</strong>
+              <span id="historyCountBadge" class="count-badge">0試合</span>
+            </div>
+            <div id="historyList" class="history-list"></div>
+            <div id="historyEmptyState" class="empty-state compact">
+              <strong>履歴はまだありません</strong>
+              <span>ゲーム終了時に、確定した盤面がここへ保存されます。</span>
+            </div>
+          </section>
+          <section id="historyDetailPanel" class="export-panel" aria-label="履歴詳細" hidden>
+            <div class="history-detail-actions">
+              <button id="closeHistoryDetailBtn" class="secondary-button" type="button">一覧へ</button>
+              <button id="editHistoryBtn" class="secondary-button" type="button">盤面を編集</button>
+              <button id="copyHistoryBtn" class="secondary-button" type="button">コピー</button>
+              <button id="deleteHistoryBtn" class="danger-button" type="button">削除</button>
+            </div>
+            <pre id="historyDetailPreview"></pre>
+          </section>
+          <section class="history-management-panel" aria-label="履歴管理">
+            <div class="section-heading">
+              <div>
+                <strong>履歴管理</strong>
+                <span class="section-note">現在の盤面と参加者名簿は削除されません。</span>
+              </div>
+            </div>
+            <div class="history-management-actions">
+              <button id="deleteTournamentHistoriesBtn" class="danger-button" type="button">この大会の履歴を削除</button>
+              <button id="deleteAllHistoriesBtn" class="danger-button" type="button">すべての履歴を削除</button>
+            </div>
+          </section>
+        </section>
+      </main>
+
+      <nav class="bottom-bar" aria-label="操作">
+        <button class="tab-button" type="button" data-view="participants">参加者</button>
+        <button class="tab-button" type="button" data-view="reasoning">推理</button>
+        <button class="tab-button" type="button" data-view="export">ログ</button>
+      </nav>
+    </div>
+
+    <dialog id="editDialog" class="edit-dialog">
+      <form id="editForm" method="dialog">
+        <div class="sheet-handle" aria-hidden="true"></div>
+        <div class="sheet-heading">
+          <div>
+            <p class="kicker">Player</p>
+            <h2 id="editPlayerName">プレイヤー</h2>
+          </div>
+          <button id="closeEditBtn" class="round-button" type="button" aria-label="閉じる">×</button>
+        </div>
+
+        <label class="field">
+          <span>CO</span>
+          <select id="roleSelect">
+            <option value="">なし</option>
+            <option value="seer">預言者</option>
+            <option value="medium">霊媒師</option>
+            <option value="guard">ボディガード</option>
+            <option value="villager">市民</option>
+            <option value="madman">裏切り者</option>
+            <option value="wolfSide">狼狂</option>
+            <option value="other">その他</option>
+            <option value="hunter">ハンター</option>
+            <option value="fox">妖狐</option>
+            <option value="teruteru">てるてる</option>
+          </select>
+        </label>
+
+        <div class="field-group">
+          <div id="resultSeerHint" class="field-title">この人への占い結果</div>
+          <div class="result-grid">
+            <select id="resultValueSelect" aria-label="結果">
+              <option value="">未記録</option>
+              <option value="human">村人</option>
+              <option value="werewolf">人狼</option>
+            </select>
+          </div>
+        </div>
+
+        <label class="field">
+          <span>短いメモ</span>
+          <textarea id="memoInput" maxlength="80" placeholder="例: 発言少なめ、佐藤真寄り"></textarea>
+        </label>
+
+        <button id="savePlayerBtn" class="primary-button wide" type="submit">保存</button>
+      </form>
+    </dialog>
+
+    <dialog id="statusDialog" class="status-dialog">
+      <form method="dialog">
+        <div class="sheet-handle" aria-hidden="true"></div>
+        <div class="sheet-heading">
+          <div>
+            <p class="kicker">Status</p>
+            <h2 id="statusPlayerName">プレイヤー</h2>
+          </div>
+          <button id="closeStatusBtn" class="round-button" type="button" aria-label="閉じる">×</button>
+        </div>
+        <div class="status-actions" aria-label="状態を選択">
+          <button id="markExiledBtn" class="status-choice exiled" type="button">追放</button>
+          <button id="markAttackedBtn" class="status-choice attacked" type="button">襲撃</button>
+          <button id="markAliveBtn" class="status-choice alive" type="button">生存に戻す</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="membershipDialog" class="membership-dialog">
+      <form id="membershipForm" method="dialog">
+        <div class="sheet-handle" aria-hidden="true"></div>
+        <div class="sheet-heading">
+          <div>
+            <p class="kicker">Membership</p>
+            <h2 id="membershipPlayerName">プレイヤー</h2>
+          </div>
+          <button id="closeMembershipBtn" class="round-button" type="button" aria-label="閉じる">×</button>
+        </div>
+        <div id="membershipOptions" class="membership-options"></div>
+        <button class="primary-button wide" type="submit">所属を保存</button>
+      </form>
+    </dialog>
+
+    <dialog id="finishGameDialog" class="action-dialog">
+      <form id="finishGameForm" method="dialog">
+        <div class="sheet-handle" aria-hidden="true"></div>
+        <div class="sheet-heading">
+          <div>
+            <p class="kicker">Game Result</p>
+            <h2>ゲーム終了</h2>
+          </div>
+          <button id="closeFinishGameBtn" class="round-button" type="button" aria-label="閉じる">×</button>
+        </div>
+        <label class="field">
+          <span>勝利陣営</span>
+          <select id="winnerSelect" required>
+            <option value="">選択してください</option>
+            <option value="村人陣営">村人陣営</option>
+            <option value="人狼陣営">人狼陣営</option>
+            <option value="妖狐陣営">妖狐陣営</option>
+            <option value="てるてる">てるてる</option>
+            <option value="その他">その他</option>
+          </select>
+        </label>
+        <label id="otherWinnerField" class="field" hidden>
+          <span>勝利陣営名</span>
+          <input id="otherWinnerInput" type="text" maxlength="30" placeholder="勝利陣営名" />
+        </label>
+        <button class="danger-button wide" type="submit">終了して履歴へ保存</button>
+      </form>
+    </dialog>
+
+    <dialog id="historyEditDialog" class="history-edit-dialog">
+      <form id="historyEditForm" method="dialog">
+        <div class="sheet-handle" aria-hidden="true"></div>
+        <div class="sheet-heading">
+          <div>
+            <p class="kicker">History Edit</p>
+            <h2 id="historyEditTitle">履歴を編集</h2>
+          </div>
+          <button id="closeHistoryEditBtn" class="round-button" type="button" aria-label="閉じる">×</button>
+        </div>
+        <div class="history-meta-grid">
+          <label class="field"><span>大会名</span><input id="historyEventNameInput" type="text" /></label>
+          <label class="field"><span>開催日</span><input id="historyEventDateInput" type="date" /></label>
+          <label class="field"><span>試合</span><input id="historyGameNumberInput" type="number" min="1" /></label>
+          <label class="field">
+            <span>勝利陣営</span>
+            <input id="historyWinnerInput" type="text" maxlength="30" />
+          </label>
+        </div>
+        <div class="field-title">参加者・盤面</div>
+        <div id="historyPlayerEditor" class="history-player-editor"></div>
+        <div class="section-heading flush">
+          <div class="field-title">占い結果</div>
+          <button id="addHistoryResultBtn" class="secondary-button" type="button">結果を追加</button>
+        </div>
+        <div id="historyResultEditor" class="history-result-editor"></div>
+        <button class="primary-button wide" type="submit">履歴の変更を保存</button>
+      </form>
+    </dialog>
+
+    <dialog id="bulkDeleteHistoryDialog" class="action-dialog">
+      <form id="bulkDeleteHistoryForm" method="dialog">
+        <div class="sheet-handle" aria-hidden="true"></div>
+        <div class="sheet-heading">
+          <div>
+            <p class="kicker">Delete History</p>
+            <h2 id="bulkDeleteHistoryTitle">履歴を削除</h2>
+          </div>
+          <button id="closeBulkDeleteHistoryBtn" class="round-button" type="button" aria-label="閉じる">×</button>
+        </div>
+        <div id="bulkDeleteHistoryMessage" class="delete-warning"></div>
+        <label class="field">
+          <span>確認のため「削除」と入力</span>
+          <input id="bulkDeleteConfirmInput" type="text" inputmode="text" autocomplete="off" placeholder="削除" />
+        </label>
+        <button id="confirmBulkDeleteHistoryBtn" class="danger-button wide" type="submit" disabled>履歴を削除</button>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
