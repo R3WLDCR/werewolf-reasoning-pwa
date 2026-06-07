@@ -783,7 +783,10 @@ function saveRoleGuess() {
   const player = findPlayer(roleGuessPlayerId);
   if (!player) return;
   player.roleGuessCandidates = normalizeRoleGuessCandidates(getSelectedRoleGuessCandidates());
-  player.primaryRoleGuess = normalizePrimaryRoleGuess(els.primaryRoleGuessSelect.value, player.roleGuessCandidates);
+  player.primaryRoleGuess =
+    normalizePrimaryRoleGuess(els.primaryRoleGuessSelect.value, player.roleGuessCandidates) ||
+    player.roleGuessCandidates.find((value) => value !== "unknown") ||
+    "";
   closeRoleGuessDialog();
   renderAndStore();
   toast("役職推理を保存しました");
@@ -1139,12 +1142,12 @@ function renderRows() {
           <span class="player-name-row">
             <span class="player-name">${escapeHtml(player.name)}</span>
             <span class="impression-label impression-${impression.value}">${escapeHtml(impression.label)}</span>
-            <span class="role-guess-label ${getRoleGuessClass(roleGuess.value)}">${escapeHtml(roleGuess.label)}</span>
           </span>
           <span class="player-sub">${escapeHtml(memo)}</span>
         </span>
         ${seerGrid}
       </button>
+      <button class="role-guess-button ${getRoleGuessClass(roleGuess.value)}" type="button" aria-label="${escapeHtml(player.name)}の役職推理を変更">${escapeHtml(roleGuess.label)}</button>
       <button class="status-button status-${escapeHtml(player.status || "alive")}" type="button" aria-label="${escapeHtml(player.name)}の状態を変更">${escapeHtml(getStatusDisplay(player))}</button>
       <span class="order-actions" aria-label="${escapeHtml(player.name)}の並び替え">
         <button class="order-button" type="button" data-direction="-1" ${index === 0 ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を上へ">↑</button>
@@ -1157,11 +1160,6 @@ function renderRows() {
         openImpressionDialog(player.id);
         return;
       }
-      if (event.target.closest(".role-guess-label")) {
-        event.stopPropagation();
-        openRoleGuessDialog(player.id);
-        return;
-      }
       const seerCell = event.target.closest("[data-seer-id]");
       openEditDialog(player.id, seerCell?.dataset.seerId || "");
     });
@@ -1169,6 +1167,7 @@ function renderRows() {
       button.addEventListener("click", () => movePlayer(player.id, Number(button.dataset.direction)));
     });
     row.querySelector(".status-button").addEventListener("click", () => openStatusDialog(player.id));
+    row.querySelector(".role-guess-button").addEventListener("click", () => openRoleGuessDialog(player.id));
     els.playerRows.appendChild(row);
   });
 }
