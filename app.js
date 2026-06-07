@@ -984,13 +984,18 @@ function saveDivinationResult({ silent = false } = {}) {
   const target = findPlayer(editingPlayerId);
   const seer = findPlayer(editingSeerId);
   const value = els.resultValueSelect.value;
-  if (!target || !seer || !value) {
-    if (!value) return false;
+  if (!target || !seer) {
     if (silent) return false;
     toast("占い列を選んでください");
     return false;
   }
   const existing = state.results.find((result) => result.seerId === seer.id && result.targetId === target.id);
+  if (!value) {
+    if (!existing) return false;
+    state.results = state.results.filter((result) => result.id !== existing.id);
+    if (!silent) renderAndStore();
+    return true;
+  }
   if (existing) {
     existing.value = value;
     existing.order = existing.order || existing.day || getNextDivinationOrder(seer.id);

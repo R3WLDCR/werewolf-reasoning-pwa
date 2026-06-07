@@ -1592,7 +1592,7 @@ select:disabled {
   }
 }
 
-@media (min-width: 900px) {
+@media (min-width: 680px) {
   body[data-active-view="reasoning"] .app-shell {
     max-width: none;
     padding-inline: 24px;
