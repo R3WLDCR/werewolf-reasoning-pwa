@@ -517,7 +517,7 @@ select:disabled {
 
 .player-info:focus-visible,
 .participant-info:focus-visible,
-.impression-button:focus-visible,
+.role-guess-button:focus-visible,
 .status-button:focus-visible,
 .order-button:focus-visible {
   outline: 3px solid rgba(21, 94, 99, 0.22);
@@ -549,8 +549,7 @@ select:disabled {
   flex: 1 1 auto;
 }
 
-.impression-label,
-.role-guess-label {
+.impression-label {
   flex: 0 0 auto;
   display: inline-grid;
   place-items: center;
@@ -563,7 +562,7 @@ select:disabled {
   white-space: nowrap;
 }
 
-.impression-button {
+.role-guess-button {
   min-width: 0;
   width: 100%;
   display: inline-grid;

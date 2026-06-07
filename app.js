@@ -1146,14 +1146,14 @@ function renderRows() {
         <span class="player-main">
           <span class="player-name-row">
             <span class="player-name">${escapeHtml(player.name)}</span>
-            <span class="role-guess-label ${getRoleGuessClass(roleGuess.value)}">${escapeHtml(roleGuess.label)}</span>
+            <span class="impression-label impression-${impression.value}">${escapeHtml(impression.label)}</span>
           </span>
           <span class="player-sub">${escapeHtml(memo)}</span>
         </span>
         ${seerGrid}
         ${rivalRoleGrid}
       </button>
-      <button class="impression-button impression-${impression.value}" type="button" aria-label="${escapeHtml(player.name)}の印象を変更">${escapeHtml(impression.label)}</button>
+      <button class="role-guess-button ${getRoleGuessClass(roleGuess.value)}" type="button" aria-label="${escapeHtml(player.name)}の役職推理を変更">${escapeHtml(roleGuess.label)}</button>
       <button class="status-button status-${escapeHtml(player.status || "alive")}" type="button" aria-label="${escapeHtml(player.name)}の状態を変更">${escapeHtml(getStatusDisplay(player))}</button>
       <span class="order-actions" aria-label="${escapeHtml(player.name)}の並び替え">
         <button class="order-button" type="button" data-direction="-1" ${index === 0 ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を上へ">↑</button>
@@ -1161,9 +1161,9 @@ function renderRows() {
       </span>
     `;
     row.querySelector(".player-info").addEventListener("click", (event) => {
-      if (event.target.closest(".role-guess-label")) {
+      if (event.target.closest(".impression-label")) {
         event.stopPropagation();
-        openRoleGuessDialog(player.id);
+        openImpressionDialog(player.id);
         return;
       }
       const seerCell = event.target.closest("[data-seer-id]");
@@ -1173,7 +1173,7 @@ function renderRows() {
       button.addEventListener("click", () => movePlayer(player.id, Number(button.dataset.direction)));
     });
     row.querySelector(".status-button").addEventListener("click", () => openStatusDialog(player.id));
-    row.querySelector(".impression-button").addEventListener("click", () => openImpressionDialog(player.id));
+    row.querySelector(".role-guess-button").addEventListener("click", () => openRoleGuessDialog(player.id));
     els.playerRows.appendChild(row);
   });
 }
@@ -1221,9 +1221,9 @@ function getNextRoleClaimOrder(players = state.players) {
 function getImpressionFromReasons(reasons) {
   const villagerCount = reasons.filter((reason) => reason.side === "villager").length;
   const werewolfCount = reasons.filter((reason) => reason.side === "werewolf").length;
-  if (villagerCount > werewolfCount) return { value: "villager", label: "村人寄り", villagerCount, werewolfCount };
-  if (werewolfCount > villagerCount) return { value: "werewolf", label: "人狼寄り", villagerCount, werewolfCount };
-  return { value: "none", label: "印象なし", villagerCount, werewolfCount };
+  if (villagerCount > werewolfCount) return { value: "villager", label: "村人", villagerCount, werewolfCount };
+  if (werewolfCount > villagerCount) return { value: "werewolf", label: "人狼", villagerCount, werewolfCount };
+  return { value: "none", label: "なし", villagerCount, werewolfCount };
 }
 
 function normalizeImpressionSide(value) {
