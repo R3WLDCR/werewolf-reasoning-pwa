@@ -1240,6 +1240,7 @@ function renderRows() {
     const impression = getPlayerImpression(player);
     const roleGuess = getRoleGuessDisplay(player);
     row.innerHTML = `
+      <button class="sticky-player-name" type="button" ${isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を編集">${escapeHtml(player.name)}</button>
       <button class="player-info" type="button" ${isGameFinished() ? "disabled" : ""}>
         <span class="player-main">
           <span class="player-name-row">
@@ -1258,6 +1259,7 @@ function renderRows() {
         <button class="order-button" type="button" data-direction="1" ${index === state.players.length - 1 || isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を下へ">↓</button>
       </span>
     `;
+    row.querySelector(".sticky-player-name").addEventListener("click", () => openEditDialog(player.id));
     row.querySelector(".player-info").addEventListener("click", (event) => {
       if (event.target.closest(".role-guess-label")) {
         event.stopPropagation();

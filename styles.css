@@ -482,6 +482,10 @@ select:disabled {
   text-align: left;
 }
 
+.sticky-player-name {
+  display: none;
+}
+
 .participant-info {
   min-width: 0;
   display: flex;
@@ -1640,21 +1644,51 @@ select:disabled {
   #reasoningView .player-row {
     width: max-content;
     min-width: 1000px;
-    grid-template-columns: max-content 56px 76px 38px;
+    grid-template-columns: 116px max-content 56px 76px 38px;
     gap: 4px;
     min-height: 50px;
-    padding: 3px 5px 3px 9px;
+    padding: 3px 5px 3px 0;
+  }
+
+  #reasoningView .sticky-player-name {
+    position: sticky;
+    left: 0;
+    z-index: 5;
+    display: block;
+    width: 116px;
+    height: 44px;
+    padding: 0 8px 0 10px;
+    border-right: 1px solid var(--line);
+    border-radius: 0;
+    background: #070a0b;
+    color: inherit;
+    overflow: hidden;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.88rem;
+    font-weight: 900;
+  }
+
+  #reasoningView .player-status-exiled .sticky-player-name {
+    background: #202829;
+    text-decoration: line-through;
+  }
+
+  #reasoningView .player-status-attacked .sticky-player-name {
+    background: #3a2025;
+    text-decoration: line-through;
   }
 
   #reasoningView .player-info {
     width: max-content;
-    grid-template-columns: 390px max-content;
+    grid-template-columns: 280px max-content;
     gap: 4px;
     min-height: 42px;
   }
 
   #reasoningView .player-main {
-    grid-template-columns: 285px 100px;
+    grid-template-columns: 175px 100px;
     align-items: center;
     gap: 4px;
   }
@@ -1666,8 +1700,7 @@ select:disabled {
   }
 
   #reasoningView .player-name {
-    flex: 0 0 110px;
-    font-size: 0.88rem;
+    display: none;
   }
 
   #reasoningView .role-guess-label,
