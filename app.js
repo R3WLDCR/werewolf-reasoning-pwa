@@ -1253,11 +1253,11 @@ function renderRows() {
             ${isGameFinished() && player.trueRole ? `<span class="true-role-label ${getRoleGuessClass(player.trueRole)}">${escapeHtml(ROLE_GUESS_LABELS[player.trueRole] || player.trueRole)}</span>` : ""}
             <span class="role-guess-label ${getRoleGuessClass(roleGuess.value)}">${escapeHtml(roleGuess.label)}</span>
           </span>
-          <span class="player-sub">${escapeHtml(memo)}</span>
         </span>
         ${seerGrid}
       </button>
       <button class="impression-button impression-${impression.value}" type="button" ${isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}の要素を変更">${escapeHtml(impression.label)}</button>
+      <button class="memo-button" type="button" ${isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}のメモを変更">${escapeHtml(memo)}</button>
       <button class="status-button status-${escapeHtml(player.status || "alive")}" type="button" ${isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}の状態を変更">${escapeHtml(getStatusDisplay(player))}</button>
       <span class="order-actions" aria-label="${escapeHtml(player.name)}の並び替え">
         <button class="order-button" type="button" data-direction="-1" ${index === 0 || isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を上へ">↑</button>
@@ -1279,6 +1279,7 @@ function renderRows() {
     });
     row.querySelector(".status-button").addEventListener("click", () => openStatusDialog(player.id));
     row.querySelector(".impression-button").addEventListener("click", () => openImpressionDialog(player.id));
+    row.querySelector(".memo-button").addEventListener("click", () => openEditDialog(player.id));
     els.playerRows.appendChild(row);
   });
 }
