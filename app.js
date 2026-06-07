@@ -21,6 +21,7 @@ const ROLE_ORDER = {
   guard: 2,
   hunter: 3,
 };
+const RIVAL_DISPLAY_ROLES = new Set(["medium", "guard", "hunter"]);
 const STATUS_LABELS = {
   alive: "生存",
   exiled: "追放",
@@ -460,6 +461,7 @@ function addPlayer() {
     impressionReasons: [],
     roleGuessCandidates: [],
     primaryRoleGuess: "",
+    roleClaimOrder: null,
   });
   els.playerNameInput.value = "";
   renderAndStore();
@@ -541,6 +543,7 @@ function resetBoardState() {
     impressionReasons: [],
     roleGuessCandidates: [],
     primaryRoleGuess: "",
+    roleClaimOrder: null,
   }));
   state.results = [];
 }
@@ -796,7 +799,7 @@ function getRoleGuessDisplay(player) {
   const primary = normalizePrimaryRoleGuess(player.primaryRoleGuess, player.roleGuessCandidates);
   return {
     value: primary || "unknown",
-    label: `推理: ${primary ? ROLE_GUESS_LABELS[primary] : ROLE_GUESS_LABELS.unknown}`,
+    label: primary ? ROLE_GUESS_LABELS[primary] : ROLE_GUESS_LABELS.unknown,
   };
 }
 
@@ -876,6 +879,7 @@ function saveEditingPlayer() {
   player.role = els.roleSelect.value;
   player.memo = els.memoInput.value.trim();
   if (previousRole !== player.role) {
+    player.roleClaimOrder = player.role ? getNextRoleClaimOrder() : null;
     reorderPlayersForBoard();
   }
   saveDivinationResult({ silent: true });
@@ -1136,18 +1140,20 @@ function renderRows() {
     const seerGrid = getSeerGridHtml(player);
     const impression = getPlayerImpression(player);
     const roleGuess = getRoleGuessDisplay(player);
+    const rivalRoleGrid = getRivalRoleGridHtml(player);
     row.innerHTML = `
       <button class="player-info" type="button">
         <span class="player-main">
           <span class="player-name-row">
             <span class="player-name">${escapeHtml(player.name)}</span>
-            <span class="impression-label impression-${impression.value}">${escapeHtml(impression.label)}</span>
+            <span class="role-guess-label ${getRoleGuessClass(roleGuess.value)}">${escapeHtml(roleGuess.label)}</span>
           </span>
           <span class="player-sub">${escapeHtml(memo)}</span>
         </span>
         ${seerGrid}
+        ${rivalRoleGrid}
       </button>
-      <button class="role-guess-button ${getRoleGuessClass(roleGuess.value)}" type="button" aria-label="${escapeHtml(player.name)}の役職推理を変更">${escapeHtml(roleGuess.label)}</button>
+      <button class="impression-button impression-${impression.value}" type="button" aria-label="${escapeHtml(player.name)}の印象を変更">${escapeHtml(impression.label)}</button>
       <button class="status-button status-${escapeHtml(player.status || "alive")}" type="button" aria-label="${escapeHtml(player.name)}の状態を変更">${escapeHtml(getStatusDisplay(player))}</button>
       <span class="order-actions" aria-label="${escapeHtml(player.name)}の並び替え">
         <button class="order-button" type="button" data-direction="-1" ${index === 0 ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を上へ">↑</button>
@@ -1155,9 +1161,9 @@ function renderRows() {
       </span>
     `;
     row.querySelector(".player-info").addEventListener("click", (event) => {
-      if (event.target.closest(".impression-label")) {
+      if (event.target.closest(".role-guess-label")) {
         event.stopPropagation();
-        openImpressionDialog(player.id);
+        openRoleGuessDialog(player.id);
         return;
       }
       const seerCell = event.target.closest("[data-seer-id]");
@@ -1167,13 +1173,49 @@ function renderRows() {
       button.addEventListener("click", () => movePlayer(player.id, Number(button.dataset.direction)));
     });
     row.querySelector(".status-button").addEventListener("click", () => openStatusDialog(player.id));
-    row.querySelector(".role-guess-button").addEventListener("click", () => openRoleGuessDialog(player.id));
+    row.querySelector(".impression-button").addEventListener("click", () => openImpressionDialog(player.id));
     els.playerRows.appendChild(row);
   });
 }
 
 function getPlayerImpression(player) {
   return getImpressionFromReasons(player.impressionReasons || []);
+}
+
+function getRivalRoleGridHtml(player, players = getActivePlayers()) {
+  if (!RIVAL_DISPLAY_ROLES.has(player.role)) return "";
+  const claimants = getRoleClaimants(player.role, players);
+  if (claimants.length < 2) return "";
+  const cells = claimants
+    .map((claimant, index) => {
+      if (claimant.id === player.id) {
+        return `<span class="rival-role-label ${getRoleClass(player)}">${escapeHtml(`${ROLE_LABELS[player.role]}${getCircledNumber(index + 1)}`)}</span>`;
+      }
+      const attacked = claimant.status === "attacked";
+      return `<span class="rival-role-label ${attacked ? "role-madman" : "role-wolfSide"}">${attacked ? ROLE_LABELS.madman : ROLE_LABELS.wolfSide}</span>`;
+    })
+    .join("");
+  return `<span class="rival-role-grid" style="--rival-columns: ${claimants.length}">${cells}</span>`;
+}
+
+function getRoleClaimants(role, players = getActivePlayers()) {
+  return players
+    .filter((player) => player.role === role)
+    .slice()
+    .sort((a, b) => getRoleClaimOrder(a) - getRoleClaimOrder(b));
+}
+
+function getRoleClaimOrder(player) {
+  if (player.roleClaimOrder === null || player.roleClaimOrder === undefined || player.roleClaimOrder === "") {
+    return Number.MAX_SAFE_INTEGER;
+  }
+  const order = Number(player.roleClaimOrder);
+  return Number.isFinite(order) && order > 0 ? order : Number.MAX_SAFE_INTEGER;
+}
+
+function getNextRoleClaimOrder(players = state.players) {
+  const orders = players.map(getRoleClaimOrder).filter((order) => Number.isFinite(order) && order < Number.MAX_SAFE_INTEGER);
+  return orders.length ? Math.max(...orders) + 1 : 1;
 }
 
 function getImpressionFromReasons(reasons) {
@@ -1378,7 +1420,7 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
 
 function getRoleClaimLabel(player) {
   if (!player.role || !Object.hasOwn(ROLE_LABELS, player.role)) return "";
-  const sameRolePlayers = getActivePlayers().filter((item) => item.role === player.role);
+  const sameRolePlayers = getRoleClaimants(player.role);
   const suffix = sameRolePlayers.length > 1 ? getCircledNumber(sameRolePlayers.findIndex((item) => item.id === player.id) + 1) : "";
   return `${ROLE_LABELS[player.role]}${suffix}`;
 }
@@ -1766,9 +1808,13 @@ function saveHistoryEdits() {
   els.historyPlayerEditor.querySelectorAll("[data-player-id]").forEach((row) => {
     const player = history.players.find((item) => item.id === row.dataset.playerId);
     if (!player) return;
+    const previousRole = player.role;
     player.name = row.querySelector('[data-field="name"]').value.trim() || "名無し";
     player.participating = row.querySelector('[data-field="participating"]').checked;
     player.role = row.querySelector('[data-field="role"]').value;
+    if (previousRole !== player.role) {
+      player.roleClaimOrder = player.role ? getNextRoleClaimOrder(history.players) : null;
+    }
     player.status = row.querySelector('[data-field="status"]').value;
     player.statusDay = isInactiveStatus(player.status)
       ? Math.max(1, Number(row.querySelector('[data-field="statusDay"]').value) || 1)
@@ -1799,6 +1845,7 @@ function saveHistoryEdits() {
     order: Math.max(1, Number(row.querySelector('[data-field="order"]').value) || 1),
     value: row.querySelector('[data-field="value"]').value,
   }));
+  backfillRoleClaimOrders(history.players);
   closeHistoryEditDialog();
   renderAndStore();
   toast("履歴の変更を保存しました");
@@ -2357,6 +2404,7 @@ function ensureMatchDefaults() {
   state.activeView = normalizeActiveView(state.activeView);
   state.rosterFilter = normalizeRosterFilter(state.rosterFilter);
   applySelectedTournamentParticipation();
+  backfillRoleClaimOrders(state.players);
 }
 
 function migrateLegacyRoster(savedEventName = "") {
@@ -2380,6 +2428,21 @@ function backfillStatusDays() {
         player.statusDay = index + 1;
       });
     });
+}
+
+function backfillRoleClaimOrders(players) {
+  let nextOrder =
+    players
+      .map(getRoleClaimOrder)
+      .filter((order) => Number.isFinite(order) && order < Number.MAX_SAFE_INTEGER)
+      .reduce((max, order) => Math.max(max, order), 0) + 1;
+  players.forEach((player) => {
+    if (player.role && getRoleClaimOrder(player) === Number.MAX_SAFE_INTEGER) {
+      player.roleClaimOrder = nextOrder;
+      nextOrder += 1;
+    }
+    if (!player.role) player.roleClaimOrder = null;
+  });
 }
 
 function normalizeWolfCount(value) {
@@ -2449,6 +2512,8 @@ function normalizePlayer(player) {
       player.primaryRoleGuess,
       normalizeRoleGuessCandidates(player.roleGuessCandidates),
     ),
+    roleClaimOrder:
+      getRoleClaimOrder(player) < Number.MAX_SAFE_INTEGER ? Math.max(1, getRoleClaimOrder(player)) : null,
   };
 }
 
@@ -2465,7 +2530,7 @@ function normalizeResult(result) {
 
 function normalizeGameHistory(history) {
   if (!history?.id || !Array.isArray(history.players) || !Array.isArray(history.results)) return null;
-  return {
+  const normalized = {
     id: String(history.id),
     eventName: normalizeEventName(history.eventName) || "未設定",
     eventDate: normalizeDateValue(history.eventDate),
@@ -2478,6 +2543,8 @@ function normalizeGameHistory(history) {
     players: history.players.map(normalizePlayer),
     results: history.results.map(normalizeResult).filter(Boolean),
   };
+  backfillRoleClaimOrders(normalized.players);
+  return normalized;
 }
 
 function findPlayer(id) {
