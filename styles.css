@@ -1588,6 +1588,30 @@ select:disabled {
   }
 }
 
+@media (min-width: 900px) {
+  body[data-active-view="reasoning"] .app-shell {
+    max-width: none;
+    padding-inline: 24px;
+  }
+
+  body[data-active-view="reasoning"] .bottom-bar {
+    width: calc(100% - 48px);
+  }
+
+  body[data-active-view="reasoning"] .player-row {
+    grid-template-columns: minmax(0, 1fr) 76px 92px 46px;
+  }
+
+  body[data-active-view="reasoning"] .player-info {
+    grid-template-columns: minmax(250px, 0.32fr) minmax(0, 1fr);
+  }
+
+  body[data-active-view="reasoning"] .seer-grid {
+    grid-template-columns: repeat(var(--seer-columns), minmax(150px, 1fr));
+    overflow-x: auto;
+  }
+}
+
 @media (max-width: 520px) {
   .app-header {
     align-items: flex-start;
@@ -1605,6 +1629,7 @@ select:disabled {
     overflow-x: auto;
     overflow-y: hidden;
     scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
   }
 
   #reasoningView .player-rows {
@@ -1614,65 +1639,69 @@ select:disabled {
 
   #reasoningView .player-row {
     width: max-content;
-    min-width: 880px;
-    grid-template-columns: 610px 58px 78px 40px;
-    gap: 5px;
-    min-height: 58px;
-    padding: 5px 6px 5px 10px;
+    min-width: 1000px;
+    grid-template-columns: max-content 56px 76px 38px;
+    gap: 4px;
+    min-height: 50px;
+    padding: 3px 5px 3px 9px;
   }
 
   #reasoningView .player-info {
-    grid-template-columns: 250px 355px;
-    gap: 5px;
-    min-height: 46px;
+    width: max-content;
+    grid-template-columns: 390px max-content;
+    gap: 4px;
+    min-height: 42px;
   }
 
   #reasoningView .player-main {
-    grid-template-columns: minmax(0, 1fr) 100px;
+    grid-template-columns: 285px 100px;
     align-items: center;
-    gap: 5px;
+    gap: 4px;
   }
 
   #reasoningView .player-name-row {
     flex-wrap: nowrap;
-    gap: 5px;
+    gap: 4px;
+    overflow: hidden;
   }
 
   #reasoningView .player-name {
-    font-size: 0.92rem;
+    flex: 0 0 110px;
+    font-size: 0.88rem;
   }
 
   #reasoningView .role-guess-label,
   #reasoningView .true-role-label {
-    min-height: 30px;
-    padding: 5px 8px;
-    font-size: 0.75rem;
+    min-height: 28px;
+    padding: 4px 7px;
+    font-size: 0.7rem;
   }
 
   #reasoningView .player-sub {
-    font-size: 0.7rem;
+    font-size: 0.66rem;
   }
 
   #reasoningView .seer-grid {
     grid-column: auto;
-    height: 42px;
-    grid-template-columns: repeat(var(--seer-columns), minmax(105px, 1fr));
-    gap: 4px;
-    padding: 4px 5px;
+    width: max(380px, calc(var(--seer-columns) * 118px));
+    height: 38px;
+    grid-template-columns: repeat(var(--seer-columns), minmax(114px, 1fr));
+    gap: 3px;
+    padding: 3px 4px;
     overflow: hidden;
   }
 
   #reasoningView .seer-result-label {
-    min-height: 32px;
-    padding: 5px 7px;
-    font-size: 0.78rem;
+    min-height: 30px;
+    padding: 4px 6px;
+    font-size: 0.72rem;
   }
 
   #reasoningView .impression-button,
   #reasoningView .status-button {
-    min-height: 34px;
-    padding: 4px;
-    font-size: 0.68rem;
+    min-height: 30px;
+    padding: 3px;
+    font-size: 0.64rem;
   }
 
   #reasoningView .order-actions {
@@ -1680,9 +1709,9 @@ select:disabled {
   }
 
   #reasoningView .order-button {
-    width: 34px;
-    height: 25px;
-    font-size: 0.82rem;
+    width: 32px;
+    height: 22px;
+    font-size: 0.76rem;
   }
 
   .history-meta-grid,

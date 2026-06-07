@@ -1040,6 +1040,7 @@ function render() {
 function renderActiveView() {
   const activeView = normalizeActiveView(state.activeView);
   state.activeView = activeView;
+  document.body.dataset.activeView = activeView;
   [
     ["participants", els.participantsView],
     ["reasoning", els.reasoningView],
