@@ -7,6 +7,9 @@ create table if not exists public.user_states (
 
 alter table public.user_states enable row level security;
 
+revoke all on table public.user_states from anon;
+grant select, insert, update on table public.user_states to authenticated;
+
 drop policy if exists "Users can read their own state" on public.user_states;
 create policy "Users can read their own state"
 on public.user_states for select

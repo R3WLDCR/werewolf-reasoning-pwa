@@ -537,6 +537,45 @@ select:disabled {
   font-weight: 900;
 }
 
+.player-name-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.player-name-row .player-name {
+  flex: 1 1 auto;
+}
+
+.impression-label {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  min-height: 28px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.impression-villager {
+  background: #183755;
+  color: #a9d7ff;
+}
+
+.impression-werewolf {
+  background: #43272c;
+  color: var(--wolf);
+}
+
+.impression-none {
+  background: #263637;
+  color: var(--muted);
+}
+
 .player-sub {
   min-width: 0;
   overflow: hidden;
@@ -1045,7 +1084,8 @@ select:disabled {
 .status-dialog,
 .edit-dialog,
 .action-dialog,
-.history-edit-dialog {
+.history-edit-dialog,
+.impression-dialog {
   width: min(760px, 100%);
   max-width: 100%;
   margin: auto auto 0;
@@ -1059,7 +1099,8 @@ select:disabled {
 .status-dialog::backdrop,
 .edit-dialog::backdrop,
 .action-dialog::backdrop,
-.history-edit-dialog::backdrop {
+.history-edit-dialog::backdrop,
+.impression-dialog::backdrop {
   background: rgba(22, 35, 38, 0.42);
 }
 
@@ -1067,7 +1108,8 @@ select:disabled {
 .status-dialog form,
 .edit-dialog form,
 .action-dialog form,
-.history-edit-dialog form {
+.history-edit-dialog form,
+.impression-dialog form {
   display: grid;
   gap: 13px;
   max-height: min(84dvh, 720px);
@@ -1075,6 +1117,116 @@ select:disabled {
   padding: 10px 14px calc(18px + env(safe-area-inset-bottom));
   border-radius: 8px 8px 0 0;
   background: var(--panel);
+}
+
+.impression-dialog form {
+  max-height: 92dvh;
+}
+
+.impression-summary {
+  display: grid;
+  place-items: center;
+  min-height: 46px;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.impression-reason-section,
+.custom-reason-section {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+.impression-reason-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.impression-reason-option,
+.history-impression-option {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.impression-reason-option:has(input:checked),
+.history-impression-option:has(input:checked) {
+  border-color: currentColor;
+}
+
+.impression-reason-option.villager:has(input:checked),
+.history-impression-option.villager:has(input:checked) {
+  background: #183755;
+  color: #a9d7ff;
+}
+
+.impression-reason-option.werewolf:has(input:checked),
+.history-impression-option.werewolf:has(input:checked) {
+  background: #43272c;
+  color: var(--wolf);
+}
+
+.impression-reason-option input,
+.history-impression-option input {
+  width: 18px;
+  min-height: 18px;
+  height: 18px;
+  padding: 0;
+}
+
+.custom-reason-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px auto;
+  gap: 7px;
+}
+
+.custom-reason-list {
+  display: grid;
+  gap: 6px;
+}
+
+.custom-reason-item {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.custom-reason-item .danger-button {
+  min-height: 34px;
+  padding-inline: 10px;
+  font-size: 0.78rem;
+}
+
+.impression-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.impression-dot.villager {
+  background: #a9d7ff;
+}
+
+.impression-dot.werewolf {
+  background: var(--wolf);
 }
 
 .history-edit-dialog form {
@@ -1114,6 +1266,23 @@ select:disabled {
 .history-player-edit [data-field="name"] {
   grid-column: span 2;
   font-weight: 900;
+}
+
+.history-impression-edit {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 7px;
+}
+
+.history-impression-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.history-impression-option {
+  min-height: 36px;
+  font-size: 0.74rem;
 }
 
 .history-participation {
@@ -1334,5 +1503,17 @@ select:disabled {
 
   .history-management-actions {
     grid-template-columns: 1fr;
+  }
+
+  .custom-reason-form {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .custom-reason-form input {
+    grid-column: 1 / -1;
+  }
+
+  .history-impression-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

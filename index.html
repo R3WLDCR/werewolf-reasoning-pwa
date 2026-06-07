@@ -383,6 +383,41 @@
       </form>
     </dialog>
 
+    <dialog id="impressionDialog" class="impression-dialog">
+      <form method="dialog">
+        <div class="sheet-handle" aria-hidden="true"></div>
+        <div class="sheet-heading">
+          <div>
+            <p class="kicker">Impression</p>
+            <h2 id="impressionPlayerName">プレイヤー</h2>
+          </div>
+          <button id="closeImpressionBtn" class="round-button" type="button" aria-label="閉じる">×</button>
+        </div>
+        <div id="impressionSummary" class="impression-summary">印象なし</div>
+        <section class="impression-reason-section villager-side">
+          <div class="field-title">村人要素</div>
+          <div id="villagerReasonOptions" class="impression-reason-options"></div>
+        </section>
+        <section class="impression-reason-section werewolf-side">
+          <div class="field-title">人狼要素</div>
+          <div id="werewolfReasonOptions" class="impression-reason-options"></div>
+        </section>
+        <section class="custom-reason-section">
+          <div class="field-title">自由観察ラベル</div>
+          <div id="customReasonForm" class="custom-reason-form">
+            <input id="customReasonNameInput" type="text" maxlength="24" placeholder="観察ラベルを追加" />
+            <select id="customReasonSideSelect" aria-label="分類">
+              <option value="villager">村人要素</option>
+              <option value="werewolf">人狼要素</option>
+            </select>
+            <button id="addCustomReasonBtn" class="secondary-button" type="button">追加</button>
+          </div>
+          <div id="customReasonList" class="custom-reason-list"></div>
+        </section>
+        <button id="saveImpressionBtn" class="primary-button wide" type="button">印象を保存</button>
+      </form>
+    </dialog>
+
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

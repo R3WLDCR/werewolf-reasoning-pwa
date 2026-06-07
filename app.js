@@ -30,6 +30,20 @@ const RESULT_LABELS = {
   werewolf: "人狼",
 };
 const CIRCLED_NUMBERS = ["", "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨"];
+const STANDARD_IMPRESSION_REASONS = [
+  { id: "standard-villager-light", label: "動きが軽い", side: "villager", custom: false },
+  { id: "standard-villager-natural-talk", label: "発言が自然", side: "villager", custom: false },
+  { id: "standard-villager-honest-reaction", label: "反応が素直", side: "villager", custom: false },
+  { id: "standard-villager-natural-vote", label: "投票が自然", side: "villager", custom: false },
+  { id: "standard-villager-natural-view", label: "視点が自然", side: "villager", custom: false },
+  { id: "standard-villager-growing-reasoning", label: "推理が伸びる", side: "villager", custom: false },
+  { id: "standard-werewolf-stiff", label: "動きが硬い", side: "werewolf", custom: false },
+  { id: "standard-werewolf-heavy-talk", label: "発言が重い", side: "werewolf", custom: false },
+  { id: "standard-werewolf-defensive", label: "反応が防御的", side: "werewolf", custom: false },
+  { id: "standard-werewolf-unnatural-vote", label: "投票が不自然", side: "werewolf", custom: false },
+  { id: "standard-werewolf-unnatural-view", label: "視点が不自然", side: "werewolf", custom: false },
+  { id: "standard-werewolf-following", label: "便乗が多い", side: "werewolf", custom: false },
+];
 
 const state = {
   day: 1,
@@ -46,6 +60,7 @@ const state = {
   gameStatus: "preparing",
   startedAt: "",
   gameHistories: [],
+  customImpressionReasons: [],
 };
 
 const els = {};
@@ -57,6 +72,8 @@ let draggedPlayerId = "";
 let selectedHistoryId = "";
 let editingHistoryId = "";
 let bulkDeleteHistoryScope = "";
+let impressionPlayerId = "";
+let impressionDraftReasons = [];
 let toastTimer = null;
 let syncTimer = null;
 let supabaseClient = null;
@@ -152,6 +169,18 @@ document.addEventListener("DOMContentLoaded", () => {
     "bulkDeleteConfirmInput",
     "confirmBulkDeleteHistoryBtn",
     "closeBulkDeleteHistoryBtn",
+    "impressionDialog",
+    "impressionPlayerName",
+    "impressionSummary",
+    "villagerReasonOptions",
+    "werewolfReasonOptions",
+    "customReasonList",
+    "customReasonForm",
+    "customReasonNameInput",
+    "customReasonSideSelect",
+    "addCustomReasonBtn",
+    "saveImpressionBtn",
+    "closeImpressionBtn",
     "syncStatusText",
     "syncStatusBadge",
     "syncConfigNotice",
@@ -294,6 +323,12 @@ function bindEvents() {
   els.bulkDeleteHistoryDialog.addEventListener("click", (event) => {
     if (event.target === els.bulkDeleteHistoryDialog) closeBulkDeleteHistoryDialog();
   });
+  els.closeImpressionBtn.addEventListener("click", closeImpressionDialog);
+  els.saveImpressionBtn.addEventListener("click", saveImpressionSelection);
+  els.addCustomReasonBtn.addEventListener("click", addCustomImpressionReason);
+  els.impressionDialog.addEventListener("click", (event) => {
+    if (event.target === els.impressionDialog) closeImpressionDialog();
+  });
   els.remoteUpdateBanner.addEventListener("click", () => {
     state.activeView = "sync";
     render();
@@ -395,6 +430,7 @@ function addPlayer() {
     status: "alive",
     statusDay: null,
     memo: "",
+    impressionReasons: [],
   });
   els.playerNameInput.value = "";
   renderAndStore();
@@ -473,6 +509,7 @@ function resetBoardState() {
     status: "alive",
     statusDay: null,
     memo: "",
+    impressionReasons: [],
   }));
   state.results = [];
 }
@@ -525,6 +562,128 @@ function saveMemberships() {
   closeMembershipDialog();
   renderAndStore();
   toast("所属を保存しました");
+}
+
+function openImpressionDialog(playerId) {
+  const player = findPlayer(playerId);
+  if (!player) return;
+  impressionPlayerId = playerId;
+  impressionDraftReasons = player.impressionReasons.map((reason) => ({ ...reason }));
+  els.impressionPlayerName.textContent = player.name;
+  renderImpressionDialog();
+  els.impressionDialog.showModal();
+}
+
+function closeImpressionDialog() {
+  impressionPlayerId = "";
+  impressionDraftReasons = [];
+  els.impressionDialog.close();
+}
+
+function renderImpressionDialog() {
+  const player = findPlayer(impressionPlayerId);
+  if (!player) return;
+  const selectedIds = new Set(impressionDraftReasons.map((reason) => reason.id));
+  const reasons = getAvailableImpressionReasons();
+  els.villagerReasonOptions.innerHTML = getImpressionReasonOptionsHtml(
+    reasons.filter((reason) => reason.side === "villager"),
+    selectedIds,
+  );
+  els.werewolfReasonOptions.innerHTML = getImpressionReasonOptionsHtml(
+    reasons.filter((reason) => reason.side === "werewolf"),
+    selectedIds,
+  );
+  els.customReasonList.innerHTML = state.customImpressionReasons.length
+    ? state.customImpressionReasons
+        .map(
+          (reason) => `
+            <div class="custom-reason-item">
+              <span class="impression-dot ${reason.side}"></span>
+              <span>${escapeHtml(reason.label)}</span>
+              <button class="danger-button" type="button" data-delete-custom-reason="${escapeHtml(reason.id)}">削除</button>
+            </div>
+          `,
+        )
+        .join("")
+    : '<div class="empty-inline">自由ラベルなし</div>';
+  els.customReasonList.querySelectorAll("[data-delete-custom-reason]").forEach((button) => {
+    button.addEventListener("click", () => deleteCustomImpressionReason(button.dataset.deleteCustomReason));
+  });
+  updateImpressionDialogSummary();
+}
+
+function getImpressionReasonOptionsHtml(reasons, selectedIds) {
+  return reasons
+    .map(
+      (reason) => `
+        <label class="impression-reason-option ${reason.side}">
+          <input type="checkbox" value="${escapeHtml(reason.id)}" ${selectedIds.has(reason.id) ? "checked" : ""} />
+          <span>${escapeHtml(reason.label)}</span>
+        </label>
+      `,
+    )
+    .join("");
+}
+
+function getAvailableImpressionReasons() {
+  const player = findPlayer(impressionPlayerId);
+  const available = [...STANDARD_IMPRESSION_REASONS, ...state.customImpressionReasons];
+  const ids = new Set(available.map((reason) => reason.id));
+  impressionDraftReasons.forEach((reason) => {
+    if (!ids.has(reason.id)) available.push(reason);
+  });
+  return available;
+}
+
+function updateImpressionDialogSummary() {
+  const reasons = getSelectedImpressionReasonsFromDialog();
+  impressionDraftReasons = reasons;
+  const impression = getImpressionFromReasons(reasons);
+  els.impressionSummary.textContent = `${impression.label} / 村${impression.villagerCount}・狼${impression.werewolfCount}`;
+  els.impressionSummary.className = `impression-summary impression-${impression.value}`;
+  els.impressionDialog.querySelectorAll('.impression-reason-options input[type="checkbox"]').forEach((input) => {
+    input.onchange = updateImpressionDialogSummary;
+  });
+}
+
+function getSelectedImpressionReasonsFromDialog() {
+  const reasonMap = new Map(getAvailableImpressionReasons().map((reason) => [reason.id, reason]));
+  return Array.from(els.impressionDialog.querySelectorAll('.impression-reason-options input[type="checkbox"]:checked'))
+    .map((input) => reasonMap.get(input.value))
+    .filter(Boolean)
+    .map((reason) => ({ ...reason }));
+}
+
+function saveImpressionSelection() {
+  const player = findPlayer(impressionPlayerId);
+  if (!player) return;
+  player.impressionReasons = impressionDraftReasons.map((reason) => ({ ...reason }));
+  closeImpressionDialog();
+  renderAndStore();
+  toast("印象を保存しました");
+}
+
+function addCustomImpressionReason() {
+  const label = els.customReasonNameInput.value.trim();
+  const side = normalizeImpressionSide(els.customReasonSideSelect.value);
+  if (!label) return;
+  if (getAvailableImpressionReasons().some((reason) => reason.label.toLocaleLowerCase() === label.toLocaleLowerCase())) {
+    return toast("同じ観察ラベルがあります");
+  }
+  state.customImpressionReasons.push({ id: crypto.randomUUID(), label, side, custom: true });
+  els.customReasonNameInput.value = "";
+  renderImpressionDialog();
+  store();
+  toast("観察ラベルを追加しました");
+}
+
+function deleteCustomImpressionReason(reasonId) {
+  const reason = state.customImpressionReasons.find((item) => item.id === reasonId);
+  if (!reason || !confirm(`「${reason.label}」を今後の候補から削除しますか？`)) return;
+  state.customImpressionReasons = state.customImpressionReasons.filter((item) => item.id !== reasonId);
+  renderImpressionDialog();
+  store();
+  toast("候補から削除しました");
 }
 
 function openEditDialog(playerId, seerId = "") {
@@ -845,10 +1004,14 @@ function renderRows() {
 
     const memo = player.memo || "メモなし";
     const seerGrid = getSeerGridHtml(player);
+    const impression = getPlayerImpression(player);
     row.innerHTML = `
       <button class="player-info" type="button">
         <span class="player-main">
-          <span class="player-name">${escapeHtml(player.name)}</span>
+          <span class="player-name-row">
+            <span class="player-name">${escapeHtml(player.name)}</span>
+            <span class="impression-label impression-${impression.value}">${escapeHtml(impression.label)}</span>
+          </span>
           <span class="player-sub">${escapeHtml(memo)}</span>
         </span>
         ${seerGrid}
@@ -860,6 +1023,11 @@ function renderRows() {
       </span>
     `;
     row.querySelector(".player-info").addEventListener("click", (event) => {
+      if (event.target.closest(".impression-label")) {
+        event.stopPropagation();
+        openImpressionDialog(player.id);
+        return;
+      }
       const seerCell = event.target.closest("[data-seer-id]");
       openEditDialog(player.id, seerCell?.dataset.seerId || "");
     });
@@ -869,6 +1037,32 @@ function renderRows() {
     row.querySelector(".status-button").addEventListener("click", () => openStatusDialog(player.id));
     els.playerRows.appendChild(row);
   });
+}
+
+function getPlayerImpression(player) {
+  return getImpressionFromReasons(player.impressionReasons || []);
+}
+
+function getImpressionFromReasons(reasons) {
+  const villagerCount = reasons.filter((reason) => reason.side === "villager").length;
+  const werewolfCount = reasons.filter((reason) => reason.side === "werewolf").length;
+  if (villagerCount > werewolfCount) return { value: "villager", label: "村人寄り", villagerCount, werewolfCount };
+  if (werewolfCount > villagerCount) return { value: "werewolf", label: "人狼寄り", villagerCount, werewolfCount };
+  return { value: "none", label: "印象なし", villagerCount, werewolfCount };
+}
+
+function normalizeImpressionSide(value) {
+  return value === "werewolf" ? "werewolf" : "villager";
+}
+
+function normalizeImpressionReason(reason) {
+  if (!reason?.id || !String(reason.label || "").trim()) return null;
+  return {
+    id: String(reason.id),
+    label: String(reason.label).trim(),
+    side: normalizeImpressionSide(reason.side),
+    custom: reason.custom === true,
+  };
 }
 
 function movePlayer(playerId, direction) {
@@ -1275,6 +1469,10 @@ function renderHistoryEditor(history) {
           </select>
           <input data-field="statusDay" type="number" min="1" value="${player.statusDay || ""}" placeholder="日" aria-label="${escapeHtml(player.name)}の追放・襲撃順" />
           <input data-field="memo" type="text" maxlength="80" value="${escapeHtml(player.memo || "")}" placeholder="メモ" aria-label="${escapeHtml(player.name)}のメモ" />
+          <div class="history-impression-edit">
+            <span class="impression-label impression-${getPlayerImpression(player).value}">${getPlayerImpression(player).label}</span>
+            <div class="history-impression-options">${getHistoryImpressionOptionsHtml(player)}</div>
+          </div>
         </div>
       `,
     )
@@ -1305,6 +1503,25 @@ function renderHistoryEditor(history) {
 function getHistoryPlayerOptionsHtml(players, selectedId) {
   return players
     .map((player) => `<option value="${escapeHtml(player.id)}" ${player.id === selectedId ? "selected" : ""}>${escapeHtml(player.name)}</option>`)
+    .join("");
+}
+
+function getHistoryImpressionOptionsHtml(player) {
+  const selectedIds = new Set(player.impressionReasons.map((reason) => reason.id));
+  const reasons = [...STANDARD_IMPRESSION_REASONS, ...state.customImpressionReasons];
+  const knownIds = new Set(reasons.map((reason) => reason.id));
+  player.impressionReasons.forEach((reason) => {
+    if (!knownIds.has(reason.id)) reasons.push(reason);
+  });
+  return reasons
+    .map(
+      (reason) => `
+        <label class="history-impression-option ${reason.side}">
+          <input type="checkbox" data-impression-reason="${escapeHtml(reason.id)}" ${selectedIds.has(reason.id) ? "checked" : ""} />
+          <span>${escapeHtml(reason.label)}</span>
+        </label>
+      `,
+    )
     .join("");
 }
 
@@ -1366,6 +1583,16 @@ function saveHistoryEdits() {
       ? Math.max(1, Number(row.querySelector('[data-field="statusDay"]').value) || 1)
       : null;
     player.memo = row.querySelector('[data-field="memo"]').value.trim();
+    const reasonMap = new Map(
+      [...STANDARD_IMPRESSION_REASONS, ...state.customImpressionReasons, ...player.impressionReasons].map((reason) => [
+        reason.id,
+        reason,
+      ]),
+    );
+    player.impressionReasons = Array.from(row.querySelectorAll("[data-impression-reason]:checked"))
+      .map((input) => reasonMap.get(input.dataset.impressionReason))
+      .filter(Boolean)
+      .map((reason) => ({ ...reason }));
   });
   history.results = Array.from(els.historyResultEditor.querySelectorAll("[data-result-id]")).map((row) => ({
     id: row.dataset.resultId.startsWith("new-") ? crypto.randomUUID() : row.dataset.resultId,
@@ -1397,7 +1624,7 @@ function buildExportText() {
   lines.push(`残り縄: ${getRemainingRopeCount()}`);
   lines.push("", "参加者");
   getActivePlayers().forEach((player) => {
-    lines.push(`- ${player.name} / ${getStatusDisplay(player)} / ${player.role ? ROLE_LABELS[player.role] : "COなし"}${player.memo ? ` / ${player.memo}` : ""}`);
+    lines.push(`- ${player.name} / ${getStatusDisplay(player)} / ${player.role ? ROLE_LABELS[player.role] : "COなし"} / ${formatImpressionForExport(player)}${player.memo ? ` / ${player.memo}` : ""}`);
   });
   const restingPlayers = getSelectedTournamentPlayers().filter((player) => !isParticipating(player));
   if (restingPlayers.length) {
@@ -1434,7 +1661,7 @@ function buildHistoryText(history) {
   getHistoryActivePlayers(history).forEach((player) => {
     const statusLabel = STATUS_LABELS[player.status] || "生存";
     const status = isInactiveStatus(player.status) && player.statusDay ? `${player.statusDay}日目 ${statusLabel}` : statusLabel;
-    lines.push(`- ${player.name} / ${status} / ${player.role ? ROLE_LABELS[player.role] : "COなし"}${player.memo ? ` / ${player.memo}` : ""}`);
+    lines.push(`- ${player.name} / ${status} / ${player.role ? ROLE_LABELS[player.role] : "COなし"} / ${formatImpressionForExport(player)}${player.memo ? ` / ${player.memo}` : ""}`);
   });
   const resting = history.players.filter(
     (player) => player.tournamentIds.includes(history.selectedTournamentId) && player.participating === false,
@@ -1457,6 +1684,16 @@ function buildHistoryText(history) {
       });
   }
   return lines.join("\n");
+}
+
+function formatImpressionForExport(player) {
+  const impression = getPlayerImpression(player);
+  const reasons = formatImpressionReasons(player.impressionReasons);
+  return reasons ? `${impression.label}: ${reasons}` : impression.label;
+}
+
+function formatImpressionReasons(reasons = []) {
+  return reasons.map((reason) => reason.label).join("、");
 }
 
 function getHistoryActivePlayers(history) {
@@ -1517,6 +1754,9 @@ function applySavedState(saved) {
   state.wolfCount = normalizeWolfCount(saved.wolfCount);
   state.players = Array.isArray(saved.players) ? saved.players.map(normalizePlayer) : [];
   state.results = Array.isArray(saved.results) ? saved.results.map(normalizeResult).filter(Boolean) : [];
+  state.customImpressionReasons = Array.isArray(saved.customImpressionReasons)
+    ? saved.customImpressionReasons.map(normalizeImpressionReason).filter((reason) => reason?.custom)
+    : [];
   state.gameStatus = saved.gameStatus === "in_progress" ? "in_progress" : "preparing";
   state.startedAt = state.gameStatus === "in_progress" ? String(saved.startedAt || "") : "";
   state.gameHistories = Array.isArray(saved.gameHistories) ? saved.gameHistories.map(normalizeGameHistory).filter(Boolean) : [];
@@ -1717,6 +1957,7 @@ function resetStateToDefaults() {
     gameStatus: "preparing",
     startedAt: "",
     gameHistories: [],
+    customImpressionReasons: [],
   });
 }
 
@@ -1996,6 +2237,9 @@ function normalizePlayer(player) {
     status: Object.hasOwn(STATUS_LABELS, status) ? status : "alive",
     statusDay: Number.isFinite(Number(player.statusDay)) ? Math.max(1, Number(player.statusDay)) : null,
     memo: String(player.memo || ""),
+    impressionReasons: Array.isArray(player.impressionReasons)
+      ? player.impressionReasons.map(normalizeImpressionReason).filter(Boolean)
+      : [],
   };
 }
 

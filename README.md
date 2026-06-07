@@ -21,6 +21,13 @@ GitHub Pagesでは `main` ブランチの `/ (root)` を公開元に指定しま
    - Site URL: `https://r3wldcr.github.io/werewolf-reasoning-pwa/`
    - Redirect URLs: `https://r3wldcr.github.io/werewolf-reasoning-pwa/`
 
+`permission denied for table user_states`と表示された場合は、SQL Editorで以下を実行してください。
+
+```sql
+revoke all on table public.user_states from anon;
+grant select, insert, update on table public.user_states to authenticated;
+```
+
 ### 2. 公開用接続情報を設定
 
 Supabaseの`Project Settings` → `API`で、Project URLと公開用anon keyを確認します。
