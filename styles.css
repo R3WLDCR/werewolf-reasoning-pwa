@@ -517,7 +517,7 @@ select:disabled {
 
 .player-info:focus-visible,
 .participant-info:focus-visible,
-.role-guess-button:focus-visible,
+.impression-button:focus-visible,
 .status-button:focus-visible,
 .order-button:focus-visible {
   outline: 3px solid rgba(21, 94, 99, 0.22);
@@ -549,6 +549,7 @@ select:disabled {
   flex: 1 1 auto;
 }
 
+.role-guess-label,
 .impression-label {
   flex: 0 0 auto;
   display: inline-grid;
@@ -562,7 +563,7 @@ select:disabled {
   white-space: nowrap;
 }
 
-.role-guess-button {
+.impression-button {
   min-width: 0;
   width: 100%;
   display: inline-grid;
@@ -619,38 +620,6 @@ select:disabled {
 
 .seer-grid::-webkit-scrollbar {
   display: none;
-}
-
-.rival-role-grid {
-  grid-column: 1 / -1;
-  min-width: 0;
-  width: 100%;
-  display: grid;
-  grid-template-columns: repeat(var(--rival-columns), minmax(96px, 1fr));
-  gap: 6px;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: #1d292b;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.rival-role-grid::-webkit-scrollbar {
-  display: none;
-}
-
-.rival-role-label {
-  min-width: 0;
-  display: grid;
-  place-items: center;
-  min-height: 36px;
-  padding: 8px 10px;
-  border-radius: 999px;
-  font-size: 0.94rem;
-  font-weight: 900;
-  line-height: 1;
-  white-space: nowrap;
 }
 
 .role-title {
