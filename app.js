@@ -1497,10 +1497,11 @@ function getSeerGridHtml(player) {
   }
   const seers = getSeers();
   const perspectiveCells = getSeerPerspectiveCellsHtml(player, seers);
+  if (!perspectiveCells) return "";
   const columnCount = Math.max(1, seers.length);
   return `
     <span class="seer-grid" style="--seer-columns: ${columnCount}">
-      ${perspectiveCells || '<span class="seer-result-label empty" aria-hidden="true"></span>'}
+      ${perspectiveCells}
     </span>
   `;
 }
@@ -1580,7 +1581,9 @@ function getCircledNumber(value) {
 
 function getSeers() {
   const seerIds = new Set(state.results.map((result) => result.seerId));
-  return getActivePlayers().filter((player) => player.role === "seer" || seerIds.has(player.id));
+  return getActivePlayers().filter(
+    (player) => player.role === "seer" || (player.role === "wolfSide" && seerIds.has(player.id)),
+  );
 }
 
 function getActivePlayers() {

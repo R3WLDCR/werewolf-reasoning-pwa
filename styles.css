@@ -570,6 +570,10 @@ select:disabled {
   white-space: nowrap;
 }
 
+.role-guess-label {
+  width: 112px;
+}
+
 .true-role-label {
   outline: 2px solid #eef6f4;
   outline-offset: 1px;
@@ -1723,6 +1727,10 @@ select:disabled {
     min-height: 28px;
     padding: 4px 7px;
     font-size: 0.7rem;
+  }
+
+  #reasoningView .role-guess-label {
+    width: 96px;
   }
 
   #reasoningView .seer-grid {
