@@ -24,6 +24,7 @@ const ROLE_ORDER = {
 };
 const PRIORITY_PLAYER_NAME = "羊飼いK";
 const RIVAL_DISPLAY_ROLES = new Set(["medium", "guard", "hunter"]);
+const SELF_PERSPECTIVE_EXCLUDED_RIVAL_ROLES = new Set(["unknown", "wolfSide", "confirmedWhite"]);
 const STATUS_LABELS = {
   alive: "生存",
   exiled: "追放",
@@ -879,35 +880,27 @@ function closeRoleGuessDialog() {
 }
 
 function renderRoleGuessDialog(player) {
-  const selected = new Set(player.roleGuessCandidates);
+  const selectedValue = getRoleGuessDisplay(player).value;
   els.roleGuessCandidateOptions.innerHTML = Object.entries(ROLE_GUESS_LABELS)
     .map(
       ([value, label]) => `
         <label class="role-guess-option ${getRoleGuessClass(value)}">
-          <input type="checkbox" value="${value}" ${selected.has(value) ? "checked" : ""} />
+          <input type="radio" name="roleGuessCandidate" value="${value}" ${selectedValue === value ? "checked" : ""} />
           <span>${label}</span>
         </label>
       `,
     )
     .join("");
-  els.roleGuessCandidateOptions.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+  els.roleGuessCandidateOptions.querySelectorAll('input[type="radio"]').forEach((input) => {
     input.addEventListener("change", handleRoleGuessCandidateChange);
   });
-  renderPrimaryRoleGuessOptions(player.primaryRoleGuess);
+  renderPrimaryRoleGuessOptions(selectedValue === "unknown" ? "" : selectedValue);
 }
 
 function handleRoleGuessCandidateChange(event) {
   const input = event.currentTarget;
-  const checkboxes = Array.from(els.roleGuessCandidateOptions.querySelectorAll('input[type="checkbox"]'));
-  if (input.checked && input.value === "unknown") {
-    checkboxes.forEach((item) => {
-      item.checked = item.value === "unknown";
-    });
-  } else if (input.checked) {
-    const unknown = checkboxes.find((item) => item.value === "unknown");
-    if (unknown) unknown.checked = false;
-  }
   renderPrimaryRoleGuessOptions(els.primaryRoleGuessSelect.value);
+  if (input.value !== "unknown") els.primaryRoleGuessSelect.value = input.value;
 }
 
 function renderPrimaryRoleGuessOptions(currentValue = "") {
@@ -921,7 +914,7 @@ function renderPrimaryRoleGuessOptions(currentValue = "") {
 }
 
 function getSelectedRoleGuessCandidates() {
-  return Array.from(els.roleGuessCandidateOptions.querySelectorAll('input[type="checkbox"]:checked')).map(
+  return Array.from(els.roleGuessCandidateOptions.querySelectorAll('input[type="radio"]:checked')).map(
     (input) => input.value,
   );
 }
@@ -959,10 +952,10 @@ function getRoleGuessClass(value) {
   return Object.hasOwn(ROLE_LABELS, value) ? `role-${value}` : "role-unknown";
 }
 
-function normalizeRoleGuessCandidates(values) {
+function normalizeRoleGuessCandidates(values, preferredValue = "") {
   const candidates = [...new Set(Array.isArray(values) ? values.filter((value) => Object.hasOwn(ROLE_GUESS_LABELS, value)) : [])];
-  if (candidates.includes("unknown")) return ["unknown"];
-  return candidates;
+  if (!candidates.length || candidates.includes("unknown")) return ["unknown"];
+  return [candidates.includes(preferredValue) ? preferredValue : candidates[0]];
 }
 
 function normalizePrimaryRoleGuess(value, candidates) {
@@ -1072,6 +1065,7 @@ function saveDivinationResult({ silent = false } = {}) {
       value,
     });
   }
+  applySelfSeerResultRoleGuess(target, seer, value);
   autoStartGameFromBoardInput();
   if (!silent) renderAndStore();
   return true;
@@ -1482,17 +1476,26 @@ function reorderPlayersForBoard() {
   const indexed = state.players.map((player, index) => ({ player, index }));
   const active = indexed
     .filter(({ player }) => !isInactiveStatus(player.status))
-    .sort((a, b) => getBoardOrder(a.player) - getBoardOrder(b.player) || a.index - b.index)
+    .sort(
+      (a, b) =>
+        getBoardOrder(a.player) - getBoardOrder(b.player) ||
+        getBoardTieOrder(a.player) - getBoardTieOrder(b.player) ||
+        a.index - b.index,
+    )
     .map(({ player }) => player);
   const inactive = indexed.filter(({ player }) => isInactiveStatus(player.status)).map(({ player }) => player);
   state.players = [...active, ...inactive];
 }
 
 function getBoardOrder(player) {
-  if (isPriorityPlayer(player) && player.role) return -1;
+  if (isPriorityPlayer(player) && player.role && !isSelfPerspectiveSeer()) return -1;
   if (Object.hasOwn(ROLE_ORDER, player.role)) return ROLE_ORDER[player.role];
   if (isPriorityPlayer(player)) return 4;
   return 99;
+}
+
+function getBoardTieOrder(player) {
+  return Object.hasOwn(ROLE_ORDER, player.role) ? getRoleClaimOrder(player) : Number.MAX_SAFE_INTEGER;
 }
 
 function getRoleOrder(player) {
@@ -1740,6 +1743,7 @@ function getWolfSideAwareRoleLabel(player) {
 }
 
 function getSeerGridRoleLabel(player) {
+  if (player.role === "werewolf") return "";
   if (RIVAL_DISPLAY_ROLES.has(player.role) && getRoleClaimants(player.role).length >= 2) return "";
   return getWolfSideAwareRoleLabel(player);
 }
@@ -1795,22 +1799,66 @@ function getOutsiderExposureIdsForSeer(seer) {
 
 function applyConfirmedWhiteUpdates() {
   getActivePlayers().forEach(applySingleClaimRoleGuess);
+  applySelfSeerResultRoleGuesses();
   const seers = getSeers();
-  if (!seers.length) return;
-  getActivePlayers().forEach((player) => {
-    if (!shouldBecomeConfirmedWhite(player, seers)) return;
-    player.role = "confirmedWhite";
-    player.roleGuessCandidates = ["confirmedWhite"];
-    player.primaryRoleGuess = "confirmedWhite";
-    player.roleClaimOrder = getNextRoleClaimOrder();
-  });
+  if (seers.length) {
+    getActivePlayers().forEach((player) => {
+      if (!shouldBecomeConfirmedWhite(player, seers)) return;
+      setRoleGuess(player, "confirmedWhite");
+      player.role = "confirmedWhite";
+      player.roleClaimOrder = getNextRoleClaimOrder();
+    });
+  }
+  applySelfPerspectiveRivalRoleGuesses();
 }
 
 function applySingleClaimRoleGuess(player) {
   if (!player.role || !Object.hasOwn(ROLE_GUESS_LABELS, player.role)) return;
   if (getRoleClaimants(player.role).length !== 1) return;
-  player.roleGuessCandidates = [player.role];
-  player.primaryRoleGuess = player.role;
+  setRoleGuess(player, player.role);
+}
+
+function applySelfPerspectiveRivalRoleGuesses() {
+  const selfPlayer = getSelfPerspectivePlayer();
+  if (!selfPlayer) return;
+  const selfRole = getRoleGuessDisplay(selfPlayer).value;
+  if (SELF_PERSPECTIVE_EXCLUDED_RIVAL_ROLES.has(selfRole) || !Object.hasOwn(ROLE_LABELS, selfRole)) return;
+  getActivePlayers().forEach((player) => {
+    if (player.id === selfPlayer.id || player.role !== selfRole) return;
+    setRoleGuess(player, "wolfSide");
+  });
+}
+
+function getSelfPerspectivePlayer() {
+  return getActivePlayers().find(isPriorityPlayer) || state.players.find(isPriorityPlayer) || null;
+}
+
+function isSelfPerspectiveSeer() {
+  const selfPlayer = getSelfPerspectivePlayer();
+  return Boolean(selfPlayer && getRoleGuessDisplay(selfPlayer).value === "seer");
+}
+
+function applySelfSeerResultRoleGuesses() {
+  const selfPlayer = getSelfPerspectivePlayer();
+  if (!selfPlayer || getRoleGuessDisplay(selfPlayer).value !== "seer") return;
+  state.results
+    .filter((result) => result.seerId === selfPlayer.id)
+    .forEach((result) => {
+      const target = findPlayer(result.targetId);
+      applySelfSeerResultRoleGuess(target, selfPlayer, result.value);
+    });
+}
+
+function applySelfSeerResultRoleGuess(target, seer, resultValue) {
+  if (!target || !seer || !isPriorityPlayer(seer) || getRoleGuessDisplay(seer).value !== "seer") return;
+  const roleGuess = resultValue === "werewolf" ? "werewolf" : resultValue === "human" ? "villager" : "";
+  if (roleGuess) setRoleGuess(target, roleGuess);
+}
+
+function setRoleGuess(player, role) {
+  if (!Object.hasOwn(ROLE_GUESS_LABELS, role)) return;
+  player.roleGuessCandidates = [role];
+  player.primaryRoleGuess = role === "unknown" ? "" : role;
 }
 
 function shouldBecomeConfirmedWhite(player, seers = getSeers()) {
@@ -2154,12 +2202,12 @@ function getHistoryImpressionOptionsHtml(player) {
 }
 
 function getHistoryRoleGuessOptionsHtml(player) {
-  const selected = new Set(player.roleGuessCandidates);
+  const selected = getRoleGuessDisplay(player).value;
   return Object.entries(ROLE_GUESS_LABELS)
     .map(
       ([value, label]) => `
         <label class="history-role-guess-option ${getRoleGuessClass(value)}">
-          <input type="checkbox" data-role-guess="${value}" ${selected.has(value) ? "checked" : ""} />
+          <input type="radio" name="history-role-guess-${escapeHtml(player.id)}" data-role-guess="${value}" ${selected === value ? "checked" : ""} />
           <span>${label}</span>
         </label>
       `,
@@ -2181,20 +2229,12 @@ function bindHistoryRoleGuessControls() {
   els.historyPlayerEditor.querySelectorAll("[data-player-id]").forEach((row) => {
     row.querySelectorAll("[data-role-guess]").forEach((input) => {
       input.addEventListener("change", () => {
-        const checkboxes = Array.from(row.querySelectorAll("[data-role-guess]"));
-        if (input.checked && input.dataset.roleGuess === "unknown") {
-          checkboxes.forEach((item) => {
-            item.checked = item.dataset.roleGuess === "unknown";
-          });
-        } else if (input.checked) {
-          const unknown = checkboxes.find((item) => item.dataset.roleGuess === "unknown");
-          if (unknown) unknown.checked = false;
-        }
         const candidates = normalizeRoleGuessCandidates(
-          checkboxes.filter((item) => item.checked).map((item) => item.dataset.roleGuess),
+          Array.from(row.querySelectorAll("[data-role-guess]:checked")).map((item) => item.dataset.roleGuess),
         );
         const select = row.querySelector('[data-field="primaryRoleGuess"]');
         select.innerHTML = getPrimaryRoleGuessOptionsHtml(candidates, select.value);
+        select.value = candidates[0] === "unknown" ? "" : candidates[0];
       });
     });
   });
@@ -3065,10 +3105,10 @@ function normalizePlayer(player) {
     impressionReasons: Array.isArray(player.impressionReasons)
       ? player.impressionReasons.map(normalizeImpressionReason).filter(Boolean)
       : [],
-    roleGuessCandidates: normalizeRoleGuessCandidates(player.roleGuessCandidates),
+    roleGuessCandidates: normalizeRoleGuessCandidates(player.roleGuessCandidates, player.primaryRoleGuess),
     primaryRoleGuess: normalizePrimaryRoleGuess(
       player.primaryRoleGuess,
-      normalizeRoleGuessCandidates(player.roleGuessCandidates),
+      normalizeRoleGuessCandidates(player.roleGuessCandidates, player.primaryRoleGuess),
     ),
     trueRole: Object.hasOwn(ROLE_GUESS_LABELS, player.trueRole) && player.trueRole !== "unknown" ? player.trueRole : "",
     roleClaimOrder:
