@@ -126,6 +126,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "gameStatusBadge",
     "startGameBtn",
     "returnSetupBtn",
+    "resetBoardBtn",
     "finishGameBtn",
     "nextGameBtn",
     "participantsView",
@@ -316,6 +317,7 @@ function bindEvents() {
   });
   els.startGameBtn.addEventListener("click", startGame);
   els.returnSetupBtn.addEventListener("click", returnToSetup);
+  els.resetBoardBtn.addEventListener("click", resetBoardForTesting);
   els.finishGameBtn.addEventListener("click", openFinishGameDialog);
   els.nextGameBtn.addEventListener("click", prepareNextGame);
   els.copyExportBtn.addEventListener("click", copyExport);
@@ -556,6 +558,17 @@ function returnToSetup() {
   state.activeView = "participants";
   renderAndStore();
   toast("準備中へ戻りました");
+}
+
+function resetBoardForTesting() {
+  if (isGameFinished()) return toast("終了済み盤面は次試合へ進んでからリセットしてください");
+  if (!confirm("CO、占い、役職行動、追放・襲撃、メモ、印象、役職推理を消して初日に戻しますか？")) return;
+  state.gameStatus = "preparing";
+  state.startedAt = "";
+  resetBoardState();
+  state.activeView = "participants";
+  renderAndStore();
+  toast("盤面を初日に戻しました");
 }
 
 function openFinishGameDialog() {
@@ -1130,6 +1143,7 @@ function renderGameLifecycle() {
   els.gameStatusBadge.classList.toggle("finished", finished);
   els.startGameBtn.hidden = inProgress || finished;
   els.returnSetupBtn.hidden = !inProgress;
+  els.resetBoardBtn.hidden = finished;
   els.finishGameBtn.hidden = !inProgress;
   els.nextGameBtn.hidden = !finished;
   [
@@ -1478,11 +1492,19 @@ function getStatusDisplay(player) {
 
 function getNextStatusDayForStatus(status) {
   backfillStatusDays();
-  const days = getActivePlayers()
+  const exiledMax = getMaxStatusDay("exiled");
+  const attackedMax = getMaxStatusDay("attacked");
+  if (status === "exiled") return exiledMax + 1;
+  if (status === "attacked") return exiledMax > attackedMax ? Math.max(1, exiledMax) : attackedMax + 1;
+  return 1;
+}
+
+function getMaxStatusDay(status) {
+  return getActivePlayers()
     .filter((player) => player.status === status)
     .map((player) => Number(player.statusDay))
-    .filter((day) => Number.isFinite(day) && day > 0);
-  return days.length ? Math.max(...days) + 1 : 1;
+    .filter((day) => Number.isFinite(day) && day > 0)
+    .reduce((max, day) => Math.max(max, day), 0);
 }
 
 function handlePlayerDragStart(event) {
@@ -2858,14 +2880,18 @@ function migrateLegacyRoster(savedEventName = "") {
 }
 
 function backfillStatusDays() {
-  ["exiled", "attacked"].forEach((status) => {
-    getActivePlayers()
-      .filter((player) => player.status === status)
-      .slice()
-      .reverse()
-      .forEach((player, index) => {
-        player.statusDay = index + 1;
-      });
+  let currentDay = 0;
+  getActivePlayers()
+    .filter((player) => isInactiveStatus(player.status))
+    .slice()
+    .reverse()
+    .forEach((player) => {
+      if (player.status === "exiled") {
+        currentDay += 1;
+        player.statusDay = currentDay;
+      } else if (player.status === "attacked") {
+        player.statusDay = Math.max(1, currentDay);
+      }
     });
 }
 
