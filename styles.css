@@ -721,7 +721,8 @@ select:disabled {
   color: #d9c5ff;
 }
 
-.role-villager {
+.role-villager,
+.role-confirmedWhite {
   background: #183755;
   color: #a9d7ff;
 }

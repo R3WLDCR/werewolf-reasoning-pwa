@@ -7,6 +7,7 @@ const ROLE_LABELS = {
   medium: "霊媒師",
   guard: "ボディガード",
   villager: "市民",
+  confirmedWhite: "確定白",
   madman: "裏切り者",
   wolfSide: "狼狂",
   werewolf: "人狼",
@@ -21,6 +22,7 @@ const ROLE_ORDER = {
   guard: 2,
   hunter: 3,
 };
+const PRIORITY_PLAYER_NAME = "羊飼いK";
 const RIVAL_DISPLAY_ROLES = new Set(["medium", "guard", "hunter"]);
 const STATUS_LABELS = {
   alive: "生存",
@@ -70,6 +72,7 @@ const ROLE_GUESS_LABELS = {
   medium: "霊媒師",
   guard: "ボディガード",
   villager: "市民",
+  confirmedWhite: "確定白",
   madman: "裏切り者",
   wolfSide: "狼狂",
   werewolf: "人狼",
@@ -633,7 +636,7 @@ function renderFinishTrueRoleFields() {
 
 function getTrueRoleOptionsHtml(selectedRole = "") {
   return Object.entries(ROLE_GUESS_LABELS)
-    .filter(([role]) => role !== "unknown" && role !== "wolfSide")
+    .filter(([role]) => role !== "unknown" && role !== "wolfSide" && role !== "confirmedWhite")
     .map(([role, label]) => `<option value="${role}" ${role === selectedRole ? "selected" : ""}>${label}</option>`)
     .join("");
 }
@@ -931,6 +934,11 @@ function saveRoleGuess() {
     normalizePrimaryRoleGuess(els.primaryRoleGuessSelect.value, player.roleGuessCandidates) ||
     player.roleGuessCandidates.find((value) => value !== "unknown") ||
     "";
+  if (player.primaryRoleGuess === "werewolf" && player.role !== "werewolf") {
+    player.role = "werewolf";
+    player.roleClaimOrder = getNextRoleClaimOrder();
+    reorderPlayersForBoard();
+  }
   autoStartGameFromBoardInput();
   closeRoleGuessDialog();
   renderAndStore();
@@ -1474,14 +1482,25 @@ function reorderPlayersForBoard() {
   const indexed = state.players.map((player, index) => ({ player, index }));
   const active = indexed
     .filter(({ player }) => !isInactiveStatus(player.status))
-    .sort((a, b) => getRoleOrder(a.player) - getRoleOrder(b.player) || a.index - b.index)
+    .sort((a, b) => getBoardOrder(a.player) - getBoardOrder(b.player) || a.index - b.index)
     .map(({ player }) => player);
   const inactive = indexed.filter(({ player }) => isInactiveStatus(player.status)).map(({ player }) => player);
   state.players = [...active, ...inactive];
 }
 
+function getBoardOrder(player) {
+  if (isPriorityPlayer(player) && player.role) return -1;
+  if (Object.hasOwn(ROLE_ORDER, player.role)) return ROLE_ORDER[player.role];
+  if (isPriorityPlayer(player)) return 4;
+  return 99;
+}
+
 function getRoleOrder(player) {
   return Object.hasOwn(ROLE_ORDER, player.role) ? ROLE_ORDER[player.role] : 99;
+}
+
+function isPriorityPlayer(player) {
+  return (player.name || "").trim() === PRIORITY_PLAYER_NAME;
 }
 
 function getStatusDisplay(player) {
@@ -1693,10 +1712,11 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
       }
       const result = state.results.find((item) => item.seerId === seer.id && item.targetId === player.id);
       const roleClaim = getSeerGridRoleLabel(player);
-      const autoVillagerClaim = roleClaim || getAutoVillagerClaimForSeer(player, seer.id) || getExposedHumanClaimForSeer(player, seer);
+      const exposedHumanClaim = getExposedHumanClaimForSeer(player, seer);
+      const autoVillagerClaim = roleClaim || getAutoVillagerClaimForSeer(player, seer.id) || exposedHumanClaim;
       if (!result) {
         return autoVillagerClaim
-          ? `<span class="seer-result-label ${getAutoVillagerClass(player)}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(autoVillagerClaim)}</span>`
+          ? `<span class="seer-result-label ${exposedHumanClaim ? "judgement-human" : getAutoVillagerClass(player)}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(autoVillagerClaim)}</span>`
           : `<span class="seer-result-label empty" data-seer-id="${escapeHtml(seer.id)}" aria-hidden="true"></span>`;
       }
       const className = result.value === "werewolf" ? "judgement-werewolf" : "judgement-human";
@@ -1747,7 +1767,7 @@ function getExposedHumanClaimForSeer(player, seer) {
   if (!isFullOutsiderExposureForSeer(seer)) return "";
   if (player.id === seer.id || player.role || isInactiveStatus(player.status)) return "";
   if (hasDivinationResultForSeer(player.id, seer.id)) return "";
-  return ROLE_LABELS.villager;
+  return "結果市民";
 }
 
 function isFullOutsiderExposureForSeer(seer) {
@@ -1771,6 +1791,38 @@ function getOutsiderExposureIdsForSeer(seer) {
     .filter((result) => result.seerId === seer.id && result.value === "werewolf")
     .forEach((result) => ids.add(result.targetId));
   return ids;
+}
+
+function applyConfirmedWhiteUpdates() {
+  getActivePlayers().forEach(applySingleClaimRoleGuess);
+  const seers = getSeers();
+  if (!seers.length) return;
+  getActivePlayers().forEach((player) => {
+    if (!shouldBecomeConfirmedWhite(player, seers)) return;
+    player.role = "confirmedWhite";
+    player.roleGuessCandidates = ["confirmedWhite"];
+    player.primaryRoleGuess = "confirmedWhite";
+    player.roleClaimOrder = getNextRoleClaimOrder();
+  });
+}
+
+function applySingleClaimRoleGuess(player) {
+  if (!player.role || !Object.hasOwn(ROLE_GUESS_LABELS, player.role)) return;
+  if (getRoleClaimants(player.role).length !== 1) return;
+  player.roleGuessCandidates = [player.role];
+  player.primaryRoleGuess = player.role;
+}
+
+function shouldBecomeConfirmedWhite(player, seers = getSeers()) {
+  if (player.role || player.status !== "alive") return false;
+  if (seers.some((seer) => seer.id === player.id)) return false;
+  return seers.every((seer) => isHumanOrExposedHumanForSeer(player, seer));
+}
+
+function isHumanOrExposedHumanForSeer(player, seer) {
+  const result = state.results.find((item) => item.seerId === seer.id && item.targetId === player.id);
+  if (result) return result.value === "human";
+  return Boolean(getExposedHumanClaimForSeer(player, seer));
 }
 
 function getAutoVillagerClass(player) {
@@ -2479,6 +2531,7 @@ function isGameLocked() {
 }
 
 function renderAndStore() {
+  applyConfirmedWhiteUpdates();
   render();
   store();
 }
@@ -2529,6 +2582,7 @@ function applySavedState(saved) {
   state.gameHistories = Array.isArray(saved.gameHistories) ? saved.gameHistories.map(normalizeGameHistory).filter(Boolean) : [];
   migrateLegacyRoster(saved.eventName);
   backfillStatusDays();
+  applyConfirmedWhiteUpdates();
 }
 
 function getSyncPayload() {
