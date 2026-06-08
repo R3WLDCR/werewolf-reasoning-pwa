@@ -1688,6 +1688,9 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
         const className = isInactiveStatus(player.status) ? "role-madman" : "judgement-rival";
         return `<span class="seer-result-label ${className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(getWolfSideDisplayLabel(player))}</span>`;
       }
+      if (shouldDisplayMediumConfirmedWerewolf(player)) {
+        return `<span class="seer-result-label judgement-werewolf" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(RESULT_LABELS.werewolf)}</span>`;
+      }
       const result = state.results.find((item) => item.seerId === seer.id && item.targetId === player.id);
       const roleClaim = getSeerGridRoleLabel(player);
       const autoVillagerClaim = roleClaim || getAutoVillagerClaimForSeer(player, seer.id);
@@ -1727,6 +1730,12 @@ function getWolfSideAwareRoleClass(player) {
 
 function getWolfSideDisplayLabel(player) {
   return isInactiveStatus(player.status) ? ROLE_LABELS.madman : ROLE_LABELS.wolfSide;
+}
+
+function shouldDisplayMediumConfirmedWerewolf(player) {
+  if (player.role !== "werewolf" || player.status !== "attacked") return false;
+  const mediumClaimants = getRoleClaimants("medium");
+  return mediumClaimants.length === 1 && !isInactiveStatus(mediumClaimants[0].status);
 }
 
 function getAutoVillagerClaimForSeer(player, seerId) {
