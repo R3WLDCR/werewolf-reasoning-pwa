@@ -28,14 +28,14 @@ const STATUS_LABELS = {
   attacked: "襲撃",
 };
 const RESULT_LABELS = {
-  human: "村人",
+  human: "市民",
   werewolf: "人狼",
 };
 const ROLE_ACTION_ROLES = new Set(["medium", "guard", "hunter"]);
 const ROLE_ACTION_RESULT_LABELS = {
   medium: {
     unknown: "不明",
-    human: "村人",
+    human: "市民",
     werewolf: "人狼",
   },
   guard: {
@@ -812,7 +812,7 @@ function updateImpressionDialogSummary() {
   const reasons = getSelectedImpressionReasonsFromDialog();
   impressionDraftReasons = reasons;
   const impression = getImpressionFromReasons(reasons);
-  els.impressionSummary.textContent = `${impression.label} / 村${impression.villagerCount}・狼${impression.werewolfCount}`;
+  els.impressionSummary.textContent = `${impression.label} / 市${impression.villagerCount}・狼${impression.werewolfCount}`;
   els.impressionSummary.className = `impression-summary impression-${impression.value}`;
   els.impressionDialog.querySelectorAll('.impression-reason-options input[type="checkbox"]').forEach((input) => {
     input.onchange = updateImpressionDialogSummary;
@@ -1395,7 +1395,7 @@ function getNextRoleClaimOrder(players = state.players) {
 function getImpressionFromReasons(reasons) {
   const villagerCount = reasons.filter((reason) => reason.side === "villager").length;
   const werewolfCount = reasons.filter((reason) => reason.side === "werewolf").length;
-  if (villagerCount > werewolfCount) return { value: "villager", label: "村人", villagerCount, werewolfCount };
+  if (villagerCount > werewolfCount) return { value: "villager", label: "市民", villagerCount, werewolfCount };
   if (werewolfCount > villagerCount) return { value: "werewolf", label: "人狼", villagerCount, werewolfCount };
   return { value: "none", label: "なし", villagerCount, werewolfCount };
 }
@@ -1693,7 +1693,7 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
       }
       const result = state.results.find((item) => item.seerId === seer.id && item.targetId === player.id);
       const roleClaim = getSeerGridRoleLabel(player);
-      const autoVillagerClaim = roleClaim || getAutoVillagerClaimForSeer(player, seer.id);
+      const autoVillagerClaim = roleClaim || getAutoVillagerClaimForSeer(player, seer.id) || getExposedHumanClaimForSeer(player, seer);
       if (!result) {
         return autoVillagerClaim
           ? `<span class="seer-result-label ${getAutoVillagerClass(player)}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(autoVillagerClaim)}</span>`
@@ -1741,6 +1741,36 @@ function shouldDisplayMediumConfirmedWerewolf(player) {
 function getAutoVillagerClaimForSeer(player, seerId) {
   if (player.role || player.status !== "attacked") return "";
   return hasDivinationResultForSeer(player.id, seerId) ? "" : ROLE_LABELS.villager;
+}
+
+function getExposedHumanClaimForSeer(player, seer) {
+  if (!isFullOutsiderExposureForSeer(seer)) return "";
+  if (player.id === seer.id || player.role || isInactiveStatus(player.status)) return "";
+  if (hasDivinationResultForSeer(player.id, seer.id)) return "";
+  return ROLE_LABELS.villager;
+}
+
+function isFullOutsiderExposureForSeer(seer) {
+  if (!seer) return false;
+  return getOutsiderExposureIdsForSeer(seer).size >= getTotalOutsiderCount();
+}
+
+function getTotalOutsiderCount() {
+  return Math.max(0, Number(state.wolfCount) || 0) + 1;
+}
+
+function getOutsiderExposureIdsForSeer(seer) {
+  const ids = new Set();
+  getSeers().forEach((claimant) => {
+    if (claimant.id !== seer.id) ids.add(claimant.id);
+  });
+  getActivePlayers().forEach((player) => {
+    if (["werewolf", "wolfSide", "madman"].includes(player.role)) ids.add(player.id);
+  });
+  state.results
+    .filter((result) => result.seerId === seer.id && result.value === "werewolf")
+    .forEach((result) => ids.add(result.targetId));
+  return ids;
 }
 
 function getAutoVillagerClass(player) {
@@ -2027,7 +2057,7 @@ function renderHistoryEditor(history) {
               <select data-field="targetId" aria-label="占い対象">${getHistoryPlayerOptionsHtml(activePlayers, target?.id)}</select>
               <input data-field="order" type="number" min="1" value="${getDivinationOrder(result)}" aria-label="占い順" />
               <select data-field="value" aria-label="占い結果">
-                <option value="human" ${result.value === "human" ? "selected" : ""}>村人</option>
+                <option value="human" ${result.value === "human" ? "selected" : ""}>市民</option>
                 <option value="werewolf" ${result.value === "werewolf" ? "selected" : ""}>人狼</option>
               </select>
               <button class="danger-button" type="button" data-delete-result>削除</button>
@@ -2136,7 +2166,7 @@ function addHistoryResultEditorRow() {
     <select data-field="seerId" aria-label="預言者">${getHistoryPlayerOptionsHtml(players, players[0].id)}</select>
     <select data-field="targetId" aria-label="占い対象">${getHistoryPlayerOptionsHtml(players, players[0].id)}</select>
     <input data-field="order" type="number" min="1" value="1" aria-label="占い順" />
-    <select data-field="value" aria-label="占い結果"><option value="human">村人</option><option value="werewolf">人狼</option></select>
+    <select data-field="value" aria-label="占い結果"><option value="human">市民</option><option value="werewolf">人狼</option></select>
     <button class="danger-button" type="button" data-delete-result>削除</button>
   `;
   els.historyResultEditor.appendChild(row);
