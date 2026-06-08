@@ -31,6 +31,24 @@ const RESULT_LABELS = {
   human: "村人",
   werewolf: "人狼",
 };
+const ROLE_ACTION_ROLES = new Set(["medium", "guard", "hunter"]);
+const ROLE_ACTION_RESULT_LABELS = {
+  medium: {
+    unknown: "不明",
+    human: "村人",
+    werewolf: "人狼",
+  },
+  guard: {
+    unknown: "不明",
+    success: "成功",
+    fail: "失敗",
+  },
+  hunter: {
+    unknown: "不明",
+    activated: "発動",
+    notActivated: "未発動",
+  },
+};
 const CIRCLED_NUMBERS = ["", "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨"];
 const STANDARD_IMPRESSION_REASONS = [
   { id: "standard-villager-light", label: "動きが軽い", side: "villager", custom: false },
@@ -73,6 +91,7 @@ const state = {
   wolfCount: 2,
   players: [],
   results: [],
+  roleActions: [],
   gameStatus: "preparing",
   startedAt: "",
   gameHistories: [],
@@ -86,6 +105,7 @@ let membershipPlayerId = "";
 let statusPlayerId = "";
 let draggedPlayerId = "";
 let selectedHistoryId = "";
+let selectedHistoryIds = new Set();
 let editingHistoryId = "";
 let bulkDeleteHistoryScope = "";
 let impressionPlayerId = "";
@@ -135,6 +155,9 @@ document.addEventListener("DOMContentLoaded", () => {
     "historyCountBadge",
     "historyList",
     "historyEmptyState",
+    "selectAllHistoriesBtn",
+    "clearHistorySelectionBtn",
+    "deleteSelectedHistoriesBtn",
     "historyDetailPanel",
     "historyDetailPreview",
     "closeHistoryDetailBtn",
@@ -150,6 +173,10 @@ document.addEventListener("DOMContentLoaded", () => {
     "roleSelect",
     "resultSeerHint",
     "resultValueSelect",
+    "roleActionSection",
+    "roleActionTitle",
+    "roleActionList",
+    "addRoleActionBtn",
     "memoInput",
     "statusDialog",
     "statusPlayerName",
@@ -180,6 +207,8 @@ document.addEventListener("DOMContentLoaded", () => {
     "historyPlayerEditor",
     "historyResultEditor",
     "addHistoryResultBtn",
+    "historyRoleActionEditor",
+    "addHistoryRoleActionBtn",
     "bulkDeleteHistoryDialog",
     "bulkDeleteHistoryForm",
     "bulkDeleteHistoryTitle",
@@ -294,9 +323,17 @@ function bindEvents() {
   els.editHistoryBtn.addEventListener("click", openHistoryEditDialog);
   els.copyHistoryBtn.addEventListener("click", copySelectedHistory);
   els.deleteHistoryBtn.addEventListener("click", deleteSelectedHistory);
+  els.selectAllHistoriesBtn.addEventListener("click", selectAllHistories);
+  els.clearHistorySelectionBtn.addEventListener("click", clearHistorySelection);
+  els.deleteSelectedHistoriesBtn.addEventListener("click", () => openBulkDeleteHistoryDialog("selected"));
   els.deleteTournamentHistoriesBtn.addEventListener("click", () => openBulkDeleteHistoryDialog("tournament"));
   els.deleteAllHistoriesBtn.addEventListener("click", () => openBulkDeleteHistoryDialog("all"));
   els.closeEditBtn.addEventListener("click", closeEditDialog);
+  els.roleSelect.addEventListener("change", () => {
+    const player = findPlayer(editingPlayerId);
+    if (player) renderRoleActionControls(player, els.roleSelect.value);
+  });
+  els.addRoleActionBtn.addEventListener("click", addRoleActionEditorRow);
   els.editForm.addEventListener("submit", (event) => {
     event.preventDefault();
     saveEditingPlayer();
@@ -336,6 +373,7 @@ function bindEvents() {
     saveHistoryEdits();
   });
   els.addHistoryResultBtn.addEventListener("click", addHistoryResultEditorRow);
+  els.addHistoryRoleActionBtn.addEventListener("click", addHistoryRoleActionEditorRow);
   els.historyEditDialog.addEventListener("click", (event) => {
     if (event.target === els.historyEditDialog) closeHistoryEditDialog();
   });
@@ -498,6 +536,7 @@ function autoStartGameFromBoardInput() {
 
 function hasBoardProgress() {
   if (state.results.length) return true;
+  if (state.roleActions.length) return true;
   return getActivePlayers().some(
     (player) =>
       Boolean(player.role) ||
@@ -611,6 +650,7 @@ function createGameHistory(winner, trueRoles = new Map()) {
     finishedAt: new Date().toISOString(),
     players,
     results: structuredClone(state.results),
+    roleActions: structuredClone(state.roleActions),
     selectedTournamentId: state.selectedTournamentId,
   };
 }
@@ -630,6 +670,7 @@ function resetBoardState() {
     roleClaimOrder: null,
   }));
   state.results = [];
+  state.roleActions = [];
 }
 
 function applySelectedTournamentParticipation() {
@@ -917,6 +958,7 @@ function openEditDialog(playerId, seerId = "") {
   els.roleSelect.value = player.role || "";
   els.memoInput.value = player.memo || "";
   renderResultControls(player);
+  renderRoleActionControls(player);
   els.editDialog.showModal();
 }
 
@@ -973,6 +1015,7 @@ function saveEditingPlayer() {
     player.roleClaimOrder = player.role ? getNextRoleClaimOrder() : null;
     reorderPlayersForBoard();
   }
+  saveRoleActionResults(player);
   saveDivinationResult({ silent: true });
   autoStartGameFromBoardInput();
   closeEditDialog();
@@ -1111,7 +1154,17 @@ function renderHistories() {
   els.historyCountBadge.textContent = `${state.gameHistories.length}試合`;
   els.historyList.innerHTML = "";
   els.historyEmptyState.hidden = state.gameHistories.length > 0;
+  const existingHistoryIds = new Set(state.gameHistories.map((history) => history.id));
+  selectedHistoryIds = new Set([...selectedHistoryIds].filter((id) => existingHistoryIds.has(id)));
   state.gameHistories.forEach((history) => {
+    const row = document.createElement("div");
+    row.className = "history-item-row";
+    const checkbox = document.createElement("input");
+    checkbox.className = "history-select-checkbox";
+    checkbox.type = "checkbox";
+    checkbox.checked = selectedHistoryIds.has(history.id);
+    checkbox.setAttribute("aria-label", `${history.eventName || "未設定"} 第${normalizeGameNumber(history.gameNumber)}試合を選択`);
+    checkbox.addEventListener("change", () => toggleHistorySelection(history.id, checkbox.checked));
     const button = document.createElement("button");
     button.className = `history-item ${history.id === selectedHistoryId ? "active" : ""}`;
     button.type = "button";
@@ -1123,11 +1176,13 @@ function renderHistories() {
       <span class="winner-label">${escapeHtml(history.winner || "勝利陣営未設定")}</span>
     `;
     button.addEventListener("click", () => openHistoryDetail(history.id));
-    els.historyList.appendChild(button);
+    row.append(checkbox, button);
+    els.historyList.appendChild(row);
   });
   const selected = getSelectedHistory();
   els.historyDetailPanel.hidden = !selected;
   if (selected) els.historyDetailPreview.textContent = buildHistoryText(selected);
+  renderHistorySelectionControls();
   els.deleteTournamentHistoriesBtn.disabled = getHistoriesForTournament(state.selectedTournamentId).length === 0;
   els.deleteAllHistoriesBtn.disabled = state.gameHistories.length === 0;
 }
@@ -1485,6 +1540,96 @@ function renderResultControls(target) {
   els.resultValueSelect.value = existing?.value || "";
 }
 
+function renderRoleActionControls(player, roleOverride = els.roleSelect.value) {
+  const role = roleOverride || "";
+  const enabled = ROLE_ACTION_ROLES.has(role);
+  els.roleActionSection.hidden = !enabled;
+  if (!enabled) {
+    els.roleActionList.innerHTML = "";
+    return;
+  }
+  els.roleActionTitle.textContent = `${ROLE_LABELS[role]}の行動結果`;
+  const actions = state.roleActions
+    .filter((action) => action.actorId === player.id && action.role === role)
+    .sort((a, b) => a.day - b.day);
+  els.roleActionList.innerHTML = actions.length
+    ? actions.map((action) => getRoleActionEditorRowHtml(action, getActivePlayers(), role)).join("")
+    : '<div class="empty-inline">行動結果なし</div>';
+  bindRoleActionDeleteButtons(els.roleActionList);
+}
+
+function addRoleActionEditorRow() {
+  const player = findPlayer(editingPlayerId);
+  const role = els.roleSelect.value;
+  const players = getActivePlayers();
+  if (!player || !ROLE_ACTION_ROLES.has(role) || !players.length) return;
+  els.roleActionList.querySelector(".empty-inline")?.remove();
+  const action = {
+    id: `new-${crypto.randomUUID()}`,
+    actorId: player.id,
+    role,
+    day: getNextRoleActionDay(player.id, role),
+    targetId: players[0].id,
+    result: "unknown",
+    note: "",
+  };
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = getRoleActionEditorRowHtml(action, players, role);
+  els.roleActionList.appendChild(wrapper.firstElementChild);
+  bindRoleActionDeleteButtons(els.roleActionList);
+}
+
+function getRoleActionEditorRowHtml(action, players, role = action.role) {
+  return `
+    <div class="role-action-edit" data-role-action-id="${escapeHtml(action.id)}">
+      <input data-field="day" type="number" min="1" value="${Number(action.day) || 1}" aria-label="日付" />
+      <select data-field="targetId" aria-label="対象">${getHistoryPlayerOptionsHtml(players, action.targetId)}</select>
+      <select data-field="result" aria-label="結果">${getRoleActionResultOptionsHtml(role, action.result)}</select>
+      <input data-field="note" type="text" maxlength="60" value="${escapeHtml(action.note || "")}" placeholder="メモ" aria-label="メモ" />
+      <button class="danger-button" type="button" data-delete-role-action>削除</button>
+    </div>
+  `;
+}
+
+function bindRoleActionDeleteButtons(root) {
+  root.querySelectorAll("[data-delete-role-action]").forEach((button) => {
+    button.addEventListener("click", () => button.closest("[data-role-action-id]").remove());
+  });
+}
+
+function saveRoleActionResults(player) {
+  state.roleActions = state.roleActions.filter((action) => action.actorId !== player.id);
+  if (!ROLE_ACTION_ROLES.has(player.role)) return;
+  const actions = Array.from(els.roleActionList.querySelectorAll("[data-role-action-id]"))
+    .map((row) =>
+      normalizeRoleAction({
+        id: row.dataset.roleActionId.startsWith("new-") ? crypto.randomUUID() : row.dataset.roleActionId,
+        actorId: player.id,
+        role: player.role,
+        day: row.querySelector('[data-field="day"]').value,
+        targetId: row.querySelector('[data-field="targetId"]').value,
+        result: row.querySelector('[data-field="result"]').value,
+        note: row.querySelector('[data-field="note"]').value,
+      }),
+    )
+    .filter(Boolean);
+  state.roleActions.push(...actions);
+}
+
+function getNextRoleActionDay(actorId, role) {
+  const days = state.roleActions
+    .filter((action) => action.actorId === actorId && action.role === role)
+    .map((action) => Number(action.day) || 1);
+  return days.length ? Math.max(...days) + 1 : 1;
+}
+
+function getRoleActionResultOptionsHtml(role, selectedResult = "unknown") {
+  const labels = ROLE_ACTION_RESULT_LABELS[role] || ROLE_ACTION_RESULT_LABELS.medium;
+  return Object.entries(labels)
+    .map(([value, label]) => `<option value="${value}" ${value === selectedResult ? "selected" : ""}>${label}</option>`)
+    .join("");
+}
+
 function getSeerGridHtml(player) {
   const rivalRoleCells = getRivalRoleCellsHtml(player);
   if (rivalRoleCells) {
@@ -1691,17 +1836,50 @@ function deleteSelectedHistory() {
   if (!history || !confirm(`${history.eventName} 第${history.gameNumber}試合の履歴を削除しますか？`)) return;
   state.gameHistories = state.gameHistories.filter((item) => item.id !== history.id);
   selectedHistoryId = "";
+  selectedHistoryIds.delete(history.id);
   renderAndStore();
   toast("履歴を削除しました");
 }
 
+function toggleHistorySelection(historyId, checked) {
+  if (checked) {
+    selectedHistoryIds.add(historyId);
+  } else {
+    selectedHistoryIds.delete(historyId);
+  }
+  renderHistorySelectionControls();
+}
+
+function selectAllHistories() {
+  selectedHistoryIds = new Set(state.gameHistories.map((history) => history.id));
+  render();
+}
+
+function clearHistorySelection() {
+  selectedHistoryIds.clear();
+  render();
+}
+
+function renderHistorySelectionControls() {
+  const count = selectedHistoryIds.size;
+  els.selectAllHistoriesBtn.disabled = state.gameHistories.length === 0 || count === state.gameHistories.length;
+  els.clearHistorySelectionBtn.disabled = count === 0;
+  els.deleteSelectedHistoriesBtn.disabled = count === 0;
+  els.deleteSelectedHistoriesBtn.textContent = count ? `選択削除 ${count}` : "選択削除";
+}
+
 function openBulkDeleteHistoryDialog(scope) {
-  const histories = scope === "tournament" ? getHistoriesForTournament(state.selectedTournamentId) : state.gameHistories;
+  const histories = getBulkDeleteTargetHistories(scope);
   if (!histories.length) return toast("削除できる履歴がありません");
   bulkDeleteHistoryScope = scope;
   els.bulkDeleteConfirmInput.value = "";
   const tournamentName = getSelectedTournament()?.name || "選択中の大会";
-  els.bulkDeleteHistoryTitle.textContent = scope === "tournament" ? `${tournamentName}の履歴を削除` : "すべての履歴を削除";
+  els.bulkDeleteHistoryTitle.textContent =
+    scope === "selected"
+      ? "選択した履歴を削除"
+      : scope === "tournament"
+        ? `${tournamentName}の履歴を削除`
+        : "すべての履歴を削除";
   els.bulkDeleteHistoryMessage.innerHTML = `
     <strong>${histories.length}試合分の履歴を削除します。</strong>
     <span>削除した履歴は復元できません。現在の盤面、大会設定、参加者名簿は残ります。</span>
@@ -1723,19 +1901,27 @@ function renderBulkDeleteConfirmation() {
 function deleteHistoriesInScope() {
   if (els.bulkDeleteConfirmInput.value.trim() !== "削除") return;
   const selectedTournamentId = state.selectedTournamentId;
-  const targetCount =
-    bulkDeleteHistoryScope === "tournament"
-      ? getHistoriesForTournament(selectedTournamentId).length
-      : state.gameHistories.length;
+  const targetHistories = getBulkDeleteTargetHistories(bulkDeleteHistoryScope);
+  const targetIds = new Set(targetHistories.map((history) => history.id));
+  const targetCount = targetIds.size;
   if (!targetCount) return closeBulkDeleteHistoryDialog();
   state.gameHistories =
-    bulkDeleteHistoryScope === "tournament"
-      ? state.gameHistories.filter((history) => history.selectedTournamentId !== selectedTournamentId)
-      : [];
-  selectedHistoryId = "";
+    bulkDeleteHistoryScope === "all"
+      ? []
+      : state.gameHistories.filter((history) =>
+          bulkDeleteHistoryScope === "tournament" ? history.selectedTournamentId !== selectedTournamentId : !targetIds.has(history.id),
+        );
+  if (selectedHistoryId && targetIds.has(selectedHistoryId)) selectedHistoryId = "";
+  selectedHistoryIds.clear();
   closeBulkDeleteHistoryDialog();
   renderAndStore();
   toast(`${targetCount}試合分の履歴を削除しました`);
+}
+
+function getBulkDeleteTargetHistories(scope) {
+  if (scope === "selected") return state.gameHistories.filter((history) => selectedHistoryIds.has(history.id));
+  if (scope === "tournament") return getHistoriesForTournament(state.selectedTournamentId);
+  return state.gameHistories;
 }
 
 function getHistoriesForTournament(tournamentId) {
@@ -1819,7 +2005,13 @@ function renderHistoryEditor(history) {
         })
         .join("")
     : '<div class="empty-inline">占い結果なし</div>';
+  els.historyRoleActionEditor.innerHTML = history.roleActions?.length
+    ? history.roleActions
+        .map((action) => getHistoryRoleActionEditorRowHtml(action, activePlayers))
+        .join("")
+    : '<div class="empty-inline">役職行動結果なし</div>';
   bindHistoryResultDeleteButtons();
+  bindHistoryRoleActionDeleteButtons();
   bindHistoryRoleGuessControls();
 }
 
@@ -1920,6 +2112,58 @@ function addHistoryResultEditorRow() {
   bindHistoryResultDeleteButtons();
 }
 
+function bindHistoryRoleActionDeleteButtons() {
+  els.historyRoleActionEditor.querySelectorAll("[data-delete-role-action]").forEach((button) => {
+    button.addEventListener("click", () => button.closest("[data-role-action-id]").remove());
+  });
+  els.historyRoleActionEditor.querySelectorAll('[data-field="role"]').forEach((select) => {
+    select.addEventListener("change", () => {
+      const row = select.closest("[data-role-action-id]");
+      row.querySelector('[data-field="result"]').innerHTML = getRoleActionResultOptionsHtml(select.value, "unknown");
+    });
+  });
+}
+
+function addHistoryRoleActionEditorRow() {
+  const history = state.gameHistories.find((item) => item.id === editingHistoryId);
+  const players = history ? getHistoryActivePlayers(history) : [];
+  if (!players.length) return toast("参加者がいません");
+  els.historyRoleActionEditor.querySelector(".empty-inline")?.remove();
+  const action = {
+    id: `new-${crypto.randomUUID()}`,
+    actorId: players[0].id,
+    role: "medium",
+    day: 1,
+    targetId: players[0].id,
+    result: "unknown",
+    note: "",
+  };
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = getHistoryRoleActionEditorRowHtml(action, players);
+  els.historyRoleActionEditor.appendChild(wrapper.firstElementChild);
+  bindHistoryRoleActionDeleteButtons();
+}
+
+function getHistoryRoleActionEditorRowHtml(action, players) {
+  return `
+    <div class="history-role-action-edit" data-role-action-id="${escapeHtml(action.id)}">
+      <select data-field="actorId" aria-label="CO者">${getHistoryPlayerOptionsHtml(players, action.actorId)}</select>
+      <select data-field="role" aria-label="役職">${getRoleActionRoleOptionsHtml(action.role)}</select>
+      <input data-field="day" type="number" min="1" value="${Number(action.day) || 1}" aria-label="日付" />
+      <select data-field="targetId" aria-label="対象">${getHistoryPlayerOptionsHtml(players, action.targetId)}</select>
+      <select data-field="result" aria-label="結果">${getRoleActionResultOptionsHtml(action.role, action.result)}</select>
+      <input data-field="note" type="text" maxlength="60" value="${escapeHtml(action.note || "")}" placeholder="メモ" aria-label="メモ" />
+      <button class="danger-button" type="button" data-delete-role-action>削除</button>
+    </div>
+  `;
+}
+
+function getRoleActionRoleOptionsHtml(selectedRole) {
+  return [...ROLE_ACTION_ROLES]
+    .map((role) => `<option value="${role}" ${role === selectedRole ? "selected" : ""}>${ROLE_LABELS[role]}</option>`)
+    .join("");
+}
+
 function getRoleOptionsHtml(selectedRole) {
   return [
     ["", "なし"],
@@ -1983,6 +2227,19 @@ function saveHistoryEdits() {
     order: Math.max(1, Number(row.querySelector('[data-field="order"]').value) || 1),
     value: row.querySelector('[data-field="value"]').value,
   }));
+  history.roleActions = Array.from(els.historyRoleActionEditor.querySelectorAll("[data-role-action-id]"))
+    .map((row) =>
+      normalizeRoleAction({
+        id: row.dataset.roleActionId.startsWith("new-") ? crypto.randomUUID() : row.dataset.roleActionId,
+        actorId: row.querySelector('[data-field="actorId"]').value,
+        role: row.querySelector('[data-field="role"]').value,
+        day: row.querySelector('[data-field="day"]').value,
+        targetId: row.querySelector('[data-field="targetId"]').value,
+        result: row.querySelector('[data-field="result"]').value,
+        note: row.querySelector('[data-field="note"]').value,
+      }),
+    )
+    .filter(Boolean);
   backfillRoleClaimOrders(history.players);
   closeHistoryEditDialog();
   renderAndStore();
@@ -2009,6 +2266,8 @@ function buildExportText() {
   getActivePlayers().forEach((player) => {
     lines.push(`- ${player.name} / ${getStatusDisplay(player)} / ${player.role ? ROLE_LABELS[player.role] : "COなし"} / ${formatRoleGuessForExport(player)} / ${formatImpressionForExport(player)}${player.memo ? ` / ${player.memo}` : ""}`);
   });
+  lines.push("", "時系列");
+  lines.push(...buildCurrentTimeline());
   return lines.join("\n");
 }
 
@@ -2032,9 +2291,11 @@ function buildHistoryTimeline(history) {
   const activePlayers = getHistoryActivePlayers(history);
   const trueSeerIds = new Set(activePlayers.filter((player) => player.trueRole === "seer").map((player) => player.id));
   const trueResults = history.results.filter((result) => trueSeerIds.has(result.seerId));
+  const roleActions = history.roleActions || [];
   const maxDay = Math.max(
     0,
     ...trueResults.map(getDivinationOrder),
+    ...roleActions.map((action) => Number(action.day) || 1),
     ...activePlayers.filter((player) => isInactiveStatus(player.status)).map((player) => Number(player.statusDay) || 1),
   );
   if (!maxDay) return ["- 出来事なし"];
@@ -2054,12 +2315,66 @@ function buildHistoryTimeline(history) {
     activePlayers
       .filter((player) => player.status === "attacked" && (Number(player.statusDay) || 1) === day)
       .forEach((player) => events.push(`襲撃: ${player.name}`));
+    roleActions
+      .filter((action) => (Number(action.day) || 1) === day)
+      .forEach((action) => {
+        const line = formatRoleActionEvent(action, history.players);
+        if (line) events.push(line);
+      });
     if (events.length) {
       lines.push(`${day}日目`);
       events.forEach((event) => lines.push(`- ${event}`));
     }
   }
   return lines.length ? lines : ["- 出来事なし"];
+}
+
+function buildCurrentTimeline() {
+  const activePlayers = getActivePlayers();
+  const maxDay = Math.max(
+    0,
+    ...state.results.map(getDivinationOrder),
+    ...state.roleActions.map((action) => Number(action.day) || 1),
+    ...activePlayers.filter((player) => isInactiveStatus(player.status)).map((player) => Number(player.statusDay) || 1),
+  );
+  if (!maxDay) return ["- 出来事なし"];
+  const lines = [];
+  for (let day = 1; day <= maxDay; day += 1) {
+    const events = [];
+    state.results
+      .filter((result) => getDivinationOrder(result) === day)
+      .forEach((result) => {
+        const seer = findPlayer(result.seerId);
+        const target = findPlayer(result.targetId);
+        if (seer && target) events.push(`占い: ${seer.name} -> ${target.name} ${RESULT_LABELS[result.value]}`);
+      });
+    activePlayers
+      .filter((player) => player.status === "exiled" && (Number(player.statusDay) || 1) === day)
+      .forEach((player) => events.push(`追放: ${player.name}`));
+    activePlayers
+      .filter((player) => player.status === "attacked" && (Number(player.statusDay) || 1) === day)
+      .forEach((player) => events.push(`襲撃: ${player.name}`));
+    state.roleActions
+      .filter((action) => (Number(action.day) || 1) === day)
+      .forEach((action) => {
+        const line = formatRoleActionEvent(action, state.players);
+        if (line) events.push(line);
+      });
+    if (events.length) {
+      lines.push(`${day}日目`);
+      events.forEach((event) => lines.push(`- ${event}`));
+    }
+  }
+  return lines.length ? lines : ["- 出来事なし"];
+}
+
+function formatRoleActionEvent(action, players) {
+  const actor = players.find((player) => player.id === action.actorId);
+  const target = players.find((player) => player.id === action.targetId);
+  const resultLabel = ROLE_ACTION_RESULT_LABELS[action.role]?.[action.result] || ROLE_ACTION_RESULT_LABELS[action.role]?.unknown || "不明";
+  if (!actor || !target || !ROLE_ACTION_ROLES.has(action.role)) return "";
+  const note = action.note ? ` / ${action.note}` : "";
+  return `${ROLE_LABELS[action.role]}: ${actor.name} -> ${target.name} ${resultLabel}${note}`;
 }
 
 function formatImpressionForExport(player) {
@@ -2144,6 +2459,7 @@ function applySavedState(saved) {
   state.wolfCount = normalizeWolfCount(saved.wolfCount);
   state.players = Array.isArray(saved.players) ? saved.players.map(normalizePlayer) : [];
   state.results = Array.isArray(saved.results) ? saved.results.map(normalizeResult).filter(Boolean) : [];
+  state.roleActions = Array.isArray(saved.roleActions) ? saved.roleActions.map(normalizeRoleAction).filter(Boolean) : [];
   state.customImpressionReasons = Array.isArray(saved.customImpressionReasons)
     ? saved.customImpressionReasons.map(normalizeImpressionReason).filter((reason) => reason?.custom)
     : [];
@@ -2350,6 +2666,7 @@ function resetStateToDefaults() {
     wolfCount: 2,
     players: [],
     results: [],
+    roleActions: [],
     gameStatus: "preparing",
     startedAt: "",
     gameHistories: [],
@@ -2651,6 +2968,21 @@ function normalizeResult(result) {
   };
 }
 
+function normalizeRoleAction(action) {
+  if (!action || !action.actorId || !action.targetId || !ROLE_ACTION_ROLES.has(action.role)) return null;
+  const resultLabels = ROLE_ACTION_RESULT_LABELS[action.role];
+  const result = Object.hasOwn(resultLabels, action.result) ? action.result : "unknown";
+  return {
+    id: action.id || crypto.randomUUID(),
+    actorId: String(action.actorId),
+    role: action.role,
+    day: Number.isFinite(Number(action.day)) ? Math.max(1, Number(action.day)) : 1,
+    targetId: String(action.targetId),
+    result,
+    note: String(action.note || "").trim().slice(0, 60),
+  };
+}
+
 function normalizeGameHistory(history) {
   if (!history?.id || !Array.isArray(history.players) || !Array.isArray(history.results)) return null;
   const normalized = {
@@ -2665,6 +2997,7 @@ function normalizeGameHistory(history) {
     selectedTournamentId: String(history.selectedTournamentId || ""),
     players: history.players.map(normalizePlayer),
     results: history.results.map(normalizeResult).filter(Boolean),
+    roleActions: Array.isArray(history.roleActions) ? history.roleActions.map(normalizeRoleAction).filter(Boolean) : [],
   };
   backfillRoleClaimOrders(normalized.players);
   return normalized;

@@ -114,6 +114,11 @@
               <strong>終了済みゲーム</strong>
               <span id="historyCountBadge" class="count-badge">0試合</span>
             </div>
+            <div class="history-selection-actions">
+              <button id="selectAllHistoriesBtn" class="secondary-button" type="button">すべて選択</button>
+              <button id="clearHistorySelectionBtn" class="secondary-button" type="button">選択解除</button>
+              <button id="deleteSelectedHistoriesBtn" class="danger-button" type="button" disabled>選択削除</button>
+            </div>
             <div id="historyList" class="history-list"></div>
             <div id="historyEmptyState" class="empty-state compact">
               <strong>履歴はまだありません</strong>
@@ -265,6 +270,14 @@
           </div>
         </div>
 
+        <div id="roleActionSection" class="field-group" hidden>
+          <div class="section-heading flush">
+            <div id="roleActionTitle" class="field-title">役職行動結果</div>
+            <button id="addRoleActionBtn" class="secondary-button" type="button">結果を追加</button>
+          </div>
+          <div id="roleActionList" class="role-action-list"></div>
+        </div>
+
         <label class="field">
           <span>短いメモ</span>
           <textarea id="memoInput" maxlength="80" placeholder="例: 発言少なめ、佐藤真寄り"></textarea>
@@ -364,6 +377,11 @@
           <button id="addHistoryResultBtn" class="secondary-button" type="button">結果を追加</button>
         </div>
         <div id="historyResultEditor" class="history-result-editor"></div>
+        <div class="section-heading flush">
+          <div class="field-title">役職行動結果</div>
+          <button id="addHistoryRoleActionBtn" class="secondary-button" type="button">行動結果を追加</button>
+        </div>
+        <div id="historyRoleActionEditor" class="history-role-action-editor"></div>
         <button class="primary-button wide" type="submit">履歴の変更を保存</button>
       </form>
     </dialog>
