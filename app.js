@@ -1065,7 +1065,7 @@ function saveDivinationResult({ silent = false } = {}) {
       value,
     });
   }
-  applySelfSeerResultRoleGuess(target, seer, value);
+  applyConfirmedSeerResultRoleGuess(target, seer, value);
   autoStartGameFromBoardInput();
   if (!silent) renderAndStore();
   return true;
@@ -1707,7 +1707,7 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
         return `<span class="seer-result-label ${className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(getSeerGridRoleLabel(player))}</span>`;
       }
       if (isWolfSideDisplayTarget(player)) {
-        const className = isInactiveStatus(player.status) ? "role-madman" : "judgement-rival";
+        const className = player.status === "attacked" ? "role-madman" : "judgement-rival";
         return `<span class="seer-result-label ${className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(getWolfSideDisplayLabel(player))}</span>`;
       }
       if (shouldDisplayMediumConfirmedWerewolf(player)) {
@@ -1749,17 +1749,26 @@ function getSeerGridRoleLabel(player) {
 }
 
 function getWolfSideAwareRoleClass(player) {
-  return player.role === "wolfSide" && isInactiveStatus(player.status) ? "role-madman" : getRoleClass(player);
+  return player.role === "wolfSide" && player.status === "attacked" ? "role-madman" : getRoleClass(player);
 }
 
 function getWolfSideDisplayLabel(player) {
-  return isInactiveStatus(player.status) ? ROLE_LABELS.madman : ROLE_LABELS.wolfSide;
+  return player.status === "attacked" ? ROLE_LABELS.madman : ROLE_LABELS.wolfSide;
 }
 
 function shouldDisplayMediumConfirmedWerewolf(player) {
   if (player.role !== "werewolf" || player.status !== "attacked") return false;
+  if (hasSelfPerspectiveWerewolfResult(player.id)) return false;
   const mediumClaimants = getRoleClaimants("medium");
   return mediumClaimants.length === 1 && !isInactiveStatus(mediumClaimants[0].status);
+}
+
+function hasSelfPerspectiveWerewolfResult(targetId) {
+  const selfPlayer = getSelfPerspectivePlayer();
+  if (!selfPlayer || getRoleGuessDisplay(selfPlayer).value !== "seer") return false;
+  return state.results.some(
+    (result) => result.seerId === selfPlayer.id && result.targetId === targetId && result.value === "werewolf",
+  );
 }
 
 function getAutoVillagerClaimForSeer(player, seerId) {
@@ -1798,8 +1807,9 @@ function getOutsiderExposureIdsForSeer(seer) {
 }
 
 function applyConfirmedWhiteUpdates() {
+  applySelfClaimRoleGuess();
   getActivePlayers().forEach(applySingleClaimRoleGuess);
-  applySelfSeerResultRoleGuesses();
+  applyConfirmedRoleResultGuesses();
   const seers = getSeers();
   if (seers.length) {
     getActivePlayers().forEach((player) => {
@@ -1816,6 +1826,51 @@ function applySingleClaimRoleGuess(player) {
   if (!player.role || !Object.hasOwn(ROLE_GUESS_LABELS, player.role)) return;
   if (getRoleClaimants(player.role).length !== 1) return;
   setRoleGuess(player, player.role);
+}
+
+function applySelfClaimRoleGuess() {
+  const selfPlayer = getSelfPerspectivePlayer();
+  if (!selfPlayer?.role || !Object.hasOwn(ROLE_GUESS_LABELS, selfPlayer.role)) return;
+  setRoleGuess(selfPlayer, selfPlayer.role);
+}
+
+function applyConfirmedRoleResultGuesses() {
+  const selfPlayer = getSelfPerspectivePlayer();
+  state.results
+    .filter((result) => result.seerId !== selfPlayer?.id)
+    .forEach((result) => applyConfirmedSeerResultRoleGuess(findPlayer(result.targetId), findPlayer(result.seerId), result.value));
+  state.roleActions
+    .filter((action) => action.role === "medium" && action.actorId !== selfPlayer?.id)
+    .forEach((action) => applyConfirmedMediumResultRoleGuess(findPlayer(action.targetId), findPlayer(action.actorId), action.result));
+  state.results
+    .filter((result) => result.seerId === selfPlayer?.id)
+    .forEach((result) => applyConfirmedSeerResultRoleGuess(findPlayer(result.targetId), selfPlayer, result.value));
+  state.roleActions
+    .filter((action) => action.role === "medium" && action.actorId === selfPlayer?.id)
+    .forEach((action) => applyConfirmedMediumResultRoleGuess(findPlayer(action.targetId), selfPlayer, action.result));
+}
+
+function applyConfirmedSeerResultRoleGuess(target, seer, resultValue) {
+  if (!target || !isConfirmedRoleActor(seer, "seer")) return;
+  applyHumanOrWerewolfRoleGuess(target, resultValue);
+}
+
+function applyConfirmedMediumResultRoleGuess(target, medium, resultValue) {
+  if (!target || !isConfirmedRoleActor(medium, "medium")) return;
+  applyHumanOrWerewolfRoleGuess(target, resultValue);
+}
+
+function applyHumanOrWerewolfRoleGuess(target, resultValue) {
+  const roleGuess = resultValue === "werewolf" ? "werewolf" : resultValue === "human" ? "villager" : "";
+  if (roleGuess) setRoleGuess(target, roleGuess);
+}
+
+function isConfirmedRoleActor(player, role) {
+  if (!player) return false;
+  if (isPriorityPlayer(player) && (player.role === role || getRoleGuessDisplay(player).value === role)) return true;
+  if (player.trueRole === role) return true;
+  const claimants = getRoleClaimants(role);
+  return claimants.length === 1 && claimants[0].id === player.id;
 }
 
 function applySelfPerspectiveRivalRoleGuesses() {
@@ -1836,23 +1891,6 @@ function getSelfPerspectivePlayer() {
 function isSelfPerspectiveSeer() {
   const selfPlayer = getSelfPerspectivePlayer();
   return Boolean(selfPlayer && getRoleGuessDisplay(selfPlayer).value === "seer");
-}
-
-function applySelfSeerResultRoleGuesses() {
-  const selfPlayer = getSelfPerspectivePlayer();
-  if (!selfPlayer || getRoleGuessDisplay(selfPlayer).value !== "seer") return;
-  state.results
-    .filter((result) => result.seerId === selfPlayer.id)
-    .forEach((result) => {
-      const target = findPlayer(result.targetId);
-      applySelfSeerResultRoleGuess(target, selfPlayer, result.value);
-    });
-}
-
-function applySelfSeerResultRoleGuess(target, seer, resultValue) {
-  if (!target || !seer || !isPriorityPlayer(seer) || getRoleGuessDisplay(seer).value !== "seer") return;
-  const roleGuess = resultValue === "werewolf" ? "werewolf" : resultValue === "human" ? "villager" : "";
-  if (roleGuess) setRoleGuess(target, roleGuess);
 }
 
 function setRoleGuess(player, role) {
