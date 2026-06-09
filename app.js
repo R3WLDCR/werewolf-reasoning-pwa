@@ -935,17 +935,21 @@ function saveRoleGuess() {
     player.roleGuessCandidates.find((value) => value !== "unknown") ||
     "";
   updateManualMediumConfirmation(player);
+  const shouldSyncAttackedVillagerRole =
+    VILLAGER_SIDE_ROLES.has(player.primaryRoleGuess) &&
+    (player.attackedAutoVillager || (player.status === "attacked" && VILLAGER_SIDE_ROLES.has(player.role)));
   const roleFromGuess =
     player.primaryRoleGuess === "werewolf" ||
-    (player.attackedAutoVillager && VILLAGER_SIDE_ROLES.has(player.primaryRoleGuess))
+    shouldSyncAttackedVillagerRole
       ? player.primaryRoleGuess
       : "";
   if (roleFromGuess && player.role !== roleFromGuess) {
     player.role = roleFromGuess;
-    player.attackedAutoVillager = false;
     player.roleClaimOrder = getNextRoleClaimOrder();
     reorderPlayersForBoard();
   }
+  if (shouldSyncAttackedVillagerRole) player.attackedAutoVillager = true;
+  if (player.primaryRoleGuess === "werewolf") player.attackedAutoVillager = false;
   autoStartGameFromBoardInput();
   closeRoleGuessDialog();
   renderAndStore();
