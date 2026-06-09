@@ -514,6 +514,7 @@ function addPlayer() {
     impressionReasons: [],
     roleGuessCandidates: [],
     primaryRoleGuess: "",
+    manualRoleGuess: false,
     mediumConfirmedRoleGuess: "",
     mediumConflictBroken: false,
     attackedAutoVillager: false,
@@ -687,6 +688,7 @@ function resetBoardState() {
     impressionReasons: [],
     roleGuessCandidates: [],
     primaryRoleGuess: "",
+    manualRoleGuess: false,
     mediumConfirmedRoleGuess: "",
     mediumConflictBroken: false,
     attackedAutoVillager: false,
@@ -934,7 +936,9 @@ function saveRoleGuess() {
     normalizePrimaryRoleGuess(els.primaryRoleGuessSelect.value, player.roleGuessCandidates) ||
     player.roleGuessCandidates.find((value) => value !== "unknown") ||
     "";
+  player.manualRoleGuess = true;
   updateManualMediumConfirmation(player);
+  if (player.mediumConfirmedRoleGuess) player.manualRoleGuess = false;
   const shouldSyncAttackedVillagerRole =
     VILLAGER_SIDE_ROLES.has(player.primaryRoleGuess) &&
     (player.attackedAutoVillager || (player.status === "attacked" && VILLAGER_SIDE_ROLES.has(player.role)));
@@ -1864,23 +1868,24 @@ function applyConfirmedWhiteUpdates() {
   reconcileMediumConfirmedSeerConflicts();
   applySelfClaimRoleGuess();
   getActivePlayers().forEach(applySingleClaimRoleGuess);
-  applyConfirmedRoleResultGuesses();
+  applySelfPerspectiveRivalRoleGuesses();
   const seers = getSeers();
   if (seers.length) {
     getActivePlayers().forEach((player) => {
       if (!shouldBecomeConfirmedWhite(player, seers)) return;
-      setRoleGuess(player, "confirmedWhite");
+      if (!setRoleGuess(player, "confirmedWhite")) return;
       player.role = "confirmedWhite";
       player.roleClaimOrder = getNextRoleClaimOrder();
     });
   }
+  applyConfirmedRoleResultGuesses();
   applyMediumConfirmedRoleGuesses();
-  applySelfPerspectiveRivalRoleGuesses();
+  applySelfClaimRoleGuess();
 }
 
 function applyMediumConfirmedRoleGuesses() {
   getActivePlayers().forEach((player) => {
-    if (player.mediumConfirmedRoleGuess) setRoleGuess(player, player.mediumConfirmedRoleGuess);
+    if (player.mediumConfirmedRoleGuess) setRoleGuess(player, player.mediumConfirmedRoleGuess, { confirmed: true });
   });
 }
 
@@ -1916,7 +1921,7 @@ function applySingleClaimRoleGuess(player) {
 function applySelfClaimRoleGuess() {
   const selfPlayer = getSelfPerspectivePlayer();
   if (!selfPlayer?.role || !Object.hasOwn(ROLE_GUESS_LABELS, selfPlayer.role)) return;
-  setRoleGuess(selfPlayer, selfPlayer.role);
+  setRoleGuess(selfPlayer, selfPlayer.role, { confirmed: true });
 }
 
 function applyConfirmedRoleResultGuesses() {
@@ -1947,7 +1952,7 @@ function applyConfirmedMediumResultRoleGuess(target, medium, resultValue) {
 
 function applyHumanOrWerewolfRoleGuess(target, resultValue) {
   const roleGuess = resultValue === "werewolf" ? "werewolf" : resultValue === "human" ? "villager" : "";
-  if (roleGuess) setRoleGuess(target, roleGuess);
+  if (roleGuess) setRoleGuess(target, roleGuess, { confirmed: true });
 }
 
 function isConfirmedRoleActor(player, role) {
@@ -1978,10 +1983,13 @@ function isSelfPerspectiveSeer() {
   return Boolean(selfPlayer && getRoleGuessDisplay(selfPlayer).value === "seer");
 }
 
-function setRoleGuess(player, role) {
-  if (!Object.hasOwn(ROLE_GUESS_LABELS, role)) return;
+function setRoleGuess(player, role, { confirmed = false } = {}) {
+  if (!Object.hasOwn(ROLE_GUESS_LABELS, role)) return false;
+  if (player.manualRoleGuess && !confirmed) return false;
   player.roleGuessCandidates = [role];
   player.primaryRoleGuess = role === "unknown" ? "" : role;
+  if (confirmed) player.manualRoleGuess = false;
+  return true;
 }
 
 function shouldBecomeConfirmedWhite(player, seers = getSeers()) {
@@ -3233,6 +3241,7 @@ function normalizePlayer(player) {
       player.primaryRoleGuess,
       normalizeRoleGuessCandidates(player.roleGuessCandidates, player.primaryRoleGuess),
     ),
+    manualRoleGuess: player.manualRoleGuess === true,
     mediumConfirmedRoleGuess: ["villager", "werewolf"].includes(player.mediumConfirmedRoleGuess)
       ? player.mediumConfirmedRoleGuess
       : "",
