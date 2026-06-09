@@ -513,6 +513,8 @@ function addPlayer() {
     impressionReasons: [],
     roleGuessCandidates: [],
     primaryRoleGuess: "",
+    mediumConfirmedRoleGuess: "",
+    mediumConflictBroken: false,
     trueRole: "",
     roleClaimOrder: null,
   });
@@ -683,6 +685,8 @@ function resetBoardState() {
     impressionReasons: [],
     roleGuessCandidates: [],
     primaryRoleGuess: "",
+    mediumConfirmedRoleGuess: "",
+    mediumConflictBroken: false,
     trueRole: "",
     roleClaimOrder: null,
   }));
@@ -927,6 +931,7 @@ function saveRoleGuess() {
     normalizePrimaryRoleGuess(els.primaryRoleGuessSelect.value, player.roleGuessCandidates) ||
     player.roleGuessCandidates.find((value) => value !== "unknown") ||
     "";
+  updateManualMediumConfirmation(player);
   if (player.primaryRoleGuess === "werewolf" && player.role !== "werewolf") {
     player.role = "werewolf";
     player.roleClaimOrder = getNextRoleClaimOrder();
@@ -936,6 +941,20 @@ function saveRoleGuess() {
   closeRoleGuessDialog();
   renderAndStore();
   toast("役職推理を保存しました");
+}
+
+function updateManualMediumConfirmation(player) {
+  const roleGuess = player.primaryRoleGuess;
+  if (!["villager", "werewolf"].includes(roleGuess)) {
+    player.mediumConfirmedRoleGuess = "";
+    return;
+  }
+  if (getLivingSingleMedium() || player.mediumConfirmedRoleGuess) player.mediumConfirmedRoleGuess = roleGuess;
+}
+
+function getLivingSingleMedium() {
+  const claimants = getRoleClaimants("medium");
+  return claimants.length === 1 && claimants[0].status === "alive" ? claimants[0] : null;
 }
 
 function getRoleGuessDisplay(player) {
@@ -1026,6 +1045,7 @@ function saveEditingPlayer() {
   player.role = els.roleSelect.value;
   player.memo = els.memoInput.value.trim();
   if (previousRole !== player.role) {
+    player.mediumConflictBroken = false;
     player.roleClaimOrder = player.role ? getNextRoleClaimOrder() : null;
     reorderPlayersForBoard();
   }
@@ -1714,6 +1734,10 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
         return `<span class="seer-result-label judgement-werewolf" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(RESULT_LABELS.werewolf)}</span>`;
       }
       const result = state.results.find((item) => item.seerId === seer.id && item.targetId === player.id);
+      const mediumConfirmedDisplay = getMediumConfirmedDisplay(player);
+      if (!result && mediumConfirmedDisplay) {
+        return `<span class="seer-result-label ${mediumConfirmedDisplay.className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(mediumConfirmedDisplay.label)}</span>`;
+      }
       const roleClaim = getSeerGridRoleLabel(player);
       const exposedHumanClaim = getExposedHumanClaimForSeer(player, seer);
       const autoVillagerClaim = roleClaim || getAutoVillagerClaimForSeer(player, seer.id) || exposedHumanClaim;
@@ -1758,6 +1782,7 @@ function getWolfSideDisplayLabel(player) {
 
 function shouldDisplayMediumConfirmedWerewolf(player) {
   if (player.role !== "werewolf" || player.status !== "attacked") return false;
+  if (player.mediumConfirmedRoleGuess) return false;
   if (hasSelfPerspectiveWerewolfResult(player.id)) return false;
   const mediumClaimants = getRoleClaimants("medium");
   return mediumClaimants.length === 1 && !isInactiveStatus(mediumClaimants[0].status);
@@ -1769,6 +1794,16 @@ function hasSelfPerspectiveWerewolfResult(targetId) {
   return state.results.some(
     (result) => result.seerId === selfPlayer.id && result.targetId === targetId && result.value === "werewolf",
   );
+}
+
+function getMediumConfirmedDisplay(player) {
+  if (player.mediumConfirmedRoleGuess === "werewolf") {
+    return { label: ROLE_LABELS.werewolf, className: "judgement-werewolf" };
+  }
+  if (player.mediumConfirmedRoleGuess === "villager") {
+    return { label: ROLE_LABELS.villager, className: "judgement-human" };
+  }
+  return null;
 }
 
 function getAutoVillagerClaimForSeer(player, seerId) {
@@ -1807,6 +1842,7 @@ function getOutsiderExposureIdsForSeer(seer) {
 }
 
 function applyConfirmedWhiteUpdates() {
+  reconcileMediumConfirmedSeerConflicts();
   applySelfClaimRoleGuess();
   getActivePlayers().forEach(applySingleClaimRoleGuess);
   applyConfirmedRoleResultGuesses();
@@ -1819,7 +1855,37 @@ function applyConfirmedWhiteUpdates() {
       player.roleClaimOrder = getNextRoleClaimOrder();
     });
   }
+  applyMediumConfirmedRoleGuesses();
   applySelfPerspectiveRivalRoleGuesses();
+}
+
+function applyMediumConfirmedRoleGuesses() {
+  getActivePlayers().forEach((player) => {
+    if (player.mediumConfirmedRoleGuess) setRoleGuess(player, player.mediumConfirmedRoleGuess);
+  });
+}
+
+function reconcileMediumConfirmedSeerConflicts() {
+  const selfPlayer = getSelfPerspectivePlayer();
+  const conflictingSeerIds = new Set();
+  state.results.forEach((result) => {
+    const target = findPlayer(result.targetId);
+    if (!target?.mediumConfirmedRoleGuess) return;
+    const confirmedResult = target.mediumConfirmedRoleGuess === "werewolf" ? "werewolf" : "human";
+    if (result.value !== confirmedResult && result.seerId !== selfPlayer?.id) conflictingSeerIds.add(result.seerId);
+  });
+  getActivePlayers().forEach((player) => {
+    if (player.mediumConflictBroken && !conflictingSeerIds.has(player.id)) {
+      player.role = "seer";
+      player.mediumConflictBroken = false;
+    }
+  });
+  conflictingSeerIds.forEach((seerId) => {
+    const seer = findPlayer(seerId);
+    if (!seer || (!seer.mediumConflictBroken && seer.role !== "seer")) return;
+    seer.role = "wolfSide";
+    seer.mediumConflictBroken = true;
+  });
 }
 
 function applySingleClaimRoleGuess(player) {
@@ -3148,6 +3214,10 @@ function normalizePlayer(player) {
       player.primaryRoleGuess,
       normalizeRoleGuessCandidates(player.roleGuessCandidates, player.primaryRoleGuess),
     ),
+    mediumConfirmedRoleGuess: ["villager", "werewolf"].includes(player.mediumConfirmedRoleGuess)
+      ? player.mediumConfirmedRoleGuess
+      : "",
+    mediumConflictBroken: player.mediumConflictBroken === true,
     trueRole: Object.hasOwn(ROLE_GUESS_LABELS, player.trueRole) && player.trueRole !== "unknown" ? player.trueRole : "",
     roleClaimOrder:
       getRoleClaimOrder(player) < Number.MAX_SAFE_INTEGER ? Math.max(1, getRoleClaimOrder(player)) : null,
