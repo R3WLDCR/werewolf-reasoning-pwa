@@ -599,7 +599,8 @@ function finishGame() {
   const winner = selectedWinner === "その他" ? els.otherWinnerInput.value.trim() : selectedWinner;
   if (!winner) return toast("勝利陣営を選んでください");
   const trueRoles = getFinishTrueRoles();
-  if (!trueRoles) return toast("参加者全員の真の役職を選んでください");
+  const compositionError = getTrueRoleCompositionError(trueRoles);
+  if (compositionError) return toast(compositionError);
   const history = createGameHistory(winner, trueRoles);
   state.gameHistories.unshift(history);
   state.players.forEach((player) => {
@@ -638,6 +639,10 @@ function renderFinishTrueRoleFields() {
       `,
     )
     .join("");
+  els.finishTrueRoleFields.querySelectorAll("[data-true-role-player-id]").forEach((select) => {
+    select.addEventListener("change", autoFillRemainingTrueRolesAsVillager);
+  });
+  autoFillRemainingTrueRolesAsVillager();
 }
 
 function getTrueRoleOptionsHtml(selectedRole = "") {
@@ -652,8 +657,52 @@ function getFinishTrueRoles() {
     select.dataset.trueRolePlayerId,
     select.value,
   ]);
-  if (entries.length !== getActivePlayers().length || entries.some(([, role]) => !role)) return null;
   return new Map(entries);
+}
+
+function autoFillRemainingTrueRolesAsVillager() {
+  const selects = Array.from(els.finishTrueRoleFields.querySelectorAll("[data-true-role-player-id]"));
+  const counts = countSelectedTrueRoles(selects);
+  if (!hasRequiredTrueRoleComposition(counts)) return;
+  selects.filter((select) => !select.value).forEach((select) => {
+    select.value = "villager";
+  });
+}
+
+function countSelectedTrueRoles(selects = []) {
+  return selects.reduce((counts, select) => {
+    if (select.value) counts[select.value] = (counts[select.value] || 0) + 1;
+    return counts;
+  }, {});
+}
+
+function hasRequiredTrueRoleComposition(counts) {
+  return (
+    (counts.werewolf || 0) === state.wolfCount &&
+    (counts.madman || 0) === 1 &&
+    (counts.guard || 0) === 1 &&
+    (counts.seer || 0) === 1 &&
+    (counts.medium || 0) === 1
+  );
+}
+
+function getTrueRoleCompositionError(trueRoles) {
+  if (!trueRoles || trueRoles.size !== getActivePlayers().length) return "参加者全員の真の役職を選んでください";
+  const counts = [...trueRoles.values()].reduce((result, role) => {
+    if (role) result[role] = (result[role] || 0) + 1;
+    return result;
+  }, {});
+  const errors = [
+    ["人狼", counts.werewolf || 0, state.wolfCount],
+    ["裏切り者", counts.madman || 0, 1],
+    ["ボディガード", counts.guard || 0, 1],
+    ["預言者", counts.seer || 0, 1],
+    ["霊媒師", counts.medium || 0, 1],
+  ]
+    .filter(([, actual, expected]) => actual !== expected)
+    .map(([label, actual, expected]) => `${label}${actual}/${expected}`);
+  if ([...trueRoles.values()].some((role) => !role)) errors.push("未選択あり");
+  return errors.length ? `役職構成を確認してください: ${errors.join("、")}` : "";
 }
 
 function createGameHistory(winner, trueRoles = new Map()) {
@@ -1408,7 +1457,13 @@ function getRivalRoleCellsHtml(player, players = getActivePlayers()) {
         return `<span class="seer-result-label ${getRoleClass(player)}">${escapeHtml(`${ROLE_LABELS[player.role]}${getCircledNumber(index + 1)}`)}</span>`;
       }
       const attacked = claimant.status === "attacked";
-      return `<span class="seer-result-label ${attacked ? "role-madman" : "role-wolfSide"}">${attacked ? ROLE_LABELS.madman : ROLE_LABELS.wolfSide}</span>`;
+      if (attacked) {
+        return `<span class="seer-result-label role-madman">${ROLE_LABELS.madman}</span>`;
+      }
+      if (player.status === "attacked") {
+        return `<span class="seer-result-label role-werewolf">${ROLE_LABELS.werewolf}</span>`;
+      }
+      return `<span class="seer-result-label role-wolfSide">${ROLE_LABELS.wolfSide}</span>`;
     })
     .join("");
 }
@@ -1750,8 +1805,15 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
         return `<span class="seer-result-label ${className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(getSeerGridRoleLabel(player))}</span>`;
       }
       if (isWolfSideDisplayTarget(player)) {
-        const className = player.status === "attacked" ? "role-madman" : "judgement-rival";
-        return `<span class="seer-result-label ${className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(getWolfSideDisplayLabel(player))}</span>`;
+        const attackedPlayer = player.status === "attacked";
+        const attackedPerspective = seer.status === "attacked";
+        const className = attackedPlayer ? "role-madman" : attackedPerspective ? "role-werewolf" : "judgement-rival";
+        const label = attackedPlayer
+          ? ROLE_LABELS.madman
+          : attackedPerspective
+            ? ROLE_LABELS.werewolf
+            : ROLE_LABELS.wolfSide;
+        return `<span class="seer-result-label ${className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(label)}</span>`;
       }
       if (shouldDisplayMediumConfirmedWerewolf(player)) {
         return `<span class="seer-result-label judgement-werewolf" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(RESULT_LABELS.werewolf)}</span>`;
@@ -2575,7 +2637,7 @@ function buildHistoryTimeline(history) {
   const activePlayers = getHistoryActivePlayers(history);
   const trueSeerIds = new Set(activePlayers.filter((player) => player.trueRole === "seer").map((player) => player.id));
   const trueResults = history.results.filter((result) => trueSeerIds.has(result.seerId));
-  const roleActions = history.roleActions || [];
+  const roleActions = getTrueRoleActions(history.roleActions || [], history.players);
   const maxDay = Math.max(
     0,
     ...trueResults.map(getDivinationOrder),
@@ -2615,17 +2677,21 @@ function buildHistoryTimeline(history) {
 
 function buildCurrentTimeline() {
   const activePlayers = getActivePlayers();
+  const results = isGameFinished()
+    ? state.results.filter((result) => findPlayer(result.seerId)?.trueRole === "seer")
+    : state.results;
+  const roleActions = isGameFinished() ? getTrueRoleActions(state.roleActions, state.players) : state.roleActions;
   const maxDay = Math.max(
     0,
-    ...state.results.map(getDivinationOrder),
-    ...state.roleActions.map((action) => Number(action.day) || 1),
+    ...results.map(getDivinationOrder),
+    ...roleActions.map((action) => Number(action.day) || 1),
     ...activePlayers.filter((player) => isInactiveStatus(player.status)).map((player) => Number(player.statusDay) || 1),
   );
   if (!maxDay) return ["- 出来事なし"];
   const lines = [];
   for (let day = 1; day <= maxDay; day += 1) {
     const events = [];
-    state.results
+    results
       .filter((result) => getDivinationOrder(result) === day)
       .forEach((result) => {
         const seer = findPlayer(result.seerId);
@@ -2638,7 +2704,7 @@ function buildCurrentTimeline() {
     activePlayers
       .filter((player) => player.status === "attacked" && (Number(player.statusDay) || 1) === day)
       .forEach((player) => events.push(`襲撃: ${player.name}`));
-    state.roleActions
+    roleActions
       .filter((action) => (Number(action.day) || 1) === day)
       .forEach((action) => {
         const line = formatRoleActionEvent(action, state.players);
@@ -2650,6 +2716,10 @@ function buildCurrentTimeline() {
     }
   }
   return lines.length ? lines : ["- 出来事なし"];
+}
+
+function getTrueRoleActions(actions, players) {
+  return actions.filter((action) => players.find((player) => player.id === action.actorId)?.trueRole === action.role);
 }
 
 function formatRoleActionEvent(action, players) {
