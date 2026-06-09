@@ -25,6 +25,7 @@ const ROLE_ORDER = {
 const PRIORITY_PLAYER_NAME = "羊飼いK";
 const RIVAL_DISPLAY_ROLES = new Set(["medium", "guard", "hunter"]);
 const SELF_PERSPECTIVE_EXCLUDED_RIVAL_ROLES = new Set(["unknown", "wolfSide", "confirmedWhite"]);
+const VILLAGER_SIDE_ROLES = new Set(["seer", "medium", "guard", "villager", "hunter"]);
 const STATUS_LABELS = {
   alive: "生存",
   exiled: "追放",
@@ -515,6 +516,7 @@ function addPlayer() {
     primaryRoleGuess: "",
     mediumConfirmedRoleGuess: "",
     mediumConflictBroken: false,
+    attackedAutoVillager: false,
     trueRole: "",
     roleClaimOrder: null,
   });
@@ -687,6 +689,7 @@ function resetBoardState() {
     primaryRoleGuess: "",
     mediumConfirmedRoleGuess: "",
     mediumConflictBroken: false,
+    attackedAutoVillager: false,
     trueRole: "",
     roleClaimOrder: null,
   }));
@@ -932,8 +935,14 @@ function saveRoleGuess() {
     player.roleGuessCandidates.find((value) => value !== "unknown") ||
     "";
   updateManualMediumConfirmation(player);
-  if (player.primaryRoleGuess === "werewolf" && player.role !== "werewolf") {
-    player.role = "werewolf";
+  const roleFromGuess =
+    player.primaryRoleGuess === "werewolf" ||
+    (player.attackedAutoVillager && VILLAGER_SIDE_ROLES.has(player.primaryRoleGuess))
+      ? player.primaryRoleGuess
+      : "";
+  if (roleFromGuess && player.role !== roleFromGuess) {
+    player.role = roleFromGuess;
+    player.attackedAutoVillager = false;
     player.roleClaimOrder = getNextRoleClaimOrder();
     reorderPlayersForBoard();
   }
@@ -1046,6 +1055,7 @@ function saveEditingPlayer() {
   player.memo = els.memoInput.value.trim();
   if (previousRole !== player.role) {
     player.mediumConflictBroken = false;
+    player.attackedAutoVillager = false;
     player.roleClaimOrder = player.role ? getNextRoleClaimOrder() : null;
     reorderPlayersForBoard();
   }
@@ -1095,6 +1105,7 @@ function applyAttackRoleUpdates(attackedPlayer) {
   const hadRole = Boolean(attackedPlayer.role);
   if (!hadRole && !hasVisibleDivinationResultForTarget(attackedPlayer.id)) {
     attackedPlayer.role = "villager";
+    attackedPlayer.attackedAutoVillager = true;
   }
 
   state.results
@@ -1717,6 +1728,10 @@ function getSeerGridHtml(player) {
 
 function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
   if (!seers.length) {
+    const mediumConfirmedDisplay = getMediumConfirmedDisplay(player);
+    if (mediumConfirmedDisplay) {
+      return `<span class="seer-result-label ${mediumConfirmedDisplay.className}">${escapeHtml(mediumConfirmedDisplay.label)}</span>`;
+    }
     const roleClaim = getSeerGridRoleLabel(player);
     return roleClaim ? `<span class="seer-result-label ${getWolfSideAwareRoleClass(player)}">${escapeHtml(roleClaim)}</span>` : "";
   }
@@ -3218,6 +3233,9 @@ function normalizePlayer(player) {
       ? player.mediumConfirmedRoleGuess
       : "",
     mediumConflictBroken: player.mediumConflictBroken === true,
+    attackedAutoVillager:
+      player.attackedAutoVillager === true ||
+      (player.attackedAutoVillager === undefined && status === "attacked" && player.role === "villager"),
     trueRole: Object.hasOwn(ROLE_GUESS_LABELS, player.trueRole) && player.trueRole !== "unknown" ? player.trueRole : "",
     roleClaimOrder:
       getRoleClaimOrder(player) < Number.MAX_SAFE_INTEGER ? Math.max(1, getRoleClaimOrder(player)) : null,
