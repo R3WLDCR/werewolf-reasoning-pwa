@@ -521,7 +521,11 @@ function addPlayer() {
     manualRoleGuess: false,
     autoConfirmedWhite: false,
     mediumConfirmedRoleGuess: "",
+    confirmedRoleEvidence: [],
+    confirmedRolePreviousGuess: null,
     mediumConflictBroken: false,
+    confirmedResultConflictBroken: false,
+    attackConflictBroken: false,
     attackedAutoVillager: false,
     trueRole: "",
     roleClaimOrder: null,
@@ -747,7 +751,11 @@ function resetBoardState() {
     manualRoleGuess: false,
     autoConfirmedWhite: false,
     mediumConfirmedRoleGuess: "",
+    confirmedRoleEvidence: [],
+    confirmedRolePreviousGuess: null,
     mediumConflictBroken: false,
+    confirmedResultConflictBroken: false,
+    attackConflictBroken: false,
     attackedAutoVillager: false,
     trueRole: "",
     roleClaimOrder: null,
@@ -999,10 +1007,11 @@ function saveRoleGuess() {
   if (player.mediumConfirmedRoleGuess) player.manualRoleGuess = false;
   const shouldSyncAttackedVillagerRole =
     !isPriorityPlayer(player) &&
+    !isBrokenSeer(player) &&
     VILLAGER_SIDE_ROLES.has(player.primaryRoleGuess) &&
     (player.attackedAutoVillager || (player.status === "attacked" && VILLAGER_SIDE_ROLES.has(player.role)));
   const roleFromGuess =
-    (!isPriorityPlayer(player) && player.primaryRoleGuess === "werewolf") ||
+    (!isPriorityPlayer(player) && !isBrokenSeer(player) && player.primaryRoleGuess === "werewolf") ||
     shouldSyncAttackedVillagerRole
       ? player.primaryRoleGuess
       : "";
@@ -1020,12 +1029,7 @@ function saveRoleGuess() {
 }
 
 function updateManualMediumConfirmation(player) {
-  const roleGuess = player.primaryRoleGuess;
-  if (!["villager", "werewolf"].includes(roleGuess)) {
-    player.mediumConfirmedRoleGuess = "";
-    return;
-  }
-  if (getLivingSingleMedium() || player.mediumConfirmedRoleGuess) player.mediumConfirmedRoleGuess = roleGuess;
+  if (!player.confirmedRoleEvidence?.length) player.mediumConfirmedRoleGuess = "";
 }
 
 function getLivingSingleMedium() {
@@ -1136,6 +1140,8 @@ function saveEditingPlayer() {
   if (previousRole !== player.role) {
     player.autoConfirmedWhite = false;
     player.mediumConflictBroken = false;
+    player.confirmedResultConflictBroken = false;
+    player.attackConflictBroken = false;
     player.attackedAutoVillager = false;
     player.roleClaimOrder = player.role ? getNextRoleClaimOrder() : null;
     reorderPlayersForBoard();
@@ -1194,7 +1200,7 @@ function applyAttackRoleUpdates(attackedPlayer) {
     .filter((result) => result.targetId === attackedPlayer.id && result.value === "werewolf")
     .forEach((result) => {
       const seer = findPlayer(result.seerId);
-      if (seer) seer.role = "wolfSide";
+      if (seer) markSeerBroken(seer, "attack");
     });
 }
 
@@ -1995,7 +2001,9 @@ function getOutsiderExposureIdsForSeer(seer) {
 
 function applyConfirmedWhiteUpdates() {
   clearSelfPerspectiveVillagerClaim();
-  reconcileMediumConfirmedSeerConflicts();
+  reconcileConfirmedRoleEvidence();
+  reconcileAttackConfirmedSeerConflicts();
+  reconcileConfirmedResultSeerConflicts();
   applySelfClaimRoleGuess();
   getActivePlayers().forEach(applySingleClaimRoleGuess);
   applySelfPerspectiveRivalRoleGuesses();
@@ -2010,7 +2018,6 @@ function applyConfirmedWhiteUpdates() {
       player.roleClaimOrder = getNextRoleClaimOrder();
     });
   }
-  applyConfirmedRoleResultGuesses();
   applyMediumConfirmedRoleGuesses();
   applySelfClaimRoleGuess();
 }
@@ -2049,30 +2056,166 @@ function applyMediumConfirmedRoleGuesses() {
   });
 }
 
-function reconcileMediumConfirmedSeerConflicts() {
-  const selfPlayer = getSelfPerspectivePlayer();
+function reconcileConfirmedRoleEvidence() {
+  const evidenceByTarget = new Map();
+  const addEvidence = (targetId, evidence) => {
+    const entries = evidenceByTarget.get(targetId) || [];
+    entries.push(evidence);
+    evidenceByTarget.set(targetId, entries);
+  };
+  ["seer", "medium", "guard", "hunter"].forEach((role) => {
+    const claimants = getRoleClaimants(role);
+    if (claimants.length !== 1) return;
+    const claimant = claimants[0];
+    const sourceId = `claim:${role}:${claimant.id}`;
+    const wasEstablished = claimant.confirmedRoleEvidence?.some((evidence) => evidence.sourceId === sourceId);
+    if (role !== "medium" || claimant.status === "alive" || wasEstablished) {
+      addEvidence(claimant.id, {
+        actorId: claimant.id,
+        role: "claim",
+        sourceId,
+        value: role,
+        persistedAfterDeath: role !== "medium" || claimant.status !== "alive" || wasEstablished,
+      });
+    }
+  });
+  const singleSeer = getRoleClaimants("seer").length === 1 ? getRoleClaimants("seer")[0] : null;
+  if (singleSeer) {
+    state.results
+      .filter((result) => result.seerId === singleSeer.id)
+      .forEach((result) => addEvidence(result.targetId, {
+        actorId: singleSeer.id,
+        role: "seer",
+        sourceId: result.id,
+        value: result.value === "werewolf" ? "werewolf" : "villager",
+        persistedAfterDeath: true,
+      }));
+  }
+  const mediumClaimants = getRoleClaimants("medium");
+  if (mediumClaimants.length === 1) {
+    const medium = mediumClaimants[0];
+    state.roleActions
+      .filter((action) => action.actorId === medium.id && action.role === "medium" && ["human", "werewolf"].includes(action.result))
+      .forEach((action) => {
+        const wasEstablished = getActivePlayers().some((player) =>
+          player.confirmedRoleEvidence?.some((evidence) => evidence.sourceId === action.id),
+        );
+        if (medium.status === "alive" || wasEstablished) {
+          addEvidence(action.targetId, {
+            actorId: medium.id,
+            role: "medium",
+            sourceId: action.id,
+            value: action.result === "werewolf" ? "werewolf" : "villager",
+            persistedAfterDeath: medium.status !== "alive" || wasEstablished,
+          });
+        }
+      });
+  }
+  getActivePlayers().forEach((player) => {
+    const entries = evidenceByTarget.get(player.id) || [];
+    const preferred =
+      entries.find((entry) => entry.role === "medium") ||
+      entries.find((entry) => entry.role === "claim") ||
+      entries[0];
+    const validEntries = preferred ? entries.filter((entry) => entry.value === preferred.value) : [];
+    if (!preferred) {
+      if (player.confirmedRolePreviousGuess) restoreRoleGuessBeforeConfirmation(player);
+      player.confirmedRoleEvidence = [];
+      player.mediumConfirmedRoleGuess = "";
+      return;
+    }
+    if (!player.confirmedRolePreviousGuess) {
+      player.confirmedRolePreviousGuess = {
+        roleGuessCandidates: [...player.roleGuessCandidates],
+        primaryRoleGuess: player.primaryRoleGuess,
+        manualRoleGuess: player.manualRoleGuess,
+      };
+    }
+    player.confirmedRoleEvidence = validEntries;
+    player.mediumConfirmedRoleGuess = ["villager", "werewolf"].includes(preferred.value) ? preferred.value : "";
+    setRoleGuess(player, preferred.value, { confirmed: true });
+  });
+}
+
+function restoreRoleGuessBeforeConfirmation(player) {
+  const previous = player.confirmedRolePreviousGuess;
+  if (!previous) return;
+  player.roleGuessCandidates = normalizeRoleGuessCandidates(previous.roleGuessCandidates, previous.primaryRoleGuess);
+  player.primaryRoleGuess = normalizePrimaryRoleGuess(previous.primaryRoleGuess, player.roleGuessCandidates);
+  player.manualRoleGuess = previous.manualRoleGuess === true;
+  player.confirmedRolePreviousGuess = null;
+}
+
+function reconcileConfirmedResultSeerConflicts() {
   const conflictingSeerIds = new Set();
+  getActivePlayers().forEach((player) => {
+    if (!player.mediumConflictBroken) return;
+    player.mediumConflictBroken = false;
+    player.confirmedResultConflictBroken = true;
+  });
   state.results.forEach((result) => {
     const target = findPlayer(result.targetId);
-    if (!target?.mediumConfirmedRoleGuess) return;
+    if (!target?.confirmedRoleEvidence?.length || !target.mediumConfirmedRoleGuess) return;
     const confirmedResult = target.mediumConfirmedRoleGuess === "werewolf" ? "werewolf" : "human";
-    if (result.value !== confirmedResult && result.seerId !== selfPlayer?.id) conflictingSeerIds.add(result.seerId);
+    const isSourceResult = target.confirmedRoleEvidence.some((evidence) => evidence.sourceId === result.id);
+    if (result.value !== confirmedResult && !isSourceResult) conflictingSeerIds.add(result.seerId);
   });
   getActivePlayers().forEach((player) => {
-    if (player.mediumConflictBroken && !conflictingSeerIds.has(player.id)) {
-      player.role = "seer";
-      player.mediumConflictBroken = false;
+    if (player.confirmedResultConflictBroken && !conflictingSeerIds.has(player.id)) {
+      player.confirmedResultConflictBroken = false;
+      restoreBrokenSeerIfResolved(player);
     }
   });
   conflictingSeerIds.forEach((seerId) => {
     const seer = findPlayer(seerId);
-    if (!seer || (!seer.mediumConflictBroken && seer.role !== "seer")) return;
-    seer.role = "wolfSide";
-    seer.mediumConflictBroken = true;
+    if (!seer || (!seer.confirmedResultConflictBroken && seer.role !== "seer")) return;
+    markSeerBroken(seer, "confirmedResult");
   });
 }
 
+function reconcileAttackConfirmedSeerConflicts() {
+  const conflictingSeerIds = new Set(
+    state.results
+      .filter((result) => result.value === "werewolf" && findPlayer(result.targetId)?.status === "attacked")
+      .map((result) => result.seerId),
+  );
+  getActivePlayers().forEach((player) => {
+    if (player.attackConflictBroken && !conflictingSeerIds.has(player.id)) {
+      player.attackConflictBroken = false;
+      restoreBrokenSeerIfResolved(player);
+    }
+  });
+  conflictingSeerIds.forEach((seerId) => {
+    const seer = findPlayer(seerId);
+    if (!seer || (!seer.attackConflictBroken && seer.role !== "seer")) return;
+    markSeerBroken(seer, "attack");
+  });
+}
+
+function markSeerBroken(seer, reason) {
+  if (!seer) return;
+  const wasBroken = isBrokenSeer(seer);
+  seer.role = "wolfSide";
+  if (reason === "medium") seer.mediumConflictBroken = true;
+  if (reason === "confirmedResult") seer.confirmedResultConflictBroken = true;
+  if (reason === "attack") seer.attackConflictBroken = true;
+  if (!wasBroken) setRoleGuess(seer, "wolfSide", { confirmed: true });
+}
+
+function restoreBrokenSeerIfResolved(seer) {
+  if (!seer || isBrokenSeer(seer)) return;
+  if (seer.role === "wolfSide") seer.role = "seer";
+  if (!seer.manualRoleGuess && getRoleGuessDisplay(seer).value === "wolfSide") {
+    setRoleGuess(seer, "seer", { confirmed: true });
+  }
+}
+
+function isBrokenSeer(player) {
+  return Boolean(player?.mediumConflictBroken || player?.confirmedResultConflictBroken || player?.attackConflictBroken);
+}
+
 function applySingleClaimRoleGuess(player) {
+  if (player.confirmedRoleEvidence?.length) return;
   if (!player.role || !Object.hasOwn(ROLE_GUESS_LABELS, player.role)) return;
   if (getRoleClaimants(player.role).length !== 1) return;
   setRoleGuess(player, player.role);
@@ -3501,13 +3644,41 @@ function normalizePlayer(player) {
     mediumConfirmedRoleGuess: ["villager", "werewolf"].includes(player.mediumConfirmedRoleGuess)
       ? player.mediumConfirmedRoleGuess
       : "",
-    mediumConflictBroken: player.mediumConflictBroken === true,
+    confirmedRoleEvidence: Array.isArray(player.confirmedRoleEvidence)
+      ? player.confirmedRoleEvidence.map(normalizeConfirmedRoleEvidence).filter(Boolean)
+      : [],
+    confirmedRolePreviousGuess: normalizeConfirmedRolePreviousGuess(player.confirmedRolePreviousGuess),
+    mediumConflictBroken: false,
+    confirmedResultConflictBroken: player.confirmedResultConflictBroken === true || player.mediumConflictBroken === true,
+    attackConflictBroken: player.attackConflictBroken === true,
     attackedAutoVillager:
       player.attackedAutoVillager === true ||
       (player.attackedAutoVillager === undefined && status === "attacked" && player.role === "villager"),
     trueRole: Object.hasOwn(ROLE_GUESS_LABELS, player.trueRole) && player.trueRole !== "unknown" ? player.trueRole : "",
     roleClaimOrder:
       getRoleClaimOrder(player) < Number.MAX_SAFE_INTEGER ? Math.max(1, getRoleClaimOrder(player)) : null,
+  };
+}
+
+function normalizeConfirmedRoleEvidence(evidence) {
+  if (!evidence?.actorId || !evidence?.sourceId || !["seer", "medium", "claim"].includes(evidence.role)) return null;
+  if (!Object.hasOwn(ROLE_GUESS_LABELS, evidence.value) || evidence.value === "unknown") return null;
+  return {
+    actorId: String(evidence.actorId),
+    role: evidence.role,
+    sourceId: String(evidence.sourceId),
+    value: evidence.value,
+    persistedAfterDeath: evidence.persistedAfterDeath === true,
+  };
+}
+
+function normalizeConfirmedRolePreviousGuess(previous) {
+  if (!previous || typeof previous !== "object") return null;
+  const candidates = normalizeRoleGuessCandidates(previous.roleGuessCandidates, previous.primaryRoleGuess);
+  return {
+    roleGuessCandidates: candidates,
+    primaryRoleGuess: normalizePrimaryRoleGuess(previous.primaryRoleGuess, candidates),
+    manualRoleGuess: previous.manualRoleGuess === true,
   };
 }
 
