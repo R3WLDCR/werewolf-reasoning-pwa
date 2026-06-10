@@ -97,6 +97,7 @@ const state = {
   players: [],
   results: [],
   roleActions: [],
+  claimEvents: [],
   gameStatus: "preparing",
   startedAt: "",
   gameHistories: [],
@@ -215,6 +216,8 @@ document.addEventListener("DOMContentLoaded", () => {
     "addHistoryResultBtn",
     "historyRoleActionEditor",
     "addHistoryRoleActionBtn",
+    "historyClaimEventEditor",
+    "addHistoryClaimEventBtn",
     "bulkDeleteHistoryDialog",
     "bulkDeleteHistoryForm",
     "bulkDeleteHistoryTitle",
@@ -381,6 +384,7 @@ function bindEvents() {
   });
   els.addHistoryResultBtn.addEventListener("click", addHistoryResultEditorRow);
   els.addHistoryRoleActionBtn.addEventListener("click", addHistoryRoleActionEditorRow);
+  els.addHistoryClaimEventBtn.addEventListener("click", addHistoryClaimEventEditorRow);
   els.historyEditDialog.addEventListener("click", (event) => {
     if (event.target === els.historyEditDialog) closeHistoryEditDialog();
   });
@@ -549,6 +553,7 @@ function autoStartGameFromBoardInput() {
 function hasBoardProgress() {
   if (state.results.length) return true;
   if (state.roleActions.length) return true;
+  if (state.claimEvents.length) return true;
   return getActivePlayers().some(
     (player) =>
       Boolean(player.role) ||
@@ -723,6 +728,7 @@ function createGameHistory(winner, trueRoles = new Map()) {
     players,
     results: structuredClone(state.results),
     roleActions: structuredClone(state.roleActions),
+    claimEvents: structuredClone(state.claimEvents),
     selectedTournamentId: state.selectedTournamentId,
   };
 }
@@ -748,6 +754,7 @@ function resetBoardState() {
   }));
   state.results = [];
   state.roleActions = [];
+  state.claimEvents = [];
 }
 
 function applySelectedTournamentParticipation() {
@@ -991,10 +998,11 @@ function saveRoleGuess() {
   updateManualMediumConfirmation(player);
   if (player.mediumConfirmedRoleGuess) player.manualRoleGuess = false;
   const shouldSyncAttackedVillagerRole =
+    !isPriorityPlayer(player) &&
     VILLAGER_SIDE_ROLES.has(player.primaryRoleGuess) &&
     (player.attackedAutoVillager || (player.status === "attacked" && VILLAGER_SIDE_ROLES.has(player.role)));
   const roleFromGuess =
-    player.primaryRoleGuess === "werewolf" ||
+    (!isPriorityPlayer(player) && player.primaryRoleGuess === "werewolf") ||
     shouldSyncAttackedVillagerRole
       ? player.primaryRoleGuess
       : "";
@@ -1033,8 +1041,21 @@ function getRoleGuessDisplay(player) {
   };
 }
 
+function getDisplayedRoleGuess(player) {
+  if (isSelfPerspectiveExposedHuman(player)) {
+    return { value: "resultVillager", label: "結果市民" };
+  }
+  return getRoleGuessDisplay(player);
+}
+
+function isSelfPerspectiveExposedHuman(player) {
+  const selfSeer = getSeers().find(isPriorityPlayer);
+  return Boolean(selfSeer && getExposedHumanClaimForSeer(player, selfSeer));
+}
+
 function getRoleGuessClass(value) {
   if (value === "werewolf") return "role-werewolf";
+  if (value === "resultVillager") return "role-villager";
   if (value === "unknown") return "role-unknown";
   return Object.hasOwn(ROLE_LABELS, value) ? `role-${value}` : "role-unknown";
 }
@@ -1110,7 +1131,7 @@ function saveEditingPlayer() {
   const player = findPlayer(editingPlayerId);
   if (!player) return;
   const previousRole = player.role;
-  player.role = els.roleSelect.value;
+  player.role = isPriorityPlayer(player) && els.roleSelect.value === "villager" ? "" : els.roleSelect.value;
   player.memo = els.memoInput.value.trim();
   if (previousRole !== player.role) {
     player.autoConfirmedWhite = false;
@@ -1121,6 +1142,7 @@ function saveEditingPlayer() {
   }
   saveRoleActionResults(player);
   saveDivinationResult({ silent: true });
+  if (previousRole !== player.role) addClaimEvent(player.id, previousRole, player.role);
   autoStartGameFromBoardInput();
   closeEditDialog();
   renderAndStore();
@@ -1405,7 +1427,7 @@ function renderRows() {
     const memo = player.memo || "メモなし";
     const seerGrid = getSeerGridHtml(player);
     const impression = getPlayerImpression(player);
-    const roleGuess = getRoleGuessDisplay(player);
+    const roleGuess = getDisplayedRoleGuess(player);
     row.innerHTML = `
       <button class="sticky-player-name" type="button" ${isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を編集">${escapeHtml(player.name)}</button>
       <button class="player-info" type="button" ${isGameFinished() ? "disabled" : ""}>
@@ -1739,7 +1761,7 @@ function bindRoleActionDeleteButtons(root) {
 }
 
 function saveRoleActionResults(player) {
-  state.roleActions = state.roleActions.filter((action) => action.actorId !== player.id);
+  state.roleActions = state.roleActions.filter((action) => action.actorId !== player.id || action.role !== player.role);
   if (!ROLE_ACTION_ROLES.has(player.role)) return;
   const actions = Array.from(els.roleActionList.querySelectorAll("[data-role-action-id]"))
     .map((row) =>
@@ -1755,6 +1777,36 @@ function saveRoleActionResults(player) {
     )
     .filter(Boolean);
   state.roleActions.push(...actions);
+}
+
+function addClaimEvent(playerId, previousRole, role) {
+  const type = !previousRole ? "claim" : !role ? "withdraw" : "change";
+  state.claimEvents.push({
+    id: crypto.randomUUID(),
+    playerId,
+    day: getCurrentLogDay(),
+    previousRole,
+    role,
+    type,
+    createdAt: new Date().toISOString(),
+  });
+}
+
+function getCurrentLogDay() {
+  const resultDay = state.results.map(getDivinationOrder).reduce((max, day) => Math.max(max, day), 0);
+  const actionDay = state.roleActions.map((action) => Number(action.day) || 1).reduce((max, day) => Math.max(max, day), 0);
+  const claimDay = state.claimEvents.map((event) => Number(event.day) || 1).reduce((max, day) => Math.max(max, day), 0);
+  const exiledDay = getMaxStatusDay("exiled");
+  const attackedDay = getMaxStatusDay("attacked");
+  const guardDay = state.roleActions
+    .filter((action) => action.role === "guard")
+    .map((action) => Number(action.day) || 1)
+    .reduce((max, day) => Math.max(max, day), 0);
+  const completedStatusDay =
+    exiledDay > 0 && Math.max(attackedDay, guardDay) >= exiledDay
+      ? exiledDay + 1
+      : Math.max(exiledDay, attackedDay);
+  return Math.max(1, resultDay, actionDay, claimDay, completedStatusDay);
 }
 
 function getNextRoleActionDay(actorId, role) {
@@ -1827,16 +1879,22 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
         return `<span class="seer-result-label ${mediumConfirmedDisplay.className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(mediumConfirmedDisplay.label)}</span>`;
       }
       const roleClaim = getSeerGridRoleLabel(player);
+      const manualMediumGuess = getManualUnclaimedMediumGuess(player);
       const exposedHumanClaim = getExposedHumanClaimForSeer(player, seer);
-      const autoVillagerClaim = roleClaim || getAutoVillagerClaimForSeer(player, seer.id) || exposedHumanClaim;
+      const autoVillagerClaim = roleClaim || manualMediumGuess || getAutoVillagerClaimForSeer(player, seer.id) || exposedHumanClaim;
       if (!result) {
         return autoVillagerClaim
-          ? `<span class="seer-result-label ${exposedHumanClaim ? "judgement-human" : getAutoVillagerClass(player)}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(autoVillagerClaim)}</span>`
+          ? `<span class="seer-result-label ${manualMediumGuess ? "role-medium" : exposedHumanClaim ? "judgement-human" : getAutoVillagerClass(player)}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(autoVillagerClaim)}</span>`
           : `<span class="seer-result-label empty" data-seer-id="${escapeHtml(seer.id)}" aria-hidden="true"></span>`;
       }
-      const className = result.value === "werewolf" ? "judgement-werewolf" : "judgement-human";
+      const className = manualMediumGuess
+        ? "role-medium"
+        : result.value === "werewolf"
+          ? "judgement-werewolf"
+          : "judgement-human";
       const resultLabel = `占い${getDivinationOrder(result)} ${RESULT_LABELS[result.value] || "未記録"}`;
-      const label = roleClaim ? `${roleClaim} / ${resultLabel}` : resultLabel;
+      const displayedRole = roleClaim || manualMediumGuess;
+      const label = displayedRole ? `${displayedRole} / ${resultLabel}` : resultLabel;
       return `<span class="seer-result-label ${className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(label)}</span>`;
     })
     .filter(Boolean)
@@ -1858,6 +1916,12 @@ function getSeerGridRoleLabel(player) {
   if (player.role === "werewolf") return "";
   if (RIVAL_DISPLAY_ROLES.has(player.role) && getRoleClaimants(player.role).length >= 2) return "";
   return getWolfSideAwareRoleLabel(player);
+}
+
+function getManualUnclaimedMediumGuess(player) {
+  if (getRoleClaimants("medium").length) return "";
+  if (!player.manualRoleGuess || getRoleGuessDisplay(player).value !== "medium") return "";
+  return ROLE_LABELS.medium;
 }
 
 function getWolfSideAwareRoleClass(player) {
@@ -1930,6 +1994,7 @@ function getOutsiderExposureIdsForSeer(seer) {
 }
 
 function applyConfirmedWhiteUpdates() {
+  clearSelfPerspectiveVillagerClaim();
   reconcileMediumConfirmedSeerConflicts();
   applySelfClaimRoleGuess();
   getActivePlayers().forEach(applySingleClaimRoleGuess);
@@ -1948,6 +2013,14 @@ function applyConfirmedWhiteUpdates() {
   applyConfirmedRoleResultGuesses();
   applyMediumConfirmedRoleGuesses();
   applySelfClaimRoleGuess();
+}
+
+function clearSelfPerspectiveVillagerClaim() {
+  const selfPlayer = getSelfPerspectivePlayer();
+  if (!selfPlayer || selfPlayer.role !== "villager") return;
+  selfPlayer.role = "";
+  selfPlayer.roleClaimOrder = null;
+  selfPlayer.attackedAutoVillager = false;
 }
 
 function reconcileAutoConfirmedWhites(seers) {
@@ -2105,9 +2178,14 @@ function getCircledNumber(value) {
 
 function getSeers() {
   const seerIds = new Set(state.results.map((result) => result.seerId));
-  return getActivePlayers().filter(
-    (player) => player.role === "seer" || (player.role === "wolfSide" && seerIds.has(player.id)),
-  );
+  return getActivePlayers()
+    .filter((player) => player.role === "seer" || (player.role === "wolfSide" && seerIds.has(player.id)))
+    .slice()
+    .sort(
+      (a, b) =>
+        Number(isPriorityPlayer(b)) - Number(isPriorityPlayer(a)) ||
+        getRoleClaimOrder(a) - getRoleClaimOrder(b),
+    );
 }
 
 function getActivePlayers() {
@@ -2384,12 +2462,16 @@ function renderHistoryEditor(history) {
         })
         .join("")
     : '<div class="empty-inline">占い結果なし</div>';
+  els.historyClaimEventEditor.innerHTML = history.claimEvents?.length
+    ? history.claimEvents.map((event) => getHistoryClaimEventEditorRowHtml(event, activePlayers)).join("")
+    : '<div class="empty-inline">CO履歴なし</div>';
   els.historyRoleActionEditor.innerHTML = history.roleActions?.length
     ? history.roleActions
         .map((action) => getHistoryRoleActionEditorRowHtml(action, activePlayers))
         .join("")
     : '<div class="empty-inline">役職行動結果なし</div>';
   bindHistoryResultDeleteButtons();
+  bindHistoryClaimEventDeleteButtons();
   bindHistoryRoleActionDeleteButtons();
   bindHistoryRoleGuessControls();
 }
@@ -2515,6 +2597,44 @@ function addHistoryRoleActionEditorRow() {
   bindHistoryRoleActionDeleteButtons();
 }
 
+function bindHistoryClaimEventDeleteButtons() {
+  els.historyClaimEventEditor.querySelectorAll("[data-delete-claim-event]").forEach((button) => {
+    button.addEventListener("click", () => button.closest("[data-claim-event-id]").remove());
+  });
+}
+
+function addHistoryClaimEventEditorRow() {
+  const history = state.gameHistories.find((item) => item.id === editingHistoryId);
+  const players = history ? getHistoryActivePlayers(history) : [];
+  if (!players.length) return toast("参加者がいません");
+  els.historyClaimEventEditor.querySelector(".empty-inline")?.remove();
+  const event = {
+    id: `new-${crypto.randomUUID()}`,
+    playerId: players[0].id,
+    day: 1,
+    previousRole: "",
+    role: "seer",
+    type: "claim",
+    createdAt: new Date().toISOString(),
+  };
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = getHistoryClaimEventEditorRowHtml(event, players);
+  els.historyClaimEventEditor.appendChild(wrapper.firstElementChild);
+  bindHistoryClaimEventDeleteButtons();
+}
+
+function getHistoryClaimEventEditorRowHtml(event, players) {
+  return `
+    <div class="history-role-action-edit" data-claim-event-id="${escapeHtml(event.id)}" data-created-at="${escapeHtml(event.createdAt || "")}">
+      <select data-field="playerId" aria-label="CO者">${getHistoryPlayerOptionsHtml(players, event.playerId)}</select>
+      <input data-field="day" type="number" min="1" value="${Number(event.day) || 1}" aria-label="日付" />
+      <select data-field="previousRole" aria-label="変更前役職">${getRoleOptionsHtml(event.previousRole)}</select>
+      <select data-field="role" aria-label="変更後役職">${getRoleOptionsHtml(event.role)}</select>
+      <button class="danger-button" type="button" data-delete-claim-event>削除</button>
+    </div>
+  `;
+}
+
 function getHistoryRoleActionEditorRowHtml(action, players) {
   return `
     <div class="history-role-action-edit" data-role-action-id="${escapeHtml(action.id)}">
@@ -2598,6 +2718,18 @@ function saveHistoryEdits() {
     order: Math.max(1, Number(row.querySelector('[data-field="order"]').value) || 1),
     value: row.querySelector('[data-field="value"]').value,
   }));
+  history.claimEvents = Array.from(els.historyClaimEventEditor.querySelectorAll("[data-claim-event-id]"))
+    .map((row) =>
+      normalizeClaimEvent({
+        id: row.dataset.claimEventId.startsWith("new-") ? crypto.randomUUID() : row.dataset.claimEventId,
+        playerId: row.querySelector('[data-field="playerId"]').value,
+        day: row.querySelector('[data-field="day"]').value,
+        previousRole: row.querySelector('[data-field="previousRole"]').value,
+        role: row.querySelector('[data-field="role"]').value,
+        createdAt: row.dataset.createdAt || new Date().toISOString(),
+      }),
+    )
+    .filter(Boolean);
   history.roleActions = Array.from(els.historyRoleActionEditor.querySelectorAll("[data-role-action-id]"))
     .map((row) =>
       normalizeRoleAction({
@@ -2650,9 +2782,11 @@ function buildHistoryText(history) {
     "",
     "真の役職",
   ];
-  getHistoryActivePlayers(history).forEach((player) => {
-    lines.push(`- ${player.name}: ${ROLE_GUESS_LABELS[player.trueRole] || "未設定"}`);
-  });
+  getHistoryActivePlayers(history)
+    .filter((player) => player.trueRole !== "villager")
+    .forEach((player) => {
+      lines.push(`- ${player.name}: ${ROLE_GUESS_LABELS[player.trueRole] || "未設定"}`);
+    });
   lines.push("", "時系列");
   lines.push(...buildHistoryTimeline(history));
   return lines.join("\n");
@@ -2660,20 +2794,27 @@ function buildHistoryText(history) {
 
 function buildHistoryTimeline(history) {
   const activePlayers = getHistoryActivePlayers(history);
-  const trueSeerIds = new Set(activePlayers.filter((player) => player.trueRole === "seer").map((player) => player.id));
-  const trueResults = history.results.filter((result) => trueSeerIds.has(result.seerId));
-  const roleActions = getTrueRoleActions(history.roleActions || [], history.players);
+  const results = history.results;
+  const roleActions = history.roleActions || [];
+  const claimEvents = history.claimEvents || [];
   const maxDay = Math.max(
     0,
-    ...trueResults.map(getDivinationOrder),
+    ...results.map(getDivinationOrder),
     ...roleActions.map((action) => Number(action.day) || 1),
+    ...claimEvents.map((event) => Number(event.day) || 1),
     ...activePlayers.filter((player) => isInactiveStatus(player.status)).map((player) => Number(player.statusDay) || 1),
   );
   if (!maxDay) return ["- 出来事なし"];
   const lines = [];
   for (let day = 1; day <= maxDay; day += 1) {
     const events = [];
-    trueResults
+    claimEvents
+      .filter((event) => (Number(event.day) || 1) === day)
+      .forEach((event) => {
+        const line = formatClaimEvent(event, history.players);
+        if (line) events.push(line);
+      });
+    results
       .filter((result) => getDivinationOrder(result) === day)
       .forEach((result) => {
         const seer = history.players.find((player) => player.id === result.seerId);
@@ -2702,20 +2843,26 @@ function buildHistoryTimeline(history) {
 
 function buildCurrentTimeline() {
   const activePlayers = getActivePlayers();
-  const results = isGameFinished()
-    ? state.results.filter((result) => findPlayer(result.seerId)?.trueRole === "seer")
-    : state.results;
-  const roleActions = isGameFinished() ? getTrueRoleActions(state.roleActions, state.players) : state.roleActions;
+  const results = state.results;
+  const roleActions = state.roleActions;
+  const claimEvents = state.claimEvents;
   const maxDay = Math.max(
     0,
     ...results.map(getDivinationOrder),
     ...roleActions.map((action) => Number(action.day) || 1),
+    ...claimEvents.map((event) => Number(event.day) || 1),
     ...activePlayers.filter((player) => isInactiveStatus(player.status)).map((player) => Number(player.statusDay) || 1),
   );
   if (!maxDay) return ["- 出来事なし"];
   const lines = [];
   for (let day = 1; day <= maxDay; day += 1) {
     const events = [];
+    claimEvents
+      .filter((event) => (Number(event.day) || 1) === day)
+      .forEach((event) => {
+        const line = formatClaimEvent(event, state.players);
+        if (line) events.push(line);
+      });
     results
       .filter((result) => getDivinationOrder(result) === day)
       .forEach((result) => {
@@ -2747,6 +2894,16 @@ function getTrueRoleActions(actions, players) {
   return actions.filter((action) => players.find((player) => player.id === action.actorId)?.trueRole === action.role);
 }
 
+function formatClaimEvent(event, players) {
+  const player = players.find((item) => item.id === event.playerId);
+  if (!player) return "";
+  if (event.type === "withdraw") return `CO撤回: ${player.name} ${ROLE_LABELS[event.previousRole] || "役職"}`;
+  if (event.type === "change") {
+    return `CO変更: ${player.name} ${ROLE_LABELS[event.previousRole] || "役職"} → ${ROLE_LABELS[event.role] || "役職"}`;
+  }
+  return `CO: ${player.name} ${ROLE_LABELS[event.role] || "役職"}`;
+}
+
 function formatRoleActionEvent(action, players) {
   const actor = players.find((player) => player.id === action.actorId);
   const target = players.find((player) => player.id === action.targetId);
@@ -2763,7 +2920,8 @@ function formatImpressionForExport(player) {
 }
 
 function formatRoleGuessForExport(player) {
-  const display = getRoleGuessDisplay(player);
+  const display = getDisplayedRoleGuess(player);
+  if (display.value === "resultVillager") return display.label;
   const candidates = player.roleGuessCandidates.filter((value) => value !== "unknown").map((value) => ROLE_GUESS_LABELS[value]);
   return candidates.length ? `${display.label}（候補: ${candidates.join("、")}）` : display.label;
 }
@@ -2840,6 +2998,7 @@ function applySavedState(saved) {
   state.players = Array.isArray(saved.players) ? saved.players.map(normalizePlayer) : [];
   state.results = Array.isArray(saved.results) ? saved.results.map(normalizeResult).filter(Boolean) : [];
   state.roleActions = Array.isArray(saved.roleActions) ? saved.roleActions.map(normalizeRoleAction).filter(Boolean) : [];
+  state.claimEvents = Array.isArray(saved.claimEvents) ? saved.claimEvents.map(normalizeClaimEvent).filter(Boolean) : [];
   state.customImpressionReasons = Array.isArray(saved.customImpressionReasons)
     ? saved.customImpressionReasons.map(normalizeImpressionReason).filter((reason) => reason?.custom)
     : [];
@@ -3048,6 +3207,7 @@ function resetStateToDefaults() {
     players: [],
     results: [],
     roleActions: [],
+    claimEvents: [],
     gameStatus: "preparing",
     startedAt: "",
     gameHistories: [],
@@ -3377,6 +3537,22 @@ function normalizeRoleAction(action) {
   };
 }
 
+function normalizeClaimEvent(event) {
+  if (!event?.playerId) return null;
+  const previousRole = Object.hasOwn(ROLE_LABELS, event.previousRole) ? event.previousRole : "";
+  const role = Object.hasOwn(ROLE_LABELS, event.role) ? event.role : "";
+  if (previousRole === role || (!previousRole && !role)) return null;
+  return {
+    id: event.id || crypto.randomUUID(),
+    playerId: String(event.playerId),
+    day: Number.isFinite(Number(event.day)) ? Math.max(1, Number(event.day)) : 1,
+    previousRole,
+    role,
+    type: !previousRole ? "claim" : !role ? "withdraw" : "change",
+    createdAt: String(event.createdAt || ""),
+  };
+}
+
 function normalizeGameHistory(history) {
   if (!history?.id || !Array.isArray(history.players) || !Array.isArray(history.results)) return null;
   const normalized = {
@@ -3392,6 +3568,7 @@ function normalizeGameHistory(history) {
     players: history.players.map(normalizePlayer),
     results: history.results.map(normalizeResult).filter(Boolean),
     roleActions: Array.isArray(history.roleActions) ? history.roleActions.map(normalizeRoleAction).filter(Boolean) : [],
+    claimEvents: Array.isArray(history.claimEvents) ? history.claimEvents.map(normalizeClaimEvent).filter(Boolean) : [],
   };
   backfillRoleClaimOrders(normalized.players);
   return normalized;
