@@ -1059,36 +1059,10 @@ function getRoleGuessClass(value) {
   return Object.hasOwn(ROLE_LABELS, value) ? `role-${value}` : "role-unknown";
 }
 
-function getAutoRoleSuggestion(player) {
-  if (player.attackedWolfSideConfirmedMadman) return "madman";
-  if (isBrokenSeer(player)) return "wolfSide";
-  if (player.status === "attacked" && player.role === "wolfSide") return "madman";
-  if (player.status === "attacked" && (player.manualRoleOverride || !player.role) && !hasVisibleDivinationResultForTarget(player.id)) {
-    return "villager";
-  }
-  if (isAutoConfirmedWhiteCandidate(player)) return "confirmedWhite";
-  return "";
-}
-
 function isAutoConfirmedWhiteCandidate(player, seers = getSeers()) {
   if (player.status !== "alive" || (!player.manualRoleOverride && player.role)) return false;
   if (!seers.length || seers.some((seer) => seer.id === player.id)) return false;
   return seers.every((seer) => isHumanOrExposedHumanForSeer(player, seer));
-}
-
-function getAutoRoleGuessSuggestion(player) {
-  if (player.attackedWolfSideConfirmedMadman) return "madman";
-  const evidenceValue = getPreferredConfirmedEvidenceValue(player);
-  if (evidenceValue) return evidenceValue;
-  if (isBrokenSeer(player)) return "wolfSide";
-  if (player.autoConfirmedWhite || isAutoConfirmedWhiteCandidate(player)) return "confirmedWhite";
-  if (player.role && getRoleClaimants(player.role).length === 1) return player.role;
-  const selfPlayer = getSelfPerspectivePlayer();
-  const selfRole = selfPlayer ? getRoleGuessDisplay(selfPlayer).value : "";
-  if (selfPlayer && player.id !== selfPlayer.id && player.role === selfRole && !SELF_PERSPECTIVE_EXCLUDED_RIVAL_ROLES.has(selfRole)) {
-    return "wolfSide";
-  }
-  return "";
 }
 
 function getPreferredConfirmedEvidenceValue(player) {
@@ -1483,8 +1457,6 @@ function renderRows() {
     const seerGrid = getSeerGridHtml(player);
     const impression = getPlayerImpression(player);
     const roleGuess = getDisplayedRoleGuess(player);
-    const autoRole = getAutoRoleSuggestion(player);
-    const autoRoleGuess = getAutoRoleGuessSuggestion(player);
     row.innerHTML = `
       <button class="sticky-player-name" type="button" ${isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を編集">${escapeHtml(player.name)}</button>
       <button class="player-info" type="button" ${isGameFinished() ? "disabled" : ""}>
@@ -1493,8 +1465,6 @@ function renderRows() {
             <span class="player-name">${escapeHtml(player.name)}</span>
             ${isGameFinished() && player.trueRole ? `<span class="true-role-label ${getRoleGuessClass(player.trueRole)}">${escapeHtml(ROLE_GUESS_LABELS[player.trueRole] || player.trueRole)}</span>` : ""}
             <span class="role-guess-label ${getRoleGuessClass(roleGuess.value)}">${escapeHtml(roleGuess.label)}</span>
-            ${autoRoleGuess && autoRoleGuess !== roleGuess.value ? `<span class="auto-suggestion">自動推理: ${escapeHtml(ROLE_GUESS_LABELS[autoRoleGuess] || autoRoleGuess)}</span>` : ""}
-            ${autoRole && autoRole !== player.role ? `<span class="auto-suggestion">自動CO: ${escapeHtml(ROLE_LABELS[autoRole] || autoRole)}</span>` : ""}
           </span>
         </span>
         ${seerGrid}
@@ -1929,13 +1899,8 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
       }
       if (isWolfSideDisplayTarget(player)) {
         const attackedPlayer = player.status === "attacked";
-        const attackedPerspective = seer.status === "attacked";
-        const className = attackedPlayer ? "role-madman" : attackedPerspective ? "role-werewolf" : "judgement-rival";
-        const label = attackedPlayer
-          ? ROLE_LABELS.madman
-          : attackedPerspective
-            ? ROLE_LABELS.werewolf
-            : ROLE_LABELS.wolfSide;
+        const className = attackedPlayer ? "role-madman" : "judgement-rival";
+        const label = attackedPlayer ? ROLE_LABELS.madman : ROLE_LABELS.wolfSide;
         return `<span class="seer-result-label ${className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(label)}</span>`;
       }
       if (shouldDisplayMediumConfirmedWerewolf(player)) {
