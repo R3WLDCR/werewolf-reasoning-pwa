@@ -262,12 +262,22 @@
         </label>
 
         <div class="field-group">
-          <div id="resultSeerHint" class="field-title">この人への占い結果</div>
+          <div id="resultSeerHint" class="field-title">この人への預言者視点</div>
           <div class="result-grid">
             <select id="resultValueSelect" aria-label="結果">
               <option value="">未記録</option>
               <option value="human">市民</option>
               <option value="werewolf">人狼</option>
+              <option value="seer">預言者</option>
+              <option value="medium">霊媒師</option>
+              <option value="guard">ボディガード</option>
+              <option value="confirmedWhite">確定白</option>
+              <option value="madman">裏切り者</option>
+              <option value="wolfSide">狼狂</option>
+              <option value="other">その他</option>
+              <option value="hunter">ハンター</option>
+              <option value="fox">妖狐</option>
+              <option value="teruteru">てるてる</option>
             </select>
           </div>
         </div>
@@ -379,6 +389,11 @@
           <button id="addHistoryResultBtn" class="secondary-button" type="button">結果を追加</button>
         </div>
         <div id="historyResultEditor" class="history-result-editor"></div>
+        <div class="section-heading flush">
+          <div class="field-title">預言者視点列の手入力</div>
+          <button id="addHistorySeerColumnOverrideBtn" class="secondary-button" type="button">手入力を追加</button>
+        </div>
+        <div id="historySeerColumnOverrideEditor" class="history-result-editor"></div>
         <div class="section-heading flush">
           <div class="field-title">CO履歴</div>
           <button id="addHistoryClaimEventBtn" class="secondary-button" type="button">CO履歴を追加</button>

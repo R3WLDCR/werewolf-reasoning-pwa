@@ -35,6 +35,10 @@ const RESULT_LABELS = {
   human: "市民",
   werewolf: "人狼",
 };
+const SEER_COLUMN_OVERRIDE_LABELS = {
+  ...RESULT_LABELS,
+  ...ROLE_LABELS,
+};
 const ROLE_ACTION_ROLES = new Set(["medium", "guard", "hunter"]);
 const ROLE_ACTION_RESULT_LABELS = {
   medium: {
@@ -96,6 +100,7 @@ const state = {
   wolfCount: 2,
   players: [],
   results: [],
+  seerColumnOverrides: [],
   roleActions: [],
   claimEvents: [],
   gameStatus: "preparing",
@@ -215,6 +220,8 @@ document.addEventListener("DOMContentLoaded", () => {
     "historyPlayerEditor",
     "historyResultEditor",
     "addHistoryResultBtn",
+    "historySeerColumnOverrideEditor",
+    "addHistorySeerColumnOverrideBtn",
     "historyRoleActionEditor",
     "addHistoryRoleActionBtn",
     "historyClaimEventEditor",
@@ -385,6 +392,7 @@ function bindEvents() {
     saveHistoryEdits();
   });
   els.addHistoryResultBtn.addEventListener("click", addHistoryResultEditorRow);
+  els.addHistorySeerColumnOverrideBtn.addEventListener("click", addHistorySeerColumnOverrideEditorRow);
   els.addHistoryRoleActionBtn.addEventListener("click", addHistoryRoleActionEditorRow);
   els.addHistoryClaimEventBtn.addEventListener("click", addHistoryClaimEventEditorRow);
   els.historyEditDialog.addEventListener("click", (event) => {
@@ -524,10 +532,12 @@ function addPlayer() {
     manualRoleGuess: false,
     autoConfirmedWhite: false,
     mediumConfirmedRoleGuess: "",
+    manualMediumConfirmedRoleGuess: "",
     confirmedRoleEvidence: [],
     confirmedRolePreviousGuess: null,
     mediumConflictBroken: false,
     confirmedResultConflictBroken: false,
+    manualMediumConflictBroken: false,
     attackConflictBroken: false,
     attackedWolfSideConfirmedMadman: false,
     attackedAutoVillager: false,
@@ -560,6 +570,7 @@ function autoStartGameFromBoardInput() {
 
 function hasBoardProgress() {
   if (state.results.length) return true;
+  if (state.seerColumnOverrides.length) return true;
   if (state.roleActions.length) return true;
   if (state.claimEvents.length) return true;
   return getActivePlayers().some(
@@ -735,6 +746,7 @@ function createGameHistory(winner, trueRoles = new Map()) {
     finishedAt: new Date().toISOString(),
     players,
     results: structuredClone(state.results),
+    seerColumnOverrides: structuredClone(state.seerColumnOverrides),
     roleActions: structuredClone(state.roleActions),
     claimEvents: structuredClone(state.claimEvents),
     selectedTournamentId: state.selectedTournamentId,
@@ -756,10 +768,12 @@ function resetBoardState() {
     manualRoleGuess: false,
     autoConfirmedWhite: false,
     mediumConfirmedRoleGuess: "",
+    manualMediumConfirmedRoleGuess: "",
     confirmedRoleEvidence: [],
     confirmedRolePreviousGuess: null,
     mediumConflictBroken: false,
     confirmedResultConflictBroken: false,
+    manualMediumConflictBroken: false,
     attackConflictBroken: false,
     attackedWolfSideConfirmedMadman: false,
     attackedAutoVillager: false,
@@ -767,6 +781,7 @@ function resetBoardState() {
     roleClaimOrder: null,
   }));
   state.results = [];
+  state.seerColumnOverrides = [];
   state.roleActions = [];
   state.claimEvents = [];
 }
@@ -1023,6 +1038,12 @@ function saveRoleGuess() {
 }
 
 function updateManualMediumConfirmation(player) {
+  const roleGuess = getRoleGuessDisplay(player).value;
+  if (player.manualMediumConfirmedRoleGuess) {
+    player.manualMediumConfirmedRoleGuess = ["villager", "werewolf"].includes(roleGuess) ? roleGuess : "";
+  } else if (getLivingSingleMedium() && ["villager", "werewolf"].includes(roleGuess)) {
+    player.manualMediumConfirmedRoleGuess = roleGuess;
+  }
   if (!player.confirmedRoleEvidence?.length) player.mediumConfirmedRoleGuess = "";
 }
 
@@ -1176,9 +1197,18 @@ function saveDivinationResult({ silent = false } = {}) {
     return false;
   }
   const existing = state.results.find((result) => result.seerId === seer.id && result.targetId === target.id);
+  state.seerColumnOverrides = state.seerColumnOverrides.filter(
+    (override) => override.seerId !== seer.id || override.targetId !== target.id,
+  );
   if (!value) {
-    if (!existing) return false;
-    state.results = state.results.filter((result) => result.id !== existing.id);
+    if (existing) state.results = state.results.filter((result) => result.id !== existing.id);
+    if (!silent) renderAndStore();
+    return true;
+  }
+  state.seerColumnOverrides.push({ seerId: seer.id, targetId: target.id, value });
+  if (!Object.hasOwn(RESULT_LABELS, value)) {
+    if (existing) state.results = state.results.filter((result) => result.id !== existing.id);
+    autoStartGameFromBoardInput();
     if (!silent) renderAndStore();
     return true;
   }
@@ -1730,9 +1760,10 @@ function renderResultControls(target) {
   }
   if (!seers.some((seer) => seer.id === editingSeerId)) editingSeerId = seers[0].id;
   const seer = findPlayer(editingSeerId);
-  els.resultSeerHint.textContent = `${seer ? seer.name : "預言者"}の占い結果`;
+  els.resultSeerHint.textContent = `${seer ? seer.name : "預言者"}視点の手入力`;
+  const override = getSeerColumnOverride(editingSeerId, target.id);
   const existing = state.results.find((result) => result.seerId === editingSeerId && result.targetId === target.id);
-  els.resultValueSelect.value = existing?.value || "";
+  els.resultValueSelect.value = override?.value || existing?.value || "";
 }
 
 function renderRoleActionControls(player, roleOverride = els.roleSelect.value) {
@@ -1893,6 +1924,13 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
   }
   return seers
     .map((seer) => {
+      const override = getSeerColumnOverride(seer.id, player.id);
+      if (override) return getSeerColumnOverrideHtml(override, seer);
+      const result = state.results.find((item) => item.seerId === seer.id && item.targetId === player.id);
+      const mediumConfirmedDisplay = getMediumConfirmedDisplay(player);
+      if (!result && mediumConfirmedDisplay) {
+        return `<span class="seer-result-label ${mediumConfirmedDisplay.className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(mediumConfirmedDisplay.label)}</span>`;
+      }
       if (player.id === seer.id) {
         const className = getWolfSideAwareRoleClass(player);
         return `<span class="seer-result-label ${className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(getSeerGridRoleLabel(player))}</span>`;
@@ -1905,11 +1943,6 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
       }
       if (shouldDisplayMediumConfirmedWerewolf(player)) {
         return `<span class="seer-result-label judgement-werewolf" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(RESULT_LABELS.werewolf)}</span>`;
-      }
-      const result = state.results.find((item) => item.seerId === seer.id && item.targetId === player.id);
-      const mediumConfirmedDisplay = getMediumConfirmedDisplay(player);
-      if (!result && mediumConfirmedDisplay) {
-        return `<span class="seer-result-label ${mediumConfirmedDisplay.className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(mediumConfirmedDisplay.label)}</span>`;
       }
       const roleClaim = getSeerGridRoleLabel(player);
       const manualMediumGuess = getManualUnclaimedMediumGuess(player);
@@ -1932,6 +1965,23 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
     })
     .filter(Boolean)
     .join("");
+}
+
+function getSeerColumnOverride(seerId, targetId, overrides = state.seerColumnOverrides) {
+  return overrides.find((override) => override.seerId === seerId && override.targetId === targetId);
+}
+
+function getSeerColumnOverrideHtml(override, seer) {
+  const result = state.results.find(
+    (item) => item.seerId === override.seerId && item.targetId === override.targetId,
+  );
+  if (Object.hasOwn(RESULT_LABELS, override.value)) {
+    const label = result ? `占い${getDivinationOrder(result)} ${RESULT_LABELS[override.value]}` : RESULT_LABELS[override.value];
+    const className = override.value === "werewolf" ? "judgement-werewolf" : "judgement-human";
+    return `<span class="seer-result-label ${className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(label)}</span>`;
+  }
+  const className = override.value === "werewolf" ? "role-werewolf" : `role-${override.value}`;
+  return `<span class="seer-result-label ${className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(SEER_COLUMN_OVERRIDE_LABELS[override.value])}</span>`;
 }
 
 function getRoleClaimLabel(player) {
@@ -1982,10 +2032,11 @@ function hasSelfPerspectiveWerewolfResult(targetId) {
 }
 
 function getMediumConfirmedDisplay(player) {
-  if (player.mediumConfirmedRoleGuess === "werewolf") {
+  const confirmedRole = player.manualMediumConfirmedRoleGuess || player.mediumConfirmedRoleGuess;
+  if (confirmedRole === "werewolf") {
     return { label: ROLE_LABELS.werewolf, className: "judgement-werewolf" };
   }
-  if (player.mediumConfirmedRoleGuess === "villager") {
+  if (confirmedRole === "villager") {
     return { label: ROLE_LABELS.villager, className: "judgement-human" };
   }
   return null;
@@ -2014,11 +2065,19 @@ function getTotalOutsiderCount() {
 
 function getOutsiderExposureIdsForSeer(seer) {
   const ids = new Set();
-  getSeers().forEach((claimant) => {
-    if (claimant.id !== seer.id) ids.add(claimant.id);
-  });
+  const otherSeerIds = new Set(getSeers().filter((claimant) => claimant.id !== seer.id).map((claimant) => claimant.id));
   getActivePlayers().forEach((player) => {
-    if (["werewolf", "wolfSide", "madman"].includes(player.role)) ids.add(player.id);
+    const override = getSeerColumnOverride(seer.id, player.id);
+    if (override && (override.value === "human" || override.value === "confirmedWhite" || VILLAGER_SIDE_ROLES.has(override.value))) {
+      return;
+    }
+    if (
+      ["werewolf", "wolfSide", "madman"].includes(override?.value) ||
+      otherSeerIds.has(player.id) ||
+      ["werewolf", "wolfSide", "madman"].includes(player.role)
+    ) {
+      ids.add(player.id);
+    }
   });
   state.results
     .filter((result) => result.seerId === seer.id && result.value === "werewolf")
@@ -2031,6 +2090,7 @@ function applyConfirmedWhiteUpdates() {
   reconcileConfirmedRoleEvidence();
   reconcileAttackConfirmedSeerConflicts();
   reconcileConfirmedResultSeerConflicts();
+  reconcileManualMediumSeerConflicts();
   const seers = getSeers();
   reconcileAutoConfirmedWhites(seers);
   if (seers.length) {
@@ -2191,6 +2251,31 @@ function reconcileConfirmedResultSeerConflicts() {
   });
 }
 
+function reconcileManualMediumSeerConflicts() {
+  const conflictingSeerIds = new Set();
+  getActivePlayers()
+    .filter((player) => player.manualMediumConfirmedRoleGuess === "werewolf")
+    .forEach((target) => {
+      state.results
+        .filter((result) => result.targetId === target.id && result.value === "human")
+        .forEach((result) => conflictingSeerIds.add(result.seerId));
+      state.seerColumnOverrides
+        .filter((override) => override.targetId === target.id && override.value === "human")
+        .forEach((override) => conflictingSeerIds.add(override.seerId));
+    });
+  getActivePlayers().forEach((player) => {
+    if (player.manualMediumConflictBroken && !conflictingSeerIds.has(player.id)) {
+      player.manualMediumConflictBroken = false;
+      restoreBrokenSeerIfResolved(player);
+    }
+  });
+  conflictingSeerIds.forEach((seerId) => {
+    const seer = findPlayer(seerId);
+    if (!seer || (!seer.manualMediumConflictBroken && !getSeers().some((item) => item.id === seer.id))) return;
+    markSeerBroken(seer, "manualMedium");
+  });
+}
+
 function reconcileAttackConfirmedSeerConflicts() {
   const conflictingSeerIds = new Set(
     state.results
@@ -2217,6 +2302,7 @@ function markSeerBroken(seer, reason) {
   if (!seer.manualRoleOverride) seer.role = "wolfSide";
   if (reason === "medium") seer.mediumConflictBroken = true;
   if (reason === "confirmedResult") seer.confirmedResultConflictBroken = true;
+  if (reason === "manualMedium") seer.manualMediumConflictBroken = true;
   if (reason === "attack") seer.attackConflictBroken = true;
   if (!wasBroken && !seer.manualRoleGuess) setRoleGuess(seer, "wolfSide", { confirmed: true });
 }
@@ -2230,7 +2316,12 @@ function restoreBrokenSeerIfResolved(seer) {
 }
 
 function isBrokenSeer(player) {
-  return Boolean(player?.mediumConflictBroken || player?.confirmedResultConflictBroken || player?.attackConflictBroken);
+  return Boolean(
+    player?.mediumConflictBroken ||
+      player?.confirmedResultConflictBroken ||
+      player?.manualMediumConflictBroken ||
+      player?.attackConflictBroken,
+  );
 }
 
 function applySingleClaimRoleGuess(player) {
@@ -2320,6 +2411,10 @@ function shouldBecomeConfirmedWhite(player, seers = getSeers()) {
 }
 
 function isHumanOrExposedHumanForSeer(player, seer) {
+  const override = getSeerColumnOverride(seer.id, player.id);
+  if (override) {
+    return override.value === "human" || override.value === "confirmedWhite" || VILLAGER_SIDE_ROLES.has(override.value);
+  }
   const result = state.results.find((item) => item.seerId === seer.id && item.targetId === player.id);
   if (result) return result.value === "human";
   return Boolean(getExposedHumanClaimForSeer(player, seer));
@@ -2338,7 +2433,10 @@ function getCircledNumber(value) {
 }
 
 function getSeers() {
-  const seerIds = new Set(state.results.map((result) => result.seerId));
+  const seerIds = new Set([
+    ...state.results.map((result) => result.seerId),
+    ...state.seerColumnOverrides.map((override) => override.seerId),
+  ]);
   return getActivePlayers()
     .filter((player) => player.role === "seer" || seerIds.has(player.id))
     .slice()
@@ -2394,11 +2492,17 @@ function hasVisibleDivinationResultForTarget(playerId) {
   const target = findPlayer(playerId);
   if (!target || !isParticipating(target)) return false;
   const visibleSeerIds = new Set(getSeers().map((seer) => seer.id));
-  return state.results.some((result) => result.targetId === playerId && visibleSeerIds.has(result.seerId));
+  return (
+    state.results.some((result) => result.targetId === playerId && visibleSeerIds.has(result.seerId)) ||
+    state.seerColumnOverrides.some((override) => override.targetId === playerId && visibleSeerIds.has(override.seerId))
+  );
 }
 
 function hasDivinationResultForSeer(playerId, seerId) {
-  return state.results.some((result) => result.targetId === playerId && result.seerId === seerId);
+  return (
+    state.results.some((result) => result.targetId === playerId && result.seerId === seerId) ||
+    Boolean(getSeerColumnOverride(seerId, playerId))
+  );
 }
 
 function getRemainingRopeCount() {
@@ -2623,6 +2727,11 @@ function renderHistoryEditor(history) {
         })
         .join("")
     : '<div class="empty-inline">占い結果なし</div>';
+  els.historySeerColumnOverrideEditor.innerHTML = history.seerColumnOverrides?.length
+    ? history.seerColumnOverrides
+        .map((override) => getHistorySeerColumnOverrideEditorRowHtml(override, activePlayers))
+        .join("")
+    : '<div class="empty-inline">列の手入力なし</div>';
   els.historyClaimEventEditor.innerHTML = history.claimEvents?.length
     ? history.claimEvents.map((event) => getHistoryClaimEventEditorRowHtml(event, activePlayers)).join("")
     : '<div class="empty-inline">CO履歴なし</div>';
@@ -2632,6 +2741,7 @@ function renderHistoryEditor(history) {
         .join("")
     : '<div class="empty-inline">役職行動結果なし</div>';
   bindHistoryResultDeleteButtons();
+  bindHistorySeerColumnOverrideDeleteButtons();
   bindHistoryClaimEventDeleteButtons();
   bindHistoryRoleActionDeleteButtons();
   bindHistoryRoleGuessControls();
@@ -2641,6 +2751,28 @@ function getHistoryPlayerOptionsHtml(players, selectedId) {
   return players
     .map((player) => `<option value="${escapeHtml(player.id)}" ${player.id === selectedId ? "selected" : ""}>${escapeHtml(player.name)}</option>`)
     .join("");
+}
+
+function getSeerColumnOverrideOptionsHtml(selectedValue = "") {
+  return [
+    ["", "未記録"],
+    ["human", RESULT_LABELS.human],
+    ["werewolf", RESULT_LABELS.werewolf],
+    ...Object.entries(ROLE_LABELS).filter(([value]) => !["villager", "werewolf"].includes(value)),
+  ]
+    .map(([value, label]) => `<option value="${value}" ${value === selectedValue ? "selected" : ""}>${label}</option>`)
+    .join("");
+}
+
+function getHistorySeerColumnOverrideEditorRowHtml(override, players) {
+  return `
+    <div class="history-result-edit" data-seer-column-override="${escapeHtml(`${override.seerId}:${override.targetId}`)}" data-original-seer-id="${escapeHtml(override.seerId)}" data-original-target-id="${escapeHtml(override.targetId)}">
+      <select data-field="seerId" aria-label="預言者">${getHistoryPlayerOptionsHtml(players, override.seerId)}</select>
+      <select data-field="targetId" aria-label="対象">${getHistoryPlayerOptionsHtml(players, override.targetId)}</select>
+      <select data-field="value" aria-label="手入力値">${getSeerColumnOverrideOptionsHtml(override.value)}</select>
+      <button class="danger-button" type="button" data-delete-seer-column-override>削除</button>
+    </div>
+  `;
 }
 
 function getHistoryImpressionOptionsHtml(player) {
@@ -2705,6 +2837,30 @@ function bindHistoryResultDeleteButtons() {
   els.historyResultEditor.querySelectorAll("[data-delete-result]").forEach((button) => {
     button.addEventListener("click", () => button.closest("[data-result-id]").remove());
   });
+}
+
+function bindHistorySeerColumnOverrideDeleteButtons() {
+  els.historySeerColumnOverrideEditor.querySelectorAll("[data-delete-seer-column-override]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const row = button.closest("[data-seer-column-override]");
+      row.dataset.deleted = "true";
+      row.hidden = true;
+    });
+  });
+}
+
+function addHistorySeerColumnOverrideEditorRow() {
+  const history = state.gameHistories.find((item) => item.id === editingHistoryId);
+  const players = history ? getHistoryActivePlayers(history) : [];
+  if (!players.length) return toast("参加者がいません");
+  els.historySeerColumnOverrideEditor.querySelector(".empty-inline")?.remove();
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = getHistorySeerColumnOverrideEditorRowHtml(
+    { seerId: players[0].id, targetId: players[0].id, value: "human" },
+    players,
+  );
+  els.historySeerColumnOverrideEditor.appendChild(wrapper.firstElementChild);
+  bindHistorySeerColumnOverrideDeleteButtons();
 }
 
 function addHistoryResultEditorRow() {
@@ -2879,6 +3035,25 @@ function saveHistoryEdits() {
     order: Math.max(1, Number(row.querySelector('[data-field="order"]').value) || 1),
     value: row.querySelector('[data-field="value"]').value,
   }));
+  const overrideRows = Array.from(els.historySeerColumnOverrideEditor.querySelectorAll("[data-seer-column-override]"));
+  const clearedOverrideKeys = new Set(
+    overrideRows
+      .filter((row) => row.dataset.deleted === "true" || !row.querySelector('[data-field="value"]').value)
+      .map((row) => `${row.dataset.originalSeerId}:${row.dataset.originalTargetId}`),
+  );
+  history.seerColumnOverrides = dedupeSeerColumnOverrides(
+    overrideRows
+      .filter((row) => row.dataset.deleted !== "true")
+      .map((row) =>
+        normalizeSeerColumnOverride({
+          seerId: row.querySelector('[data-field="seerId"]').value,
+          targetId: row.querySelector('[data-field="targetId"]').value,
+          value: row.querySelector('[data-field="value"]').value,
+        }),
+      )
+      .filter(Boolean),
+  );
+  synchronizeHistoryResultsWithSeerColumnOverrides(history, clearedOverrideKeys);
   history.claimEvents = Array.from(els.historyClaimEventEditor.querySelectorAll("[data-claim-event-id]"))
     .map((row) =>
       normalizeClaimEvent({
@@ -2908,6 +3083,35 @@ function saveHistoryEdits() {
   closeHistoryEditDialog();
   renderAndStore();
   toast("履歴の変更を保存しました");
+}
+
+function synchronizeHistoryResultsWithSeerColumnOverrides(history, clearedOverrideKeys = new Set()) {
+  const overrideKeys = new Set(history.seerColumnOverrides.map((override) => `${override.seerId}:${override.targetId}`));
+  history.results = history.results.filter((result) => {
+    if (clearedOverrideKeys.has(`${result.seerId}:${result.targetId}`)) return false;
+    const override = getSeerColumnOverride(result.seerId, result.targetId, history.seerColumnOverrides);
+    return !overrideKeys.has(`${result.seerId}:${result.targetId}`) || Object.hasOwn(RESULT_LABELS, override?.value);
+  });
+  history.seerColumnOverrides.forEach((override) => {
+    if (!Object.hasOwn(RESULT_LABELS, override.value)) return;
+    const existing = history.results.find(
+      (result) => result.seerId === override.seerId && result.targetId === override.targetId,
+    );
+    if (existing) {
+      existing.value = override.value;
+      return;
+    }
+    const orders = history.results
+      .filter((result) => result.seerId === override.seerId)
+      .map(getDivinationOrder);
+    history.results.push({
+      id: crypto.randomUUID(),
+      seerId: override.seerId,
+      targetId: override.targetId,
+      order: orders.length ? Math.max(...orders) + 1 : 1,
+      value: override.value,
+    });
+  });
 }
 
 function showExportFallback(text) {
@@ -3158,6 +3362,10 @@ function applySavedState(saved) {
   state.wolfCount = normalizeWolfCount(saved.wolfCount);
   state.players = Array.isArray(saved.players) ? saved.players.map(normalizePlayer) : [];
   state.results = Array.isArray(saved.results) ? saved.results.map(normalizeResult).filter(Boolean) : [];
+  state.seerColumnOverrides = Array.isArray(saved.seerColumnOverrides)
+    ? dedupeSeerColumnOverrides(saved.seerColumnOverrides.map(normalizeSeerColumnOverride).filter(Boolean))
+    : [];
+  synchronizeCurrentResultsWithSeerColumnOverrides();
   state.roleActions = Array.isArray(saved.roleActions) ? saved.roleActions.map(normalizeRoleAction).filter(Boolean) : [];
   state.claimEvents = Array.isArray(saved.claimEvents) ? saved.claimEvents.map(normalizeClaimEvent).filter(Boolean) : [];
   state.customImpressionReasons = Array.isArray(saved.customImpressionReasons)
@@ -3367,6 +3575,7 @@ function resetStateToDefaults() {
     wolfCount: 2,
     players: [],
     results: [],
+    seerColumnOverrides: [],
     roleActions: [],
     claimEvents: [],
     gameStatus: "preparing",
@@ -3674,12 +3883,16 @@ function normalizePlayer(player) {
     mediumConfirmedRoleGuess: ["villager", "werewolf"].includes(player.mediumConfirmedRoleGuess)
       ? player.mediumConfirmedRoleGuess
       : "",
+    manualMediumConfirmedRoleGuess: ["villager", "werewolf"].includes(player.manualMediumConfirmedRoleGuess)
+      ? player.manualMediumConfirmedRoleGuess
+      : "",
     confirmedRoleEvidence: Array.isArray(player.confirmedRoleEvidence)
       ? player.confirmedRoleEvidence.map(normalizeConfirmedRoleEvidence).filter(Boolean)
       : [],
     confirmedRolePreviousGuess: normalizeConfirmedRolePreviousGuess(player.confirmedRolePreviousGuess),
     mediumConflictBroken: false,
     confirmedResultConflictBroken: player.confirmedResultConflictBroken === true || player.mediumConflictBroken === true,
+    manualMediumConflictBroken: player.manualMediumConflictBroken === true,
     attackConflictBroken: player.attackConflictBroken === true,
     attackedWolfSideConfirmedMadman,
     attackedAutoVillager:
@@ -3722,6 +3935,46 @@ function normalizeResult(result) {
     targetId: result.targetId,
     value: result.value,
   };
+}
+
+function synchronizeCurrentResultsWithSeerColumnOverrides() {
+  state.results = state.results.filter((result) => {
+    const override = getSeerColumnOverride(result.seerId, result.targetId);
+    return !override || Object.hasOwn(RESULT_LABELS, override.value);
+  });
+  state.seerColumnOverrides.forEach((override) => {
+    if (!Object.hasOwn(RESULT_LABELS, override.value)) return;
+    const existing = state.results.find(
+      (result) => result.seerId === override.seerId && result.targetId === override.targetId,
+    );
+    if (existing) {
+      existing.value = override.value;
+      return;
+    }
+    state.results.push({
+      id: crypto.randomUUID(),
+      seerId: override.seerId,
+      targetId: override.targetId,
+      order: getNextDivinationOrder(override.seerId),
+      value: override.value,
+    });
+  });
+}
+
+function normalizeSeerColumnOverride(override) {
+  if (!override?.seerId || !override?.targetId || !Object.hasOwn(SEER_COLUMN_OVERRIDE_LABELS, override.value)) return null;
+  const value = override.value === "villager" ? "human" : override.value;
+  return {
+    seerId: String(override.seerId),
+    targetId: String(override.targetId),
+    value,
+  };
+}
+
+function dedupeSeerColumnOverrides(overrides) {
+  const byPair = new Map();
+  overrides.forEach((override) => byPair.set(`${override.seerId}:${override.targetId}`, override));
+  return [...byPair.values()];
 }
 
 function normalizeRoleAction(action) {
@@ -3769,6 +4022,9 @@ function normalizeGameHistory(history) {
     selectedTournamentId: String(history.selectedTournamentId || ""),
     players: history.players.map(normalizePlayer),
     results: history.results.map(normalizeResult).filter(Boolean),
+    seerColumnOverrides: Array.isArray(history.seerColumnOverrides)
+      ? dedupeSeerColumnOverrides(history.seerColumnOverrides.map(normalizeSeerColumnOverride).filter(Boolean))
+      : [],
     roleActions: Array.isArray(history.roleActions) ? history.roleActions.map(normalizeRoleAction).filter(Boolean) : [],
     claimEvents: Array.isArray(history.claimEvents) ? history.claimEvents.map(normalizeClaimEvent).filter(Boolean) : [],
   };
