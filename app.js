@@ -2067,6 +2067,14 @@ function getOutsiderExposureIdsForSeer(seer) {
   const ids = new Set();
   const otherSeerIds = new Set(getSeers().filter((claimant) => claimant.id !== seer.id).map((claimant) => claimant.id));
   getActivePlayers().forEach((player) => {
+    const mediumConfirmedWerewolf =
+      player.manualMediumConfirmedRoleGuess === "werewolf" ||
+      (player.mediumConfirmedRoleGuess === "werewolf" &&
+        player.confirmedRoleEvidence?.some((evidence) => evidence.role === "medium" && evidence.value === "werewolf"));
+    if (mediumConfirmedWerewolf) {
+      ids.add(player.id);
+      return;
+    }
     const override = getSeerColumnOverride(seer.id, player.id);
     if (override && (override.value === "human" || override.value === "confirmedWhite" || VILLAGER_SIDE_ROLES.has(override.value))) {
       return;
