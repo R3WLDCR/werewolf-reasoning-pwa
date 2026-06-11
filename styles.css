@@ -574,6 +574,22 @@ select:disabled {
   width: 112px;
 }
 
+.auto-suggestion {
+  flex: 0 0 auto;
+  pointer-events: none;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 2px 5px;
+  border: 1px solid #53605e;
+  border-radius: 4px;
+  color: #aeb9b7;
+  font-size: 0.58rem;
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
 .true-role-label {
   outline: 2px solid #eef6f4;
   outline-offset: 1px;
@@ -1779,6 +1795,12 @@ select:disabled {
 
   #reasoningView .role-guess-label {
     width: 96px;
+  }
+
+  #reasoningView .auto-suggestion {
+    max-width: 88px;
+    padding: 1px 3px;
+    font-size: 0.5rem;
   }
 
   #reasoningView .seer-grid {
