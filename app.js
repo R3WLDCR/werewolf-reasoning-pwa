@@ -24,6 +24,8 @@ const ROLE_ORDER = {
 };
 const PRIORITY_PLAYER_NAME = "羊飼いK";
 const RIVAL_DISPLAY_ROLES = new Set(["medium", "guard", "hunter"]);
+const RIVAL_PERSPECTIVE_ROLES = new Set(["seer", "medium", "guard", "hunter"]);
+const RIVAL_PERSPECTIVE_VALUES = new Set(["wolfSide", "werewolf", "madman"]);
 const SELF_PERSPECTIVE_EXCLUDED_RIVAL_ROLES = new Set(["unknown", "wolfSide", "confirmedWhite"]);
 const VILLAGER_SIDE_ROLES = new Set(["seer", "medium", "guard", "villager", "hunter"]);
 const STATUS_LABELS = {
@@ -101,6 +103,7 @@ const state = {
   players: [],
   results: [],
   seerColumnOverrides: [],
+  rivalPerspectiveOverrides: [],
   roleActions: [],
   claimEvents: [],
   gameStatus: "preparing",
@@ -123,6 +126,9 @@ let bulkDeleteHistoryScope = "";
 let impressionPlayerId = "";
 let impressionDraftReasons = [];
 let roleGuessPlayerId = "";
+let rivalPerspectiveRole = "";
+let rivalPerspectiveViewerId = "";
+let rivalPerspectiveTargetId = "";
 let toastTimer = null;
 let syncTimer = null;
 let supabaseClient = null;
@@ -225,6 +231,8 @@ document.addEventListener("DOMContentLoaded", () => {
     "addHistoryResultBtn",
     "historySeerColumnOverrideEditor",
     "addHistorySeerColumnOverrideBtn",
+    "historyRivalPerspectiveOverrideEditor",
+    "addHistoryRivalPerspectiveOverrideBtn",
     "historyRoleActionEditor",
     "addHistoryRoleActionBtn",
     "historyClaimEventEditor",
@@ -254,6 +262,12 @@ document.addEventListener("DOMContentLoaded", () => {
     "primaryRoleGuessSelect",
     "saveRoleGuessBtn",
     "closeRoleGuessBtn",
+    "rivalPerspectiveDialog",
+    "rivalPerspectiveForm",
+    "rivalPerspectiveTitle",
+    "rivalPerspectiveHint",
+    "rivalPerspectiveValueSelect",
+    "closeRivalPerspectiveBtn",
     "syncStatusText",
     "syncStatusBadge",
     "syncConfigNotice",
@@ -396,6 +410,7 @@ function bindEvents() {
   });
   els.addHistoryResultBtn.addEventListener("click", addHistoryResultEditorRow);
   els.addHistorySeerColumnOverrideBtn.addEventListener("click", addHistorySeerColumnOverrideEditorRow);
+  els.addHistoryRivalPerspectiveOverrideBtn.addEventListener("click", addHistoryRivalPerspectiveOverrideEditorRow);
   els.addHistoryRoleActionBtn.addEventListener("click", addHistoryRoleActionEditorRow);
   els.addHistoryClaimEventBtn.addEventListener("click", addHistoryClaimEventEditorRow);
   els.historyEditDialog.addEventListener("click", (event) => {
@@ -420,6 +435,14 @@ function bindEvents() {
   els.saveRoleGuessBtn.addEventListener("click", saveRoleGuess);
   els.roleGuessDialog.addEventListener("click", (event) => {
     if (event.target === els.roleGuessDialog) closeRoleGuessDialog();
+  });
+  els.closeRivalPerspectiveBtn.addEventListener("click", closeRivalPerspectiveDialog);
+  els.rivalPerspectiveForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    saveRivalPerspectiveOverride();
+  });
+  els.rivalPerspectiveDialog.addEventListener("click", (event) => {
+    if (event.target === els.rivalPerspectiveDialog) closeRivalPerspectiveDialog();
   });
   els.remoteUpdateBanner.addEventListener("click", () => {
     state.activeView = "sync";
@@ -574,6 +597,7 @@ function autoStartGameFromBoardInput() {
 function hasBoardProgress() {
   if (state.results.length) return true;
   if (state.seerColumnOverrides.length) return true;
+  if (state.rivalPerspectiveOverrides.length) return true;
   if (state.roleActions.length) return true;
   if (state.claimEvents.length) return true;
   return getActivePlayers().some(
@@ -750,6 +774,7 @@ function createGameHistory(winner, trueRoles = new Map()) {
     players,
     results: structuredClone(state.results),
     seerColumnOverrides: structuredClone(state.seerColumnOverrides),
+    rivalPerspectiveOverrides: structuredClone(state.rivalPerspectiveOverrides),
     roleActions: structuredClone(state.roleActions),
     claimEvents: structuredClone(state.claimEvents),
     selectedTournamentId: state.selectedTournamentId,
@@ -785,6 +810,7 @@ function resetBoardState() {
   }));
   state.results = [];
   state.seerColumnOverrides = [];
+  state.rivalPerspectiveOverrides = [];
   state.roleActions = [];
   state.claimEvents = [];
 }
@@ -976,6 +1002,59 @@ function openRoleGuessDialog(playerId) {
 function closeRoleGuessDialog() {
   roleGuessPlayerId = "";
   els.roleGuessDialog.close();
+}
+
+function openRivalPerspectiveDialog(role, viewerId, targetId) {
+  if (isGameFinished()) return toast("終了済み盤面は編集できません");
+  const viewer = findPlayer(viewerId);
+  const target = findPlayer(targetId);
+  if (!RIVAL_PERSPECTIVE_ROLES.has(role) || !viewer || !target || viewer.id === target.id) return;
+  rivalPerspectiveRole = role;
+  rivalPerspectiveViewerId = viewerId;
+  rivalPerspectiveTargetId = targetId;
+  els.rivalPerspectiveTitle.textContent = `${ROLE_LABELS[role]}の対抗視点`;
+  els.rivalPerspectiveHint.textContent = `${viewer.name}視点の${target.name}`;
+  const confirmedMadman = isRivalPerspectiveTargetConfirmedMadman(target);
+  els.rivalPerspectiveValueSelect.value = getRivalPerspectiveOverride(role, viewerId, targetId)?.value || "";
+  els.rivalPerspectiveValueSelect.disabled = confirmedMadman;
+  if (confirmedMadman) {
+    els.rivalPerspectiveValueSelect.value = "madman";
+    els.rivalPerspectiveHint.textContent += "（襲撃により裏切り者で確定）";
+  }
+  els.rivalPerspectiveDialog.showModal();
+}
+
+function closeRivalPerspectiveDialog() {
+  rivalPerspectiveRole = "";
+  rivalPerspectiveViewerId = "";
+  rivalPerspectiveTargetId = "";
+  els.rivalPerspectiveDialog.close();
+}
+
+function saveRivalPerspectiveOverride() {
+  const target = findPlayer(rivalPerspectiveTargetId);
+  if (!target) return closeRivalPerspectiveDialog();
+  if (isRivalPerspectiveTargetConfirmedMadman(target)) {
+    closeRivalPerspectiveDialog();
+    return toast("襲撃された対象は裏切り者で確定です");
+  }
+  const key = getRivalPerspectiveOverrideKey(rivalPerspectiveRole, rivalPerspectiveViewerId, rivalPerspectiveTargetId);
+  state.rivalPerspectiveOverrides = state.rivalPerspectiveOverrides.filter(
+    (override) => getRivalPerspectiveOverrideKey(override.role, override.viewerId, override.targetId) !== key,
+  );
+  const value = els.rivalPerspectiveValueSelect.value;
+  if (RIVAL_PERSPECTIVE_VALUES.has(value)) {
+    state.rivalPerspectiveOverrides.push({
+      role: rivalPerspectiveRole,
+      viewerId: rivalPerspectiveViewerId,
+      targetId: rivalPerspectiveTargetId,
+      value,
+    });
+  }
+  autoStartGameFromBoardInput();
+  closeRivalPerspectiveDialog();
+  renderAndStore();
+  toast(value ? "対抗視点欄を保存しました" : "対抗視点欄を自動表示へ戻しました");
 }
 
 function renderRoleGuessDialog(player) {
@@ -1519,6 +1598,16 @@ function renderRows() {
         openRoleGuessDialog(player.id);
         return;
       }
+      const rivalCell = event.target.closest("[data-rival-role]");
+      if (rivalCell) {
+        event.stopPropagation();
+        openRivalPerspectiveDialog(
+          rivalCell.dataset.rivalRole,
+          rivalCell.dataset.rivalViewerId,
+          rivalCell.dataset.rivalTargetId,
+        );
+        return;
+      }
       const seerCell = event.target.closest("[data-seer-id]");
       openEditDialog(player.id, seerCell?.dataset.seerId || "");
     });
@@ -1543,18 +1632,38 @@ function getRivalRoleCellsHtml(player, players = getActivePlayers()) {
   return claimants
     .map((claimant, index) => {
       if (claimant.attackedWolfSideConfirmedMadman) {
-        return `<span class="seer-result-label role-madman">${ROLE_LABELS.madman}</span>`;
+        return getRivalPerspectiveCellHtml(player.role, player, claimant, "madman");
       }
       if (claimant.id === player.id) {
         return `<span class="seer-result-label ${getRoleClass(player)}">${escapeHtml(`${ROLE_LABELS[player.role]}${getCircledNumber(index + 1)}`)}</span>`;
       }
       const attacked = claimant.status === "attacked";
       if (attacked) {
-        return `<span class="seer-result-label role-madman">${ROLE_LABELS.madman}</span>`;
+        return getRivalPerspectiveCellHtml(player.role, player, claimant, "madman");
       }
-      return `<span class="seer-result-label role-wolfSide">${ROLE_LABELS.wolfSide}</span>`;
+      const override = getRivalPerspectiveOverride(player.role, player.id, claimant.id);
+      return getRivalPerspectiveCellHtml(player.role, player, claimant, override?.value || "wolfSide");
     })
     .join("");
+}
+
+function getRivalPerspectiveCellHtml(role, viewer, target, value) {
+  const className = value === "werewolf" ? "role-werewolf" : value === "madman" ? "role-madman" : "role-wolfSide";
+  return `<span class="seer-result-label ${className}" data-rival-role="${escapeHtml(role)}" data-rival-viewer-id="${escapeHtml(viewer.id)}" data-rival-target-id="${escapeHtml(target.id)}">${escapeHtml(ROLE_LABELS[value])}</span>`;
+}
+
+function getRivalPerspectiveOverride(role, viewerId, targetId, overrides = state.rivalPerspectiveOverrides) {
+  return overrides.find(
+    (override) => override.role === role && override.viewerId === viewerId && override.targetId === targetId,
+  );
+}
+
+function getRivalPerspectiveOverrideKey(role, viewerId, targetId) {
+  return `${role}:${viewerId}:${targetId}`;
+}
+
+function isRivalPerspectiveTargetConfirmedMadman(target) {
+  return target.status === "attacked" || target.attackedWolfSideConfirmedMadman;
 }
 
 function getRoleClaimants(role, players = getActivePlayers()) {
@@ -1975,6 +2084,12 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
   }
   return seers
     .map((seer) => {
+      const isRivalSeer = player.id !== seer.id && seers.some((candidate) => candidate.id === player.id);
+      if (isRivalSeer && isRivalPerspectiveTargetConfirmedMadman(player)) {
+        return getRivalPerspectiveCellHtml("seer", seer, player, "madman");
+      }
+      const rivalOverride = isRivalSeer ? getRivalPerspectiveOverride("seer", seer.id, player.id) : null;
+      if (rivalOverride) return getRivalPerspectiveCellHtml("seer", seer, player, rivalOverride.value);
       const override = getSeerColumnOverride(seer.id, player.id);
       if (override) return getSeerColumnOverrideHtml(override, seer);
       const result = state.results.find((item) => item.seerId === seer.id && item.targetId === player.id);
@@ -1990,6 +2105,7 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
         const attackedPlayer = player.status === "attacked";
         const className = attackedPlayer ? "role-madman" : "judgement-rival";
         const label = attackedPlayer ? ROLE_LABELS.madman : ROLE_LABELS.wolfSide;
+        if (isRivalSeer) return getRivalPerspectiveCellHtml("seer", seer, player, attackedPlayer ? "madman" : "wolfSide");
         return `<span class="seer-result-label ${className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(label)}</span>`;
       }
       if (shouldDisplayMediumConfirmedWerewolf(player)) {
@@ -2798,6 +2914,11 @@ function renderHistoryEditor(history) {
         .map((override) => getHistorySeerColumnOverrideEditorRowHtml(override, activePlayers))
         .join("")
     : '<div class="empty-inline">列の手入力なし</div>';
+  els.historyRivalPerspectiveOverrideEditor.innerHTML = history.rivalPerspectiveOverrides?.length
+    ? history.rivalPerspectiveOverrides
+        .map((override) => getHistoryRivalPerspectiveOverrideEditorRowHtml(override, activePlayers))
+        .join("")
+    : '<div class="empty-inline">対抗視点欄の手入力なし</div>';
   els.historyClaimEventEditor.innerHTML = history.claimEvents?.length
     ? history.claimEvents.map((event) => getHistoryClaimEventEditorRowHtml(event, activePlayers)).join("")
     : '<div class="empty-inline">CO履歴なし</div>';
@@ -2808,6 +2929,7 @@ function renderHistoryEditor(history) {
     : '<div class="empty-inline">役職行動結果なし</div>';
   bindHistoryResultDeleteButtons();
   bindHistorySeerColumnOverrideDeleteButtons();
+  bindHistoryRivalPerspectiveOverrideDeleteButtons();
   bindHistoryClaimEventDeleteButtons();
   bindHistoryRoleActionDeleteButtons();
   bindHistoryRoleGuessControls();
@@ -2840,6 +2962,30 @@ function getHistorySeerColumnOverrideEditorRowHtml(override, players) {
       <select data-field="targetId" aria-label="対象">${getHistoryPlayerOptionsHtml(players, override.targetId)}</select>
       <select data-field="value" aria-label="手入力値">${getSeerColumnOverrideOptionsHtml(override.value)}</select>
       <button class="danger-button" type="button" data-delete-seer-column-override>削除</button>
+    </div>
+  `;
+}
+
+function getRivalPerspectiveRoleOptionsHtml(selectedRole) {
+  return [...RIVAL_PERSPECTIVE_ROLES]
+    .map((role) => `<option value="${role}" ${role === selectedRole ? "selected" : ""}>${ROLE_LABELS[role]}</option>`)
+    .join("");
+}
+
+function getRivalPerspectiveValueOptionsHtml(selectedValue) {
+  return [...RIVAL_PERSPECTIVE_VALUES]
+    .map((value) => `<option value="${value}" ${value === selectedValue ? "selected" : ""}>${ROLE_LABELS[value]}</option>`)
+    .join("");
+}
+
+function getHistoryRivalPerspectiveOverrideEditorRowHtml(override, players) {
+  return `
+    <div class="history-result-edit" data-rival-perspective-override="${escapeHtml(getRivalPerspectiveOverrideKey(override.role, override.viewerId, override.targetId))}">
+      <select data-field="role" aria-label="役職">${getRivalPerspectiveRoleOptionsHtml(override.role)}</select>
+      <select data-field="viewerId" aria-label="視点者">${getHistoryPlayerOptionsHtml(players, override.viewerId)}</select>
+      <select data-field="targetId" aria-label="対象者">${getHistoryPlayerOptionsHtml(players, override.targetId)}</select>
+      <select data-field="value" aria-label="表示">${getRivalPerspectiveValueOptionsHtml(override.value)}</select>
+      <button class="danger-button" type="button" data-delete-rival-perspective-override>削除</button>
     </div>
   `;
 }
@@ -2916,6 +3062,26 @@ function bindHistorySeerColumnOverrideDeleteButtons() {
       row.hidden = true;
     });
   });
+}
+
+function bindHistoryRivalPerspectiveOverrideDeleteButtons() {
+  els.historyRivalPerspectiveOverrideEditor.querySelectorAll("[data-delete-rival-perspective-override]").forEach((button) => {
+    button.addEventListener("click", () => button.closest("[data-rival-perspective-override]").remove());
+  });
+}
+
+function addHistoryRivalPerspectiveOverrideEditorRow() {
+  const history = state.gameHistories.find((item) => item.id === editingHistoryId);
+  const players = history ? getHistoryActivePlayers(history) : [];
+  if (players.length < 2) return toast("参加者が2人以上必要です");
+  els.historyRivalPerspectiveOverrideEditor.querySelector(".empty-inline")?.remove();
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = getHistoryRivalPerspectiveOverrideEditorRowHtml(
+    { role: "seer", viewerId: players[0].id, targetId: players[1].id, value: "wolfSide" },
+    players,
+  );
+  els.historyRivalPerspectiveOverrideEditor.appendChild(wrapper.firstElementChild);
+  bindHistoryRivalPerspectiveOverrideDeleteButtons();
 }
 
 function addHistorySeerColumnOverrideEditorRow() {
@@ -3123,6 +3289,18 @@ function saveHistoryEdits() {
       .filter(Boolean),
   );
   synchronizeHistoryResultsWithSeerColumnOverrides(history, clearedOverrideKeys);
+  history.rivalPerspectiveOverrides = dedupeRivalPerspectiveOverrides(
+    Array.from(els.historyRivalPerspectiveOverrideEditor.querySelectorAll("[data-rival-perspective-override]"))
+      .map((row) =>
+        normalizeRivalPerspectiveOverride({
+          role: row.querySelector('[data-field="role"]').value,
+          viewerId: row.querySelector('[data-field="viewerId"]').value,
+          targetId: row.querySelector('[data-field="targetId"]').value,
+          value: row.querySelector('[data-field="value"]').value,
+        }),
+      )
+      .filter(Boolean),
+  );
   history.claimEvents = Array.from(els.historyClaimEventEditor.querySelectorAll("[data-claim-event-id]"))
     .map((row) =>
       normalizeClaimEvent({
@@ -3434,6 +3612,9 @@ function applySavedState(saved) {
   state.seerColumnOverrides = Array.isArray(saved.seerColumnOverrides)
     ? dedupeSeerColumnOverrides(saved.seerColumnOverrides.map(normalizeSeerColumnOverride).filter(Boolean))
     : [];
+  state.rivalPerspectiveOverrides = Array.isArray(saved.rivalPerspectiveOverrides)
+    ? dedupeRivalPerspectiveOverrides(saved.rivalPerspectiveOverrides.map(normalizeRivalPerspectiveOverride).filter(Boolean))
+    : [];
   synchronizeCurrentResultsWithSeerColumnOverrides();
   state.roleActions = Array.isArray(saved.roleActions) ? saved.roleActions.map(normalizeRoleAction).filter(Boolean) : [];
   state.claimEvents = Array.isArray(saved.claimEvents) ? saved.claimEvents.map(normalizeClaimEvent).filter(Boolean) : [];
@@ -3645,6 +3826,7 @@ function resetStateToDefaults() {
     players: [],
     results: [],
     seerColumnOverrides: [],
+    rivalPerspectiveOverrides: [],
     roleActions: [],
     claimEvents: [],
     gameStatus: "preparing",
@@ -4040,6 +4222,32 @@ function normalizeSeerColumnOverride(override) {
   };
 }
 
+function normalizeRivalPerspectiveOverride(override) {
+  if (
+    !override?.viewerId ||
+    !override?.targetId ||
+    override.viewerId === override.targetId ||
+    !RIVAL_PERSPECTIVE_ROLES.has(override.role) ||
+    !RIVAL_PERSPECTIVE_VALUES.has(override.value)
+  ) {
+    return null;
+  }
+  return {
+    role: override.role,
+    viewerId: String(override.viewerId),
+    targetId: String(override.targetId),
+    value: override.value,
+  };
+}
+
+function dedupeRivalPerspectiveOverrides(overrides) {
+  const byPerspective = new Map();
+  overrides.forEach((override) => {
+    byPerspective.set(getRivalPerspectiveOverrideKey(override.role, override.viewerId, override.targetId), override);
+  });
+  return [...byPerspective.values()];
+}
+
 function dedupeSeerColumnOverrides(overrides) {
   const byPair = new Map();
   overrides.forEach((override) => byPair.set(`${override.seerId}:${override.targetId}`, override));
@@ -4093,6 +4301,9 @@ function normalizeGameHistory(history) {
     results: history.results.map(normalizeResult).filter(Boolean),
     seerColumnOverrides: Array.isArray(history.seerColumnOverrides)
       ? dedupeSeerColumnOverrides(history.seerColumnOverrides.map(normalizeSeerColumnOverride).filter(Boolean))
+      : [],
+    rivalPerspectiveOverrides: Array.isArray(history.rivalPerspectiveOverrides)
+      ? dedupeRivalPerspectiveOverrides(history.rivalPerspectiveOverrides.map(normalizeRivalPerspectiveOverride).filter(Boolean))
       : [],
     roleActions: Array.isArray(history.roleActions) ? history.roleActions.map(normalizeRoleAction).filter(Boolean) : [],
     claimEvents: Array.isArray(history.claimEvents) ? history.claimEvents.map(normalizeClaimEvent).filter(Boolean) : [],

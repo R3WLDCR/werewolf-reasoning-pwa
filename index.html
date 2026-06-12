@@ -396,6 +396,11 @@
         </div>
         <div id="historySeerColumnOverrideEditor" class="history-result-editor"></div>
         <div class="section-heading flush">
+          <div class="field-title">対抗視点欄の手入力</div>
+          <button id="addHistoryRivalPerspectiveOverrideBtn" class="secondary-button" type="button">手入力を追加</button>
+        </div>
+        <div id="historyRivalPerspectiveOverrideEditor" class="history-result-editor"></div>
+        <div class="section-heading flush">
           <div class="field-title">CO履歴</div>
           <button id="addHistoryClaimEventBtn" class="secondary-button" type="button">CO履歴を追加</button>
         </div>
@@ -480,6 +485,30 @@
           <select id="primaryRoleGuessSelect"></select>
         </label>
         <button id="saveRoleGuessBtn" class="primary-button wide" type="button">役職推理を保存</button>
+      </form>
+    </dialog>
+
+    <dialog id="rivalPerspectiveDialog" class="rival-perspective-dialog">
+      <form id="rivalPerspectiveForm" method="dialog">
+        <div class="sheet-handle" aria-hidden="true"></div>
+        <div class="sheet-heading">
+          <div>
+            <p class="kicker">Rival Perspective</p>
+            <h2 id="rivalPerspectiveTitle">対抗視点欄</h2>
+          </div>
+          <button id="closeRivalPerspectiveBtn" class="round-button" type="button" aria-label="閉じる">×</button>
+        </div>
+        <div id="rivalPerspectiveHint" class="field-title"></div>
+        <label class="field">
+          <span>表示</span>
+          <select id="rivalPerspectiveValueSelect">
+            <option value="">自動表示へ戻す</option>
+            <option value="wolfSide">狼狂</option>
+            <option value="werewolf">人狼</option>
+            <option value="madman">裏切り者</option>
+          </select>
+        </label>
+        <button class="primary-button wide" type="submit">保存</button>
       </form>
     </dialog>
 

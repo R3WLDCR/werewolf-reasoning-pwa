@@ -691,6 +691,10 @@ select:disabled {
   background: transparent;
 }
 
+.seer-result-label[data-rival-role] {
+  cursor: pointer;
+}
+
 .role-seer {
   background: #294a38;
   color: #c7f7d6;
@@ -1180,7 +1184,8 @@ select:disabled {
 .action-dialog,
 .history-edit-dialog,
 .impression-dialog,
-.role-guess-dialog {
+.role-guess-dialog,
+.rival-perspective-dialog {
   width: min(760px, 100%);
   max-width: 100%;
   margin: auto auto 0;
@@ -1196,7 +1201,8 @@ select:disabled {
 .action-dialog::backdrop,
 .history-edit-dialog::backdrop,
 .impression-dialog::backdrop,
-.role-guess-dialog::backdrop {
+.role-guess-dialog::backdrop,
+.rival-perspective-dialog::backdrop {
   background: rgba(22, 35, 38, 0.42);
 }
 
@@ -1206,7 +1212,8 @@ select:disabled {
 .action-dialog form,
 .history-edit-dialog form,
 .impression-dialog form,
-.role-guess-dialog form {
+.role-guess-dialog form,
+.rival-perspective-dialog form {
   display: grid;
   gap: 13px;
   max-height: min(84dvh, 720px);
