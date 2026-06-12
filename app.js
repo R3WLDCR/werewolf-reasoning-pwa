@@ -23,7 +23,7 @@ const ROLE_ORDER = {
   hunter: 3,
 };
 const PRIORITY_PLAYER_NAME = "羊飼いK";
-const SELF_ROLE_GUESS_SYNC_ROLES = new Set(["seer", "medium", "guard", "hunter"]);
+const LEGACY_SELF_SYNCED_CLAIM_ROLES = new Set(["seer", "medium", "guard", "hunter"]);
 const RIVAL_DISPLAY_ROLES = new Set(["medium", "guard", "hunter"]);
 const RIVAL_PERSPECTIVE_ROLES = new Set(["seer", "medium", "guard", "hunter"]);
 const RIVAL_PERSPECTIVE_VALUES = new Set(["wolfSide", "werewolf", "madman"]);
@@ -1109,26 +1109,10 @@ function saveRoleGuess() {
     player.roleGuessCandidates.find((value) => value !== "unknown") ||
     "";
   player.manualRoleGuess = true;
-  synchronizeSelfRoleClaimFromGuess(player);
   autoStartGameFromBoardInput();
   closeRoleGuessDialog();
   renderAndStore();
   toast("役職推理を保存しました");
-}
-
-function synchronizeSelfRoleClaimFromGuess(player) {
-  if (!isPriorityPlayer(player) || player.attackedWolfSideConfirmedMadman) return;
-  const guessedRole = getRoleGuessDisplay(player).value;
-  const nextRole = SELF_ROLE_GUESS_SYNC_ROLES.has(guessedRole) ? guessedRole : "";
-  if (player.role === nextRole) return;
-  invalidateInferenceForRoleChange(player, player.role, nextRole);
-  player.role = nextRole;
-  player.manualRoleOverride = false;
-  player.manualRoleGuess = true;
-  player.autoConfirmedWhite = false;
-  player.attackedAutoVillager = false;
-  player.roleClaimOrder = nextRole ? getNextRoleClaimOrder() : null;
-  reorderPlayersForBoard();
 }
 
 function getLivingSingleMedium() {
@@ -1255,14 +1239,13 @@ function saveEditingPlayer() {
   const player = findPlayer(editingPlayerId);
   if (!player) return;
   const previousRole = player.role;
-  const selectedRole =
-    isPriorityPlayer(player) && !SELF_ROLE_GUESS_SYNC_ROLES.has(els.roleSelect.value) ? "" : els.roleSelect.value;
+  const selectedRole = els.roleSelect.value;
   if (editingRoleTouched && previousRole !== selectedRole) {
     invalidateInferenceForRoleChange(player, previousRole, selectedRole);
   }
   player.role = player.attackedWolfSideConfirmedMadman ? "madman" : selectedRole;
   player.memo = els.memoInput.value.trim();
-  if (editingRoleTouched) player.manualRoleOverride = isPriorityPlayer(player) ? Boolean(player.role) : true;
+  if (editingRoleTouched) player.manualRoleOverride = true;
   if (previousRole !== player.role) {
     player.autoConfirmedWhite = false;
     player.attackedAutoVillager = false;
@@ -1698,7 +1681,12 @@ function getRivalRoleCellsHtml(player, players = getActivePlayers()) {
         return getRivalPerspectiveCellHtml(player.role, claimant, player, "madman");
       }
       const override = getRivalPerspectiveOverride(player.role, claimant.id, player.id);
-      return getRivalPerspectiveCellHtml(player.role, claimant, player, override?.value || "wolfSide");
+      return getRivalPerspectiveCellHtml(
+        player.role,
+        claimant,
+        player,
+        override?.value || getAutomaticRivalPerspectiveValue(claimant, player, claimants),
+      );
     })
     .join("");
 }
@@ -1720,6 +1708,12 @@ function getRivalPerspectiveOverrideKey(role, viewerId, targetId) {
 
 function isRivalPerspectiveTargetConfirmedMadman(target) {
   return target.status === "attacked" || target.attackedWolfSideConfirmedMadman;
+}
+
+function getAutomaticRivalPerspectiveValue(viewer, target, claimants) {
+  if (isRivalPerspectiveTargetConfirmedMadman(target)) return "madman";
+  if (claimants.length === 2 && viewer.status === "attacked" && target.status === "alive") return "werewolf";
+  return "wolfSide";
 }
 
 function getRoleClaimants(role, players = getActivePlayers()) {
@@ -2161,6 +2155,9 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
       const override = getSeerColumnOverride(seer.id, player.id);
       if (override) return getSeerColumnOverrideHtml(override, seer, player);
       const result = state.results.find((item) => item.seerId === seer.id && item.targetId === player.id);
+      if (isRivalSeer && !result) {
+        return getRivalPerspectiveCellHtml("seer", seer, player, getAutomaticRivalPerspectiveValue(seer, player, seers));
+      }
       const mediumConfirmedDisplay = getMediumConfirmedDisplay(player);
       if (!result && mediumConfirmedDisplay) {
         return `<span class="seer-result-label ${mediumConfirmedDisplay.className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(mediumConfirmedDisplay.label)}</span>`;
@@ -2173,7 +2170,6 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
         const attackedPlayer = player.status === "attacked";
         const className = attackedPlayer ? "role-madman" : "judgement-rival";
         const label = attackedPlayer ? ROLE_LABELS.madman : ROLE_LABELS.wolfSide;
-        if (isRivalSeer) return getRivalPerspectiveCellHtml("seer", seer, player, attackedPlayer ? "madman" : "wolfSide");
         return `<span class="seer-result-label ${className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(label)}</span>`;
       }
       if (shouldDisplayMediumConfirmedWerewolf(player)) {
@@ -4156,19 +4152,12 @@ function normalizePlayer(player) {
     : Object.hasOwn(ROLE_LABELS, player.role)
       ? player.role
       : "";
-  const normalizedSavedRoleGuess = normalizePrimaryRoleGuess(
-    player.primaryRoleGuess,
-    normalizeRoleGuessCandidates(player.roleGuessCandidates, player.primaryRoleGuess),
-  );
-  const normalizedSelfRole =
+  const isLegacySelfSyncedClaim =
     String(player.name || "") === PRIORITY_PLAYER_NAME &&
-    !attackedWolfSideConfirmedMadman
-      ? SELF_ROLE_GUESS_SYNC_ROLES.has(normalizedRole)
-        ? normalizedRole
-        : SELF_ROLE_GUESS_SYNC_ROLES.has(normalizedSavedRoleGuess)
-          ? normalizedSavedRoleGuess
-          : ""
-      : normalizedRole;
+    !attackedWolfSideConfirmedMadman &&
+    player.manualRoleOverride !== true &&
+    LEGACY_SELF_SYNCED_CLAIM_ROLES.has(normalizedRole);
+  const normalizedIndependentRole = isLegacySelfSyncedClaim ? "" : normalizedRole;
   const restoreLegacyBrokenGuess =
     onlyLegacyManualMediumBroken &&
     player.manualRoleGuess !== true &&
@@ -4176,9 +4165,9 @@ function normalizePlayer(player) {
   return {
     id: player.id || crypto.randomUUID(),
     name: String(player.name || "名無し"),
-    role: normalizedSelfRole,
+    role: normalizedIndependentRole,
     manualRoleOverride:
-      attackedWolfSideConfirmedMadman || normalizedSelfRole !== normalizedRole ? false : player.manualRoleOverride === true,
+      attackedWolfSideConfirmedMadman || isLegacySelfSyncedClaim ? false : player.manualRoleOverride === true,
     participating: player.participating !== false,
     tournamentIds: Array.isArray(player.tournamentIds) ? [...new Set(player.tournamentIds.map(String))] : [],
     participationByTournament:
@@ -4222,7 +4211,7 @@ function normalizePlayer(player) {
       (player.attackedAutoVillager === undefined && status === "attacked" && player.role === "villager"),
     trueRole: Object.hasOwn(ROLE_GUESS_LABELS, player.trueRole) && player.trueRole !== "unknown" ? player.trueRole : "",
     roleClaimOrder:
-      normalizedSelfRole && getRoleClaimOrder(player) < Number.MAX_SAFE_INTEGER
+      normalizedIndependentRole && getRoleClaimOrder(player) < Number.MAX_SAFE_INTEGER
         ? Math.max(1, getRoleClaimOrder(player))
         : null,
   };
