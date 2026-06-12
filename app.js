@@ -186,6 +186,9 @@ document.addEventListener("DOMContentLoaded", () => {
     "roleSelect",
     "resultSeerHint",
     "resultValueSelect",
+    "mediumResultSection",
+    "mediumResultHint",
+    "mediumResultSelect",
     "roleActionSection",
     "roleActionTitle",
     "roleActionList",
@@ -1117,6 +1120,7 @@ function openEditDialog(playerId, seerId = "") {
   els.roleSelect.value = player.role || "";
   els.memoInput.value = player.memo || "";
   renderResultControls(player);
+  renderMediumResultControl(player);
   renderRoleActionControls(player);
   els.editDialog.showModal();
 }
@@ -1179,6 +1183,7 @@ function saveEditingPlayer() {
     reorderPlayersForBoard();
   }
   saveRoleActionResults(player);
+  saveIndependentMediumResult(player);
   saveDivinationResult({ silent: true });
   if (previousRole !== player.role) addClaimEvent(player.id, previousRole, player.role);
   autoStartGameFromBoardInput();
@@ -1763,7 +1768,56 @@ function renderResultControls(target) {
   els.resultSeerHint.textContent = `${seer ? seer.name : "預言者"}視点の手入力`;
   const override = getSeerColumnOverride(editingSeerId, target.id);
   const existing = state.results.find((result) => result.seerId === editingSeerId && result.targetId === target.id);
+  ensureLegacySeerResultOption(override?.value);
   els.resultValueSelect.value = override?.value || existing?.value || "";
+}
+
+function ensureLegacySeerResultOption(value) {
+  els.resultValueSelect.querySelector("[data-legacy-result]")?.remove();
+  if (!value || Object.hasOwn(RESULT_LABELS, value)) return;
+  const option = document.createElement("option");
+  option.value = value;
+  option.dataset.legacyResult = "true";
+  option.textContent = `${SEER_COLUMN_OVERRIDE_LABELS[value] || value}（保存済み）`;
+  els.resultValueSelect.appendChild(option);
+}
+
+function renderMediumResultControl(target) {
+  const medium = getLivingSingleMedium();
+  els.mediumResultSection.hidden = !medium;
+  if (!medium) {
+    els.mediumResultSelect.value = "";
+    return;
+  }
+  els.mediumResultHint.textContent = `${medium.name}の霊媒結果`;
+  const existing = getMediumResultActions(medium.id, target.id)[0];
+  els.mediumResultSelect.value = ["human", "werewolf"].includes(existing?.result) ? existing.result : "";
+}
+
+function getMediumResultActions(actorId, targetId) {
+  return state.roleActions
+    .filter((action) => action.actorId === actorId && action.role === "medium" && action.targetId === targetId)
+    .sort((a, b) => Number(a.day) - Number(b.day));
+}
+
+function saveIndependentMediumResult(target) {
+  const medium = getLivingSingleMedium();
+  if (!medium || els.mediumResultSection.hidden) return;
+  const existing = getMediumResultActions(medium.id, target.id);
+  const value = els.mediumResultSelect.value;
+  state.roleActions = state.roleActions.filter(
+    (action) => action.actorId !== medium.id || action.role !== "medium" || action.targetId !== target.id,
+  );
+  if (!["human", "werewolf"].includes(value)) return;
+  state.roleActions.push({
+    id: existing[0]?.id || crypto.randomUUID(),
+    actorId: medium.id,
+    role: "medium",
+    day: target.status === "exiled" ? Math.max(1, Number(target.statusDay) || 1) : getCurrentLogDay(),
+    targetId: target.id,
+    result: value,
+    note: existing[0]?.note || "",
+  });
 }
 
 function renderRoleActionControls(player, roleOverride = els.roleSelect.value) {
@@ -2032,7 +2086,8 @@ function hasSelfPerspectiveWerewolfResult(targetId) {
 }
 
 function getMediumConfirmedDisplay(player) {
-  const confirmedRole = player.manualMediumConfirmedRoleGuess || player.mediumConfirmedRoleGuess;
+  const formalMediumEvidence = player.confirmedRoleEvidence?.find((evidence) => evidence.role === "medium");
+  const confirmedRole = formalMediumEvidence?.value || player.manualMediumConfirmedRoleGuess || player.mediumConfirmedRoleGuess;
   if (confirmedRole === "werewolf") {
     return { label: ROLE_LABELS.werewolf, className: "judgement-werewolf" };
   }
@@ -2217,7 +2272,13 @@ function reconcileConfirmedRoleEvidence() {
     }
     player.confirmedRoleEvidence = validEntries;
     player.mediumConfirmedRoleGuess = ["villager", "werewolf"].includes(preferred.value) ? preferred.value : "";
-    if (!player.manualRoleGuess && preferred.role !== "claim") setRoleGuess(player, preferred.value, { confirmed: true });
+    if (preferred.role === "medium") {
+      player.roleGuessCandidates = [preferred.value];
+      player.primaryRoleGuess = preferred.value;
+      player.manualRoleGuess = false;
+    } else if (!player.manualRoleGuess && preferred.role !== "claim") {
+      setRoleGuess(player, preferred.value, { confirmed: true });
+    }
   });
 }
 
@@ -2762,12 +2823,15 @@ function getHistoryPlayerOptionsHtml(players, selectedId) {
 }
 
 function getSeerColumnOverrideOptionsHtml(selectedValue = "") {
-  return [
+  const options = [
     ["", "未記録"],
     ["human", RESULT_LABELS.human],
     ["werewolf", RESULT_LABELS.werewolf],
-    ...Object.entries(ROLE_LABELS).filter(([value]) => !["villager", "werewolf"].includes(value)),
-  ]
+  ];
+  if (selectedValue && !Object.hasOwn(RESULT_LABELS, selectedValue)) {
+    options.push([selectedValue, `${SEER_COLUMN_OVERRIDE_LABELS[selectedValue] || selectedValue}（保存済み）`]);
+  }
+  return options
     .map(([value, label]) => `<option value="${value}" ${value === selectedValue ? "selected" : ""}>${label}</option>`)
     .join("");
 }
