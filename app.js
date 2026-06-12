@@ -1552,9 +1552,6 @@ function getRivalRoleCellsHtml(player, players = getActivePlayers()) {
       if (attacked) {
         return `<span class="seer-result-label role-madman">${ROLE_LABELS.madman}</span>`;
       }
-      if (player.status === "attacked") {
-        return `<span class="seer-result-label role-werewolf">${ROLE_LABELS.werewolf}</span>`;
-      }
       return `<span class="seer-result-label role-wolfSide">${ROLE_LABELS.wolfSide}</span>`;
     })
     .join("");
