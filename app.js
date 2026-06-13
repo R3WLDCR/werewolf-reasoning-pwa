@@ -559,6 +559,7 @@ function addPlayer() {
     manualRoleGuess: false,
     autoSelfRivalWolfSide: false,
     autoConfirmedWhite: false,
+    autoConfirmedWhitePreviousGuess: null,
     mediumConfirmedRoleGuess: "",
     confirmedRoleEvidence: [],
     confirmedRolePreviousGuess: null,
@@ -803,6 +804,7 @@ function resetBoardState() {
     manualRoleGuess: false,
     autoSelfRivalWolfSide: false,
     autoConfirmedWhite: false,
+    autoConfirmedWhitePreviousGuess: null,
     mediumConfirmedRoleGuess: "",
     confirmedRoleEvidence: [],
     confirmedRolePreviousGuess: null,
@@ -1001,6 +1003,7 @@ function openRoleGuessDialog(playerId) {
   if (isGameFinished()) return toast("終了済み盤面は編集できません");
   const player = findPlayer(playerId);
   if (!player) return;
+  if (player.autoConfirmedWhite) return toast("確定白成立中は役職推理を変更できません");
   roleGuessPlayerId = playerId;
   els.roleGuessPlayerName.textContent = player.name;
   renderRoleGuessDialog(player);
@@ -2400,7 +2403,7 @@ function applyConfirmedWhiteUpdates() {
   if (currentSeerClaimants.length) {
     getActivePlayers().forEach((player) => {
       if (!shouldBecomeConfirmedWhite(player, currentSeerClaimants)) return;
-      setRoleGuess(player, "confirmedWhite");
+      setAutoConfirmedWhiteRoleGuess(player);
       player.autoConfirmedWhite = true;
     });
   }
@@ -2422,10 +2425,7 @@ function reconcileAutoConfirmedWhites(seers) {
       player.role = "";
       player.roleClaimOrder = null;
     }
-    if (!player.manualRoleGuess) {
-      player.roleGuessCandidates = ["unknown"];
-      player.primaryRoleGuess = "";
-    }
+    restoreRoleGuessBeforeAutoConfirmedWhite(player);
     player.autoConfirmedWhite = false;
     const selfSeer = getSelfPerspectivePlayer();
     const selfResult = selfSeer
@@ -2433,6 +2433,34 @@ function reconcileAutoConfirmedWhites(seers) {
       : null;
     if (selfResult) applyConfirmedSeerResultRoleGuess(player, selfSeer, selfResult.value);
   });
+}
+
+function setAutoConfirmedWhiteRoleGuess(player) {
+  if (!player.autoConfirmedWhitePreviousGuess) {
+    player.autoConfirmedWhitePreviousGuess = {
+      roleGuessCandidates: [...player.roleGuessCandidates],
+      primaryRoleGuess: player.primaryRoleGuess,
+      manualRoleGuess: player.manualRoleGuess,
+    };
+  }
+  player.roleGuessCandidates = ["confirmedWhite"];
+  player.primaryRoleGuess = "confirmedWhite";
+  player.manualRoleGuess = false;
+  player.autoSelfRivalWolfSide = false;
+}
+
+function restoreRoleGuessBeforeAutoConfirmedWhite(player) {
+  const previous = player.autoConfirmedWhitePreviousGuess;
+  if (previous) {
+    player.roleGuessCandidates = normalizeRoleGuessCandidates(previous.roleGuessCandidates, previous.primaryRoleGuess);
+    player.primaryRoleGuess = normalizePrimaryRoleGuess(previous.primaryRoleGuess, player.roleGuessCandidates);
+    player.manualRoleGuess = previous.manualRoleGuess === true;
+  } else {
+    player.roleGuessCandidates = ["unknown"];
+    player.primaryRoleGuess = "";
+    player.manualRoleGuess = false;
+  }
+  player.autoConfirmedWhitePreviousGuess = null;
 }
 
 function applyMediumConfirmedRoleGuesses() {
@@ -4534,6 +4562,7 @@ function normalizePlayer(player) {
     manualRoleGuess: attackedWolfSideConfirmedMadman ? false : player.manualRoleGuess === true,
     autoSelfRivalWolfSide: attackedWolfSideConfirmedMadman ? false : player.autoSelfRivalWolfSide === true,
     autoConfirmedWhite: player.autoConfirmedWhite === true,
+    autoConfirmedWhitePreviousGuess: normalizeConfirmedRolePreviousGuess(player.autoConfirmedWhitePreviousGuess),
     mediumConfirmedRoleGuess: ["villager", "werewolf"].includes(player.mediumConfirmedRoleGuess)
       ? player.mediumConfirmedRoleGuess
       : "",
