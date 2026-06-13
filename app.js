@@ -1,7 +1,7 @@
 const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
-const APP_VERSION = "1.56";
+const APP_VERSION = "1.57";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -279,6 +279,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "syncAccountEmail",
     "lastSyncText",
     "appVersionText",
+    "wolfModeBadge",
     "loginForm",
     "loginEmailInput",
     "loginPasswordInput",
@@ -1423,6 +1424,7 @@ function invalidateInferenceForRoleChange(player, previousRole, nextRole) {
 
 function render() {
   renderActiveView();
+  renderPerspectiveMode();
   renderMatchMeta();
   renderGameLifecycle();
   renderSyncStatus();
@@ -1434,6 +1436,12 @@ function render() {
     renderRows();
   }
   if (state.activeView === "export") renderHistories();
+}
+
+function renderPerspectiveMode() {
+  const wolfMode = isWolfMode();
+  document.body.dataset.perspectiveMode = wolfMode ? "werewolf" : "normal";
+  els.wolfModeBadge.hidden = !wolfMode;
 }
 
 function renderActiveView() {
@@ -2921,6 +2929,11 @@ function applySelfPerspectiveRivalRoleGuesses() {
 
 function getSelfPerspectivePlayer() {
   return getActivePlayers().find(isPriorityPlayer) || state.players.find(isPriorityPlayer) || null;
+}
+
+function isWolfMode() {
+  const selfPlayer = getActivePlayers().find(isPriorityPlayer);
+  return Boolean(selfPlayer && getRoleGuessDisplay(selfPlayer).value === "werewolf");
 }
 
 function isSelfPerspectiveSeer() {

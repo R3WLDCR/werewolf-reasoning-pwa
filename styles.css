@@ -100,6 +100,7 @@ button {
 .app-title-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 7px;
 }
 
@@ -113,6 +114,21 @@ button {
   background: #1d2d2e;
   color: #a9d9d3;
   font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.wolf-mode-badge {
+  display: inline-grid;
+  place-items: center;
+  min-height: 24px;
+  padding: 2px 8px;
+  border: 1px solid #a84450;
+  border-radius: 999px;
+  background: #4b171e;
+  color: #ffb3ba;
+  font-size: 0.74rem;
   font-weight: 900;
   line-height: 1;
   white-space: nowrap;
