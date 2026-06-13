@@ -110,6 +110,7 @@ const state = {
   claimEvents: [],
   gameStatus: "preparing",
   startedAt: "",
+  pendingExileContinuationPlayerId: "",
   gameHistories: [],
   customImpressionReasons: [],
 };
@@ -654,12 +655,15 @@ function finishGame() {
   const trueRoles = getFinishTrueRoles();
   const compositionError = getTrueRoleCompositionError(trueRoles);
   if (compositionError) return toast(compositionError);
+  removeInvalidCurrentMediumResults();
+  applyConfirmedWhiteUpdates();
   const history = createGameHistory(winner, trueRoles);
   state.gameHistories.unshift(history);
   state.players.forEach((player) => {
     player.trueRole = trueRoles.get(player.id) || "";
   });
   state.gameStatus = "finished";
+  state.pendingExileContinuationPlayerId = "";
   state.activeView = "reasoning";
   selectedHistoryId = state.gameHistories[0].id;
   closeFinishGameDialog();
@@ -785,6 +789,7 @@ function createGameHistory(winner, trueRoles = new Map()) {
 
 function resetBoardState() {
   state.day = 1;
+  state.pendingExileContinuationPlayerId = "";
   state.players = state.players.map((player) => ({
     ...player,
     role: "",
@@ -1223,12 +1228,22 @@ function closeStatusDialog() {
 function setPlayerStatus(status) {
   const player = findPlayer(statusPlayerId);
   if (!player) return;
-  if (player.status !== status) invalidateInferenceForStatusChange(player);
+  const statusChanged = player.status !== status;
+  let continuationNotice = "";
+  if (statusChanged) {
+    if (state.pendingExileContinuationPlayerId === player.id && status === "alive") {
+      state.pendingExileContinuationPlayerId = "";
+    } else {
+      continuationNotice = confirmPendingExileContinuation();
+    }
+    invalidateInferenceForStatusChange(player);
+  }
   const wasInactive = isInactiveStatus(player.status);
   const isBecomingInactive = isInactiveStatus(status);
   const nextStatusDay = isBecomingInactive && !wasInactive ? getNextStatusDayForStatus(status) : player.statusDay;
   player.status = status;
   player.statusDay = isBecomingInactive ? nextStatusDay || getNextStatusDayForStatus(status) : null;
+  removeInvalidCurrentMediumResults();
   if (status === "attacked") {
     applyAttackRoleUpdates(player);
   }
@@ -1237,15 +1252,20 @@ function setPlayerStatus(status) {
   } else {
     reorderPlayersForBoard();
   }
+  if (statusChanged && status === "exiled") {
+    state.pendingExileContinuationPlayerId = player.id;
+  }
   autoStartGameFromBoardInput();
   closeStatusDialog();
   renderAndStore();
-  toast(status === "alive" ? "生存に戻しました" : `${STATUS_LABELS[status]}にしました`);
+  toast(continuationNotice || (status === "alive" ? "生存に戻しました" : `${STATUS_LABELS[status]}にしました`));
 }
 
 function saveEditingPlayer() {
   const player = findPlayer(editingPlayerId);
   if (!player) return;
+  const progressSignatureBefore = getMeaningfulProgressSignature();
+  let continuationNotice = "";
   const previousRole = player.role;
   const selectedRole = els.roleSelect.value;
   if (editingRoleTouched && previousRole !== selectedRole) {
@@ -1264,10 +1284,11 @@ function saveEditingPlayer() {
   saveIndependentMediumResult(player);
   saveDivinationResult({ silent: true });
   if (previousRole !== player.role) addClaimEvent(player.id, previousRole, player.role);
+  if (progressSignatureBefore !== getMeaningfulProgressSignature()) continuationNotice = confirmPendingExileContinuation();
   autoStartGameFromBoardInput();
   closeEditDialog();
   renderAndStore();
-  toast("保存しました");
+  toast(continuationNotice || "保存しました");
 }
 
 function saveDivinationResult({ silent = false } = {}) {
@@ -1948,8 +1969,9 @@ function ensureLegacySeerResultOption(value) {
 
 function renderMediumResultControl(target) {
   const medium = getLivingSingleMedium();
-  els.mediumResultSection.hidden = !medium;
-  if (!medium) {
+  const canRecordResult = Boolean(medium && target.status === "exiled");
+  els.mediumResultSection.hidden = !canRecordResult;
+  if (!canRecordResult) {
     els.mediumResultSelect.value = "";
     return;
   }
@@ -1966,7 +1988,7 @@ function getMediumResultActions(actorId, targetId) {
 
 function saveIndependentMediumResult(target) {
   const medium = getLivingSingleMedium();
-  if (!medium || els.mediumResultSection.hidden) return;
+  if (!medium || target.status !== "exiled" || els.mediumResultSection.hidden) return;
   const existing = getMediumResultActions(medium.id, target.id);
   const value = els.mediumResultSelect.value;
   const previousValue = ["human", "werewolf"].includes(existing[0]?.result) ? existing[0].result : "";
@@ -1995,19 +2017,21 @@ function renderRoleActionControls(player, roleOverride = els.roleSelect.value) {
     return;
   }
   els.roleActionTitle.textContent = `${ROLE_LABELS[role]}の行動結果`;
+  const targetPlayers = getRoleActionTargetPlayers(role);
+  els.addRoleActionBtn.disabled = !targetPlayers.length;
   const actions = state.roleActions
     .filter((action) => action.actorId === player.id && action.role === role)
     .sort((a, b) => a.day - b.day);
   els.roleActionList.innerHTML = actions.length
-    ? actions.map((action) => getRoleActionEditorRowHtml(action, getActivePlayers(), role)).join("")
-    : '<div class="empty-inline">行動結果なし</div>';
+    ? actions.map((action) => getRoleActionEditorRowHtml(action, targetPlayers, role)).join("")
+    : `<div class="empty-inline">${role === "medium" && !targetPlayers.length ? "追放者なし" : "行動結果なし"}</div>`;
   bindRoleActionDeleteButtons(els.roleActionList);
 }
 
 function addRoleActionEditorRow() {
   const player = findPlayer(editingPlayerId);
   const role = els.roleSelect.value;
-  const players = getActivePlayers();
+  const players = getRoleActionTargetPlayers(role);
   if (!player || !ROLE_ACTION_ROLES.has(role) || !players.length) return;
   els.roleActionList.querySelector(".empty-inline")?.remove();
   const action = {
@@ -2059,7 +2083,8 @@ function saveRoleActionResults(player) {
         note: row.querySelector('[data-field="note"]').value,
       }),
     )
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((action) => action.role !== "medium" || findPlayer(action.targetId)?.status === "exiled");
   state.roleActions.push(...actions);
   if (player.role === "medium") {
     const previousByTarget = new Map(previousActions.map((action) => [action.targetId, action.result]));
@@ -2070,6 +2095,17 @@ function saveRoleActionResults(player) {
       }
     });
   }
+}
+
+function getRoleActionTargetPlayers(role) {
+  const players = getActivePlayers();
+  return role === "medium" ? players.filter((player) => player.status === "exiled") : players;
+}
+
+function removeInvalidCurrentMediumResults() {
+  state.roleActions = state.roleActions.filter(
+    (action) => action.role !== "medium" || findPlayer(action.targetId)?.status === "exiled",
+  );
 }
 
 function addClaimEvent(playerId, previousRole, role) {
@@ -2183,7 +2219,7 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
       if (shouldDisplayMediumConfirmedWerewolf(player)) {
         return `<span class="seer-result-label judgement-werewolf" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(RESULT_LABELS.werewolf)}</span>`;
       }
-      const roleClaim = getSeerGridRoleLabel(player);
+      const roleClaim = player.autoConfirmedWhite ? "" : getSeerGridRoleLabel(player);
       const manualMediumGuess = getManualUnclaimedMediumGuess(player);
       const exposedHumanClaim = getExposedHumanClaimForSeer(player, seer);
       const autoVillagerClaim = roleClaim || manualMediumGuess || getAutoVillagerClaimForSeer(player, seer.id) || exposedHumanClaim;
@@ -3760,6 +3796,103 @@ function isGameInProgress() {
   return state.gameStatus === "in_progress";
 }
 
+function getMeaningfulProgressSignature() {
+  const sortById = (items) => items.slice().sort((a, b) => String(a.id || "").localeCompare(String(b.id || "")));
+  return JSON.stringify({
+    roles: state.players
+      .map((player) => ({ id: player.id, role: player.role }))
+      .sort((a, b) => String(a.id).localeCompare(String(b.id))),
+    results: sortById(state.results).map(({ id, seerId, targetId, value, order, day }) => ({
+      id,
+      seerId,
+      targetId,
+      value,
+      order,
+      day,
+    })),
+    seerColumnOverrides: state.seerColumnOverrides
+      .map(({ seerId, targetId, value }) => ({ seerId, targetId, value }))
+      .sort((a, b) => `${a.seerId}:${a.targetId}`.localeCompare(`${b.seerId}:${b.targetId}`)),
+    roleActions: sortById(state.roleActions).map(({ id, actorId, role, day, targetId, result, note }) => ({
+      id,
+      actorId,
+      role,
+      day,
+      targetId,
+      result,
+      note,
+    })),
+  });
+}
+
+function isConfirmedWerewolf(player) {
+  if (!player) return false;
+  if (
+    player.confirmedRoleEvidence?.some(
+      (evidence) => evidence.value === "werewolf" && ["seer", "medium"].includes(evidence.role),
+    )
+  ) {
+    return true;
+  }
+  const confirmedSeerResult = state.results.some(
+    (result) =>
+      result.targetId === player.id &&
+      result.value === "werewolf" &&
+      isConfirmedRoleActor(findPlayer(result.seerId), "seer"),
+  );
+  if (confirmedSeerResult) return true;
+  return state.roleActions.some(
+    (action) =>
+      action.targetId === player.id &&
+      action.role === "medium" &&
+      action.result === "werewolf" &&
+      isConfirmedRoleActor(findPlayer(action.actorId), "medium"),
+  );
+}
+
+function confirmPendingExileContinuation() {
+  const pendingPlayerId = state.pendingExileContinuationPlayerId;
+  if (!pendingPlayerId) return "";
+  state.pendingExileContinuationPlayerId = "";
+  const pendingPlayer = findPlayer(pendingPlayerId);
+  if (!pendingPlayer || pendingPlayer.status !== "exiled" || !isGameInProgress()) return "";
+
+  const requiredPreviousWolves = Math.max(0, Number(state.wolfCount) - 1);
+  const confirmedPreviousWolves = getActivePlayers().filter(
+    (player) => player.id !== pendingPlayer.id && player.status === "exiled" && isConfirmedWerewolf(player),
+  ).length;
+  const totalConfirmedWolves = confirmedPreviousWolves + (isConfirmedWerewolf(pendingPlayer) ? 1 : 0);
+  if (totalConfirmedWolves >= Number(state.wolfCount)) {
+    return "確定人狼数とゲーム継続が矛盾しています。確定情報を確認してください";
+  }
+  if (confirmedPreviousWolves !== requiredPreviousWolves) return "";
+
+  applyContinuedGameNonWolfInference(pendingPlayer);
+  return `${pendingPlayer.name}をゲーム継続から非人狼として更新しました`;
+}
+
+function applyContinuedGameNonWolfInference(player) {
+  if (!player.role) {
+    player.role = "villager";
+    player.manualRoleOverride = false;
+    player.roleClaimOrder = getNextRoleClaimOrder();
+    player.autoConfirmedWhite = false;
+  } else if (["werewolf", "wolfSide"].includes(player.role)) {
+    player.role = "madman";
+    player.manualRoleOverride = false;
+    player.roleClaimOrder = getNextRoleClaimOrder();
+    player.autoConfirmedWhite = false;
+  }
+
+  const currentGuess = getRoleGuessDisplay(player).value;
+  if (["werewolf", "wolfSide"].includes(currentGuess)) {
+    player.roleGuessCandidates = ["madman"];
+    player.primaryRoleGuess = "madman";
+    player.manualRoleGuess = false;
+    player.autoSelfRivalWolfSide = false;
+  }
+}
+
 function isGameFinished() {
   return state.gameStatus === "finished";
 }
@@ -3769,6 +3902,7 @@ function isGameLocked() {
 }
 
 function renderAndStore() {
+  removeInvalidCurrentMediumResults();
   applyConfirmedWhiteUpdates();
   render();
   store();
@@ -3823,12 +3957,17 @@ function applySavedState(saved) {
   state.rivalPerspectiveVersion = 2;
   synchronizeCurrentResultsWithSeerColumnOverrides();
   state.roleActions = Array.isArray(saved.roleActions) ? saved.roleActions.map(normalizeRoleAction).filter(Boolean) : [];
+  removeInvalidCurrentMediumResults();
   state.claimEvents = Array.isArray(saved.claimEvents) ? saved.claimEvents.map(normalizeClaimEvent).filter(Boolean) : [];
   state.customImpressionReasons = Array.isArray(saved.customImpressionReasons)
     ? saved.customImpressionReasons.map(normalizeImpressionReason).filter((reason) => reason?.custom)
     : [];
   state.gameStatus = ["in_progress", "finished"].includes(saved.gameStatus) ? saved.gameStatus : "preparing";
   state.startedAt = state.gameStatus !== "preparing" ? String(saved.startedAt || "") : "";
+  state.pendingExileContinuationPlayerId = String(saved.pendingExileContinuationPlayerId || "");
+  if (!state.players.some((player) => player.id === state.pendingExileContinuationPlayerId && player.status === "exiled")) {
+    state.pendingExileContinuationPlayerId = "";
+  }
   state.gameHistories = Array.isArray(saved.gameHistories) ? saved.gameHistories.map(normalizeGameHistory).filter(Boolean) : [];
   migrateLegacyRoster(saved.eventName);
   backfillStatusDays();
@@ -4038,6 +4177,7 @@ function resetStateToDefaults() {
     claimEvents: [],
     gameStatus: "preparing",
     startedAt: "",
+    pendingExileContinuationPlayerId: "",
     gameHistories: [],
     customImpressionReasons: [],
   });
