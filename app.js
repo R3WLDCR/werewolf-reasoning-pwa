@@ -1,7 +1,7 @@
 const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
-const APP_VERSION = "1.60";
+const APP_VERSION = "1.61";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -601,6 +601,7 @@ function startGame() {
 
 function autoStartGameFromBoardInput() {
   if (state.gameStatus !== "preparing" || !hasBoardProgress()) return false;
+  if (isWolfMode()) return false;
   const activeCount = getActivePlayers().length;
   if (!activeCount || !state.wolfCount || state.wolfCount >= activeCount) return false;
   state.gameStatus = "in_progress";
@@ -1164,14 +1165,19 @@ function saveRoleGuess() {
     normalizePrimaryRoleGuess(els.primaryRoleGuessSelect.value, selectedCandidates) ||
     selectedCandidates.find((value) => value !== "unknown") ||
     "";
+  const wasWolfMode = isWolfMode();
+  const entersWolfMode =
+    state.gameStatus === "preparing" && isPriorityPlayer(player) && selectedPrimary === "werewolf" && !wasWolfMode;
   const teammateLimit = Math.max(0, state.wolfCount - 1);
   const shouldRegisterWolfTeammate =
     isWolfMode() &&
     !isPriorityPlayer(player) &&
     selectedPrimary === "werewolf" &&
     getWolfTeammates().length < teammateLimit;
+  if (entersWolfMode) clearWolfModeSetupClaim(player);
   if (shouldRegisterWolfTeammate) {
     player.wolfTeammatePreviousGuess = getRoleGuessSnapshot(player);
+    if (state.gameStatus === "preparing") clearWolfModeSetupClaim(player);
     player.wolfTeammate = true;
     applyWolfTeammateCoverRole(player);
   } else {
@@ -1260,6 +1266,18 @@ function getRoleGuessSnapshot(player) {
 
 function getWolfTeammates() {
   return state.players.filter((player) => player.wolfTeammate);
+}
+
+function clearWolfModeSetupClaim(player) {
+  if (!player?.role) return false;
+  const previousRole = player.role;
+  invalidateInferenceForRoleChange(player, previousRole, "");
+  player.role = "";
+  player.manualRoleOverride = false;
+  player.roleClaimOrder = null;
+  player.attackedAutoVillager = false;
+  reorderPlayersForBoard();
+  return true;
 }
 
 function getWolfTeammateCoverRole(player) {
