@@ -1277,7 +1277,6 @@ function saveEditingPlayer() {
   player.memo = els.memoInput.value.trim();
   if (editingRoleTouched) player.manualRoleOverride = true;
   if (previousRole !== player.role) {
-    player.autoConfirmedWhite = false;
     player.attackedAutoVillager = false;
     player.roleClaimOrder = player.role ? getNextRoleClaimOrder() : null;
     reorderPlayersForBoard();
@@ -2399,32 +2398,20 @@ function applyConfirmedWhiteUpdates() {
   reconcileAttackConfirmedSeerConflicts();
   reconcileConfirmedResultSeerConflicts();
   const currentSeerClaimants = getCurrentSeerClaimants();
-  reconcileAutoConfirmedWhites(currentSeerClaimants);
-  if (currentSeerClaimants.length) {
-    getActivePlayers().forEach((player) => {
-      if (!shouldBecomeConfirmedWhite(player, currentSeerClaimants)) return;
-      setAutoConfirmedWhiteRoleGuess(player);
-      player.autoConfirmedWhite = true;
-    });
-  }
   applyMediumConfirmedRoleGuesses();
   applySelfPerspectiveRivalRoleGuesses();
+  reconcileConfirmedWhiteRoleGuessLocks(currentSeerClaimants);
 }
 
-function reconcileAutoConfirmedWhites(seers) {
+function reconcileConfirmedWhiteRoleGuessLocks(seers) {
   getActivePlayers().forEach((player) => {
-    if (!player.autoConfirmedWhite) return;
-    const remainsConfirmedWhite =
-      player.status === "alive" &&
-      seers.length > 0 &&
-      !seers.some((seer) => seer.id === player.id) &&
-      canSeersEstablishConfirmedWhite(seers) &&
-      seers.every((seer) => isHumanViewForConfirmedWhite(player, seer));
-    if (remainsConfirmedWhite) return;
-    if (!player.manualRoleOverride && player.role === "confirmedWhite") {
-      player.role = "";
-      player.roleClaimOrder = null;
+    const shouldLockConfirmedWhite = player.role === "confirmedWhite" || shouldBecomeConfirmedWhite(player, seers);
+    if (shouldLockConfirmedWhite) {
+      setAutoConfirmedWhiteRoleGuess(player);
+      player.autoConfirmedWhite = true;
+      return;
     }
+    if (!player.autoConfirmedWhite && !player.autoConfirmedWhitePreviousGuess) return;
     restoreRoleGuessBeforeAutoConfirmedWhite(player);
     player.autoConfirmedWhite = false;
     const selfSeer = getSelfPerspectivePlayer();
