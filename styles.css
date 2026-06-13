@@ -609,6 +609,7 @@ select:disabled {
 
 .role-guess-label {
   width: 112px;
+  position: relative;
 }
 
 .role-guess-label.wolf-teammate {
@@ -617,10 +618,26 @@ select:disabled {
 }
 
 .role-guess-label.black-target {
-  border: 1px solid #8d3540;
-  background: #26080d;
-  color: #ff8792;
-  box-shadow: inset 0 0 0 1px rgba(255, 92, 106, 0.14);
+  border: 1px solid rgba(101, 39, 48, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(101, 39, 48, 0.08);
+}
+
+.black-target-rank {
+  position: absolute;
+  top: -5px;
+  right: -4px;
+  display: grid;
+  place-items: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 2px;
+  border: 1px solid rgba(111, 48, 57, 0.78);
+  border-radius: 999px;
+  background: #1c1114;
+  color: #b97880;
+  font-size: 0.62rem;
+  font-weight: 900;
+  line-height: 1;
 }
 
 .true-role-label {

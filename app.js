@@ -1,7 +1,7 @@
 const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
-const APP_VERSION = "1.64";
+const APP_VERSION = "1.65";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -1293,9 +1293,6 @@ function getDisplayedRoleGuess(player) {
     const value = getWolfModeCoverRole(player);
     return { value, label: ROLE_GUESS_LABELS[value] };
   }
-  if (player.blackTargetRank) {
-    return { value: "blackTarget", label: `黒塗り${getCircledNumber(player.blackTargetRank)}` };
-  }
   if (player.autoConfirmedWhite) {
     return { value: "confirmedWhite", label: ROLE_GUESS_LABELS.confirmedWhite };
   }
@@ -1957,7 +1954,10 @@ function renderRows() {
           <span class="player-name-row">
             <span class="player-name">${escapeHtml(player.name)}</span>
             ${isGameFinished() && player.trueRole ? `<span class="true-role-label ${getRoleGuessClass(player.trueRole)}">${escapeHtml(ROLE_GUESS_LABELS[player.trueRole] || player.trueRole)}</span>` : ""}
-            <span class="role-guess-label ${getRoleGuessClass(roleGuess.value)} ${player.wolfTeammate || (isWolfMode() && isPriorityPlayer(player)) ? "wolf-teammate" : ""} ${player.blackTargetRank ? "black-target" : ""}">${escapeHtml(roleGuess.label)}</span>
+            <span class="role-guess-label ${getRoleGuessClass(roleGuess.value)} ${player.wolfTeammate || (isWolfMode() && isPriorityPlayer(player)) ? "wolf-teammate" : ""} ${player.blackTargetRank ? "black-target" : ""}">
+              ${escapeHtml(roleGuess.label)}
+              ${player.blackTargetRank ? `<span class="black-target-rank" aria-label="黒塗り順位 ${player.blackTargetRank}">${escapeHtml(getCircledNumber(player.blackTargetRank))}</span>` : ""}
+            </span>
           </span>
         </span>
         ${seerGrid}
@@ -4231,7 +4231,7 @@ function formatRoleGuessForExport(player) {
   const display = getDisplayedRoleGuess(player);
   if (isWolfMode() && isWolfModeMember(player)) return `${display.label}（人狼陣営）`;
   if (player.blackTargetRank) {
-    return `${display.label}${player.blackTargetPreference === "fixed" ? "（固定）" : "（自動）"}`;
+    return `黒塗り${getCircledNumber(player.blackTargetRank)} / ${display.label}${player.blackTargetPreference === "fixed" ? "（固定）" : "（自動）"}`;
   }
   if (display.value === "resultVillager") return `${display.label}${player.wolfTeammate ? "（仲間）" : ""}`;
   const candidates = player.roleGuessCandidates.filter((value) => value !== "unknown").map((value) => ROLE_GUESS_LABELS[value]);
