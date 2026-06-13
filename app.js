@@ -1160,8 +1160,8 @@ function getRoleGuessClass(value) {
   return Object.hasOwn(ROLE_LABELS, value) ? `role-${value}` : "role-unknown";
 }
 
-function isAutoConfirmedWhiteCandidate(player, seers = getSeers()) {
-  if (player.status !== "alive" || (!player.manualRoleOverride && player.role)) return false;
+function isAutoConfirmedWhiteCandidate(player, seers = getCurrentSeerClaimants()) {
+  if (player.status !== "alive") return false;
   if (!seers.length || seers.some((seer) => seer.id === player.id)) return false;
   return canSeersEstablishConfirmedWhite(seers) && seers.every((seer) => hasRecordedHumanResultForSeer(player.id, seer.id));
 }
@@ -2250,9 +2250,13 @@ function getSeerColumnOverrideHtml(override, seer, player = findPlayer(override.
     (item) => item.seerId === override.seerId && item.targetId === override.targetId,
   );
   if (Object.hasOwn(RESULT_LABELS, override.value)) {
-    const label = result
+    const resultLabel = result
       ? getDivinationResultDisplayLabel(result, player, override.value)
       : RESULT_LABELS[override.value];
+    const label =
+      !result && shouldDisplayConfirmedWhiteForSeer(player, override.seerId, override.value)
+        ? `${resultLabel} / ${ROLE_LABELS.confirmedWhite}`
+        : resultLabel;
     const className = override.value === "werewolf" ? "judgement-werewolf" : "judgement-human";
     return `<span class="seer-result-label ${className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(label)}</span>`;
   }
@@ -2262,7 +2266,13 @@ function getSeerColumnOverrideHtml(override, seer, player = findPlayer(override.
 
 function getDivinationResultDisplayLabel(result, player, value = result.value) {
   const resultLabel = `占い${getDivinationOrder(result)} ${RESULT_LABELS[value] || "未記録"}`;
-  return player?.autoConfirmedWhite && value === "human" ? `${resultLabel} / ${ROLE_LABELS.confirmedWhite}` : resultLabel;
+  return shouldDisplayConfirmedWhiteForSeer(player, result.seerId, value)
+    ? `${resultLabel} / ${ROLE_LABELS.confirmedWhite}`
+    : resultLabel;
+}
+
+function shouldDisplayConfirmedWhiteForSeer(player, seerId, value) {
+  return Boolean(player?.autoConfirmedWhite && value === "human" && findPlayer(seerId)?.role === "seer");
 }
 
 function getRoleClaimLabel(player) {
@@ -2381,15 +2391,13 @@ function applyConfirmedWhiteUpdates() {
   reconcileMediumHumanConversions();
   reconcileAttackConfirmedSeerConflicts();
   reconcileConfirmedResultSeerConflicts();
-  const seers = getSeers();
-  reconcileAutoConfirmedWhites(seers);
-  if (seers.length) {
+  const currentSeerClaimants = getCurrentSeerClaimants();
+  reconcileAutoConfirmedWhites(currentSeerClaimants);
+  if (currentSeerClaimants.length) {
     getActivePlayers().forEach((player) => {
-      if (!shouldBecomeConfirmedWhite(player, seers)) return;
+      if (!shouldBecomeConfirmedWhite(player, currentSeerClaimants)) return;
       setRoleGuess(player, "confirmedWhite");
-      if (!player.manualRoleOverride) player.role = "confirmedWhite";
       player.autoConfirmedWhite = true;
-      if (!player.manualRoleOverride) player.roleClaimOrder = getNextRoleClaimOrder();
     });
   }
   applyMediumConfirmedRoleGuesses();
@@ -2822,14 +2830,18 @@ function setRoleGuess(player, role, { confirmed = false } = {}) {
   return true;
 }
 
-function shouldBecomeConfirmedWhite(player, seers = getSeers()) {
-  if (player.role || player.status !== "alive") return false;
+function shouldBecomeConfirmedWhite(player, seers = getCurrentSeerClaimants()) {
+  if (player.status !== "alive") return false;
   if (seers.some((seer) => seer.id === player.id)) return false;
   return canSeersEstablishConfirmedWhite(seers) && seers.every((seer) => hasRecordedHumanResultForSeer(player.id, seer.id));
 }
 
-function canSeersEstablishConfirmedWhite(seers = getSeers()) {
+function canSeersEstablishConfirmedWhite(seers = getCurrentSeerClaimants()) {
   return seers.length > 0 && !(seers.length === 1 && isPriorityPlayer(seers[0]));
+}
+
+function getCurrentSeerClaimants() {
+  return getRoleClaimants("seer");
 }
 
 function hasRecordedHumanResultForSeer(playerId, seerId) {
