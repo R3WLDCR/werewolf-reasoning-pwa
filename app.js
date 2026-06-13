@@ -1,7 +1,7 @@
 const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
-const APP_VERSION = "1.62";
+const APP_VERSION = "1.64";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -91,7 +91,7 @@ const ROLE_GUESS_LABELS = {
   fox: "妖狐",
   teruteru: "てるてる",
 };
-const WOLF_MODE_COVER_ROLES = new Set(["villager", "seer", "medium", "guard", "hunter"]);
+const WOLF_MODE_COVER_ROLES = new Set(["unknown", "villager", "seer", "medium", "guard", "hunter"]);
 
 const state = {
   day: 1,
@@ -568,6 +568,7 @@ function addPlayer() {
     roleGuessCandidates: [],
     primaryRoleGuess: "",
     manualRoleGuess: false,
+    wolfModeCoverRole: "",
     wolfTeammate: false,
     wolfTeammatePreviousGuess: null,
     blackTargetPreference: "auto",
@@ -792,7 +793,7 @@ function createGameHistory(winner, trueRoles = new Map()) {
     gameNumber: state.gameNumber,
     wolfCount: state.wolfCount,
     wolfModeActive: state.wolfModeActive,
-    wolfModeCoverRole: state.wolfModeCoverRole,
+    wolfModeCoverRole: players.find(isPriorityPlayer)?.wolfModeCoverRole || state.wolfModeCoverRole,
     winner,
     startedAt: state.startedAt,
     finishedAt: new Date().toISOString(),
@@ -823,6 +824,7 @@ function resetBoardState() {
     roleGuessCandidates: [],
     primaryRoleGuess: "",
     manualRoleGuess: false,
+    wolfModeCoverRole: "",
     wolfTeammate: false,
     wolfTeammatePreviousGuess: null,
     blackTargetPreference: "auto",
@@ -1029,7 +1031,6 @@ function openRoleGuessDialog(playerId) {
   if (isGameFinished()) return toast("終了済み盤面は編集できません");
   const player = findPlayer(playerId);
   if (!player) return;
-  if (player.wolfTeammate) return toast("仲間の人狼は試合中に変更できません");
   if (player.autoConfirmedWhite && !isWolfMode()) {
     return toast("確定白成立中は役職推理を変更できません");
   }
@@ -1098,15 +1099,12 @@ function saveRivalPerspectiveOverride() {
 }
 
 function renderRoleGuessDialog(player) {
-  const editingWolfModeSelf = isWolfMode() && isPriorityPlayer(player);
-  const editingSelfCover = editingWolfModeSelf && isBlackTargetSelectionReady();
-  const selectedValue = editingSelfCover ? getWolfModeCoverRole() : getRoleGuessDisplay(player).value;
+  const editingWolfModeMember = isWolfMode() && isWolfModeMember(player);
+  const selectedValue = editingWolfModeMember ? getWolfModeCoverRole(player) : getRoleGuessDisplay(player).value;
   renderBlackTargetOptions(player);
-  const options = editingSelfCover
+  const options = editingWolfModeMember
     ? Object.entries(ROLE_GUESS_LABELS).filter(([value]) => WOLF_MODE_COVER_ROLES.has(value))
-    : editingWolfModeSelf
-      ? Object.entries(ROLE_GUESS_LABELS).filter(([value]) => value === "werewolf")
-      : Object.entries(ROLE_GUESS_LABELS);
+    : Object.entries(ROLE_GUESS_LABELS);
   els.roleGuessCandidateOptions.innerHTML = options
     .map(
       ([value, label]) => `
@@ -1182,15 +1180,18 @@ function saveRoleGuess() {
     normalizePrimaryRoleGuess(els.primaryRoleGuessSelect.value, selectedCandidates) ||
     selectedCandidates.find((value) => value !== "unknown") ||
     "";
-  if (isWolfMode() && isBlackTargetSelectionReady() && isPriorityPlayer(player)) {
-    state.wolfModeCoverRole = WOLF_MODE_COVER_ROLES.has(selectedPrimary) ? selectedPrimary : "villager";
+  const selectedWerewolfForSelf = isPriorityPlayer(player) && selectedCandidates.includes("werewolf");
+  if (isWolfMode() && isWolfModeMember(player)) {
+    player.wolfModeCoverRole = WOLF_MODE_COVER_ROLES.has(selectedPrimary) ? selectedPrimary : "unknown";
     closeRoleGuessDialog();
     renderAndStore();
     return toast("表向き役職を保存しました");
   }
   const wasWolfMode = isWolfMode();
-  const entersWolfMode =
-    state.gameStatus === "preparing" && isPriorityPlayer(player) && selectedPrimary === "werewolf" && !wasWolfMode;
+  if (selectedWerewolfForSelf && !wasWolfMode && state.gameStatus !== "preparing") {
+    return toast("人狼モードは準備中に設定してください");
+  }
+  const entersWolfMode = state.gameStatus === "preparing" && selectedWerewolfForSelf && !wasWolfMode;
   const teammateLimit = Math.max(0, state.wolfCount - 1);
   const shouldRegisterWolfTeammate =
     isWolfMode() &&
@@ -1200,16 +1201,14 @@ function saveRoleGuess() {
   if (entersWolfMode) {
     state.wolfModeActive = true;
     state.wolfModeCoverRole = "";
+    player.wolfModeCoverRole = "unknown";
     clearWolfModeSetupClaim(player);
   }
   if (shouldRegisterWolfTeammate) {
     player.wolfTeammatePreviousGuess = getRoleGuessSnapshot(player);
     if (state.gameStatus === "preparing") clearWolfModeSetupClaim(player);
     player.wolfTeammate = true;
-    applyWolfTeammateCoverRole(player);
-    if (getWolfTeammates().length >= teammateLimit && !state.wolfModeCoverRole) {
-      state.wolfModeCoverRole = "villager";
-    }
+    player.wolfModeCoverRole = "unknown";
   } else {
     player.roleGuessCandidates = selectedCandidates;
     player.primaryRoleGuess = selectedPrimary;
@@ -1238,6 +1237,7 @@ function exitWolfMode() {
   state.wolfModeCoverRole = "";
   state.players.forEach((player) => {
     if (player.wolfTeammate) restoreWolfTeammatePreviousGuess(player);
+    player.wolfModeCoverRole = "";
     clearBlackTargetState(player);
   });
   if (selfPlayer) {
@@ -1289,13 +1289,9 @@ function getRoleGuessDisplay(player) {
 }
 
 function getDisplayedRoleGuess(player) {
-  if (isWolfMode() && isPriorityPlayer(player)) {
-    const value = isBlackTargetSelectionReady() ? getWolfModeCoverRole() : "werewolf";
+  if (isWolfMode() && isWolfModeMember(player)) {
+    const value = getWolfModeCoverRole(player);
     return { value, label: ROLE_GUESS_LABELS[value] };
-  }
-  if (player.wolfTeammate) {
-    const coverRole = getWolfTeammateCoverRole(player);
-    return { value: coverRole, label: ROLE_GUESS_LABELS[coverRole] };
   }
   if (player.blackTargetRank) {
     return { value: "blackTarget", label: `黒塗り${getCircledNumber(player.blackTargetRank)}` };
@@ -1310,8 +1306,12 @@ function getDisplayedRoleGuess(player) {
   return getRoleGuessDisplay(player);
 }
 
-function getWolfModeCoverRole() {
-  return WOLF_MODE_COVER_ROLES.has(state.wolfModeCoverRole) ? state.wolfModeCoverRole : "villager";
+function getWolfModeCoverRole(player) {
+  return WOLF_MODE_COVER_ROLES.has(player?.wolfModeCoverRole) ? player.wolfModeCoverRole : "unknown";
+}
+
+function isWolfModeMember(player) {
+  return Boolean(player && (isPriorityPlayer(player) || player.wolfTeammate));
 }
 
 function getRoleGuessSnapshot(player) {
@@ -1338,18 +1338,6 @@ function clearWolfModeSetupClaim(player) {
   return true;
 }
 
-function getWolfTeammateCoverRole(player) {
-  return VILLAGER_SIDE_ROLES.has(player.role) || player.role === "confirmedWhite" ? player.role : "villager";
-}
-
-function applyWolfTeammateCoverRole(player) {
-  const coverRole = getWolfTeammateCoverRole(player);
-  player.roleGuessCandidates = [coverRole];
-  player.primaryRoleGuess = coverRole;
-  player.manualRoleGuess = false;
-  player.autoSelfRivalWolfSide = false;
-}
-
 function restoreWolfTeammatePreviousGuess(player) {
   const previous = player.wolfTeammatePreviousGuess;
   if (previous) {
@@ -1363,6 +1351,7 @@ function restoreWolfTeammatePreviousGuess(player) {
   }
   player.wolfTeammate = false;
   player.wolfTeammatePreviousGuess = null;
+  player.wolfModeCoverRole = "";
 }
 
 function reconcileWolfTeammates() {
@@ -1372,7 +1361,6 @@ function reconcileWolfTeammates() {
       restoreWolfTeammatePreviousGuess(player);
       return;
     }
-    applyWolfTeammateCoverRole(player);
   });
 }
 
@@ -4092,7 +4080,13 @@ function buildHistoryText(history) {
   const teammates = getHistoryActivePlayers(history).filter((player) => player.wolfTeammate);
   if (teammates.length) lines.push("", `仲間: ${teammates.map((player) => player.name).join("、")}`);
   if (history.wolfModeActive) {
-    lines.push(`羊飼いK 表向き役職: ${ROLE_GUESS_LABELS[history.wolfModeCoverRole] || ROLE_GUESS_LABELS.villager}`);
+    const wolfSidePlayers = getHistoryActivePlayers(history).filter(
+      (player) => isPriorityPlayer(player) || player.wolfTeammate,
+    );
+    lines.push("", "人狼陣営の表向き役職");
+    wolfSidePlayers.forEach((player) => {
+      lines.push(`- ${player.name}: ${ROLE_GUESS_LABELS[player.wolfModeCoverRole] || ROLE_GUESS_LABELS.unknown}`);
+    });
   }
   const blackTargets = getHistoryActivePlayers(history)
     .filter((player) => player.blackTargetRank)
@@ -4235,6 +4229,7 @@ function formatImpressionForExport(player) {
 
 function formatRoleGuessForExport(player) {
   const display = getDisplayedRoleGuess(player);
+  if (isWolfMode() && isWolfModeMember(player)) return `${display.label}（人狼陣営）`;
   if (player.blackTargetRank) {
     return `${display.label}${player.blackTargetPreference === "fixed" ? "（固定）" : "（自動）"}`;
   }
@@ -4417,6 +4412,10 @@ function applySavedState(saved) {
     state.players.some((player) => isPriorityPlayer(player) && getRoleGuessDisplay(player).value === "werewolf");
   state.wolfModeActive = saved.wolfModeActive === true || (saved.wolfModeActive === undefined && legacyWolfMode);
   state.wolfModeCoverRole = WOLF_MODE_COVER_ROLES.has(saved.wolfModeCoverRole) ? saved.wolfModeCoverRole : "";
+  const selfPlayer = state.players.find(isPriorityPlayer);
+  if (state.wolfModeActive && selfPlayer && !selfPlayer.wolfModeCoverRole) {
+    selfPlayer.wolfModeCoverRole = state.wolfModeCoverRole || "unknown";
+  }
   state.results = Array.isArray(saved.results) ? saved.results.map(normalizeResult).filter(Boolean) : [];
   state.seerColumnOverrides = Array.isArray(saved.seerColumnOverrides)
     ? dedupeSeerColumnOverrides(saved.seerColumnOverrides.map(normalizeSeerColumnOverride).filter(Boolean))
@@ -4974,6 +4973,11 @@ function normalizePlayer(player) {
           normalizeRoleGuessCandidates(player.roleGuessCandidates, player.primaryRoleGuess),
         ),
     manualRoleGuess: attackedWolfSideConfirmedMadman ? false : player.manualRoleGuess === true,
+    wolfModeCoverRole: WOLF_MODE_COVER_ROLES.has(player.wolfModeCoverRole)
+      ? player.wolfModeCoverRole
+      : player.wolfTeammate === true && WOLF_MODE_COVER_ROLES.has(normalizePrimaryRoleGuess(player.primaryRoleGuess, player.roleGuessCandidates))
+        ? normalizePrimaryRoleGuess(player.primaryRoleGuess, player.roleGuessCandidates)
+        : "",
     wolfTeammate: player.wolfTeammate === true,
     wolfTeammatePreviousGuess: normalizeConfirmedRolePreviousGuess(player.wolfTeammatePreviousGuess),
     blackTargetPreference: ["auto", "exclude", "fixed"].includes(player.blackTargetPreference)
