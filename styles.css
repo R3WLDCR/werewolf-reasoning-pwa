@@ -611,6 +611,33 @@ select:disabled {
   width: 112px;
 }
 
+.role-guess-label.wolf-teammate {
+  border: 1px solid #b44955;
+  background: #501820;
+  color: #ffc0c6;
+  box-shadow: inset 0 0 0 1px rgba(255, 130, 141, 0.16);
+}
+
+.wolf-teammate-field {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 46px;
+  padding: 9px 11px;
+  border: 1px solid #8d3540;
+  border-radius: 8px;
+  background: #361217;
+  color: #ffb3ba;
+  font-weight: 900;
+}
+
+.wolf-teammate-field input {
+  width: 20px;
+  min-height: 20px;
+  height: 20px;
+  padding: 0;
+}
+
 .true-role-label {
   outline: 2px solid #eef6f4;
   outline-offset: 1px;
