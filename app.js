@@ -27,7 +27,7 @@ const LEGACY_SELF_SYNCED_CLAIM_ROLES = new Set(["seer", "medium", "guard", "hunt
 const RIVAL_DISPLAY_ROLES = new Set(["medium", "guard", "hunter"]);
 const RIVAL_PERSPECTIVE_ROLES = new Set(["seer", "medium", "guard", "hunter"]);
 const RIVAL_PERSPECTIVE_VALUES = new Set(["wolfSide", "werewolf", "madman"]);
-const SELF_PERSPECTIVE_EXCLUDED_RIVAL_ROLES = new Set(["unknown", "wolfSide", "confirmedWhite"]);
+const SELF_RIVAL_GUESS_ROLES = new Set(["seer", "medium", "guard", "hunter"]);
 const VILLAGER_SIDE_ROLES = new Set(["seer", "medium", "guard", "villager", "hunter"]);
 const STATUS_LABELS = {
   alive: "生存",
@@ -556,6 +556,7 @@ function addPlayer() {
     roleGuessCandidates: [],
     primaryRoleGuess: "",
     manualRoleGuess: false,
+    autoSelfRivalWolfSide: false,
     autoConfirmedWhite: false,
     mediumConfirmedRoleGuess: "",
     confirmedRoleEvidence: [],
@@ -793,6 +794,7 @@ function resetBoardState() {
     roleGuessCandidates: [],
     primaryRoleGuess: "",
     manualRoleGuess: false,
+    autoSelfRivalWolfSide: false,
     autoConfirmedWhite: false,
     mediumConfirmedRoleGuess: "",
     confirmedRoleEvidence: [],
@@ -1109,6 +1111,7 @@ function saveRoleGuess() {
     player.roleGuessCandidates.find((value) => value !== "unknown") ||
     "";
   player.manualRoleGuess = true;
+  player.autoSelfRivalWolfSide = false;
   autoStartGameFromBoardInput();
   closeRoleGuessDialog();
   renderAndStore();
@@ -1341,6 +1344,7 @@ function setConfirmedMadman(player) {
   player.roleGuessCandidates = ["madman"];
   player.primaryRoleGuess = "madman";
   player.manualRoleGuess = false;
+  player.autoSelfRivalWolfSide = false;
   player.attackedAutoVillager = false;
   player.roleClaimOrder = getNextRoleClaimOrder();
 }
@@ -2348,6 +2352,7 @@ function applyConfirmedWhiteUpdates() {
     });
   }
   applyMediumConfirmedRoleGuesses();
+  applySelfPerspectiveRivalRoleGuesses();
 }
 
 function reconcileAutoConfirmedWhites(seers) {
@@ -2601,12 +2606,28 @@ function isConfirmedRoleActor(player, role) {
 
 function applySelfPerspectiveRivalRoleGuesses() {
   const selfPlayer = getSelfPerspectivePlayer();
-  if (!selfPlayer) return;
-  const selfRole = getRoleGuessDisplay(selfPlayer).value;
-  if (SELF_PERSPECTIVE_EXCLUDED_RIVAL_ROLES.has(selfRole) || !Object.hasOwn(ROLE_LABELS, selfRole)) return;
+  const selfRole = selfPlayer ? getRoleGuessDisplay(selfPlayer).value : "";
+  const rivalIds = new Set(
+    SELF_RIVAL_GUESS_ROLES.has(selfRole)
+      ? getActivePlayers()
+          .filter((player) => player.id !== selfPlayer.id && player.role === selfRole)
+          .map((player) => player.id)
+      : [],
+  );
   getActivePlayers().forEach((player) => {
-    if (player.id === selfPlayer.id || player.role !== selfRole) return;
-    setRoleGuess(player, "wolfSide");
+    const remainsRival = rivalIds.has(player.id);
+    if (player.autoSelfRivalWolfSide && !remainsRival) {
+      if (!player.manualRoleGuess && getRoleGuessDisplay(player).value === "wolfSide") {
+        player.roleGuessCandidates = ["unknown"];
+        player.primaryRoleGuess = "";
+      }
+      player.autoSelfRivalWolfSide = false;
+      return;
+    }
+    if (!remainsRival || player.manualRoleGuess || player.attackedWolfSideConfirmedMadman) return;
+    player.roleGuessCandidates = ["wolfSide"];
+    player.primaryRoleGuess = "wolfSide";
+    player.autoSelfRivalWolfSide = true;
   });
 }
 
@@ -4194,6 +4215,7 @@ function normalizePlayer(player) {
           normalizeRoleGuessCandidates(player.roleGuessCandidates, player.primaryRoleGuess),
         ),
     manualRoleGuess: attackedWolfSideConfirmedMadman ? false : player.manualRoleGuess === true,
+    autoSelfRivalWolfSide: attackedWolfSideConfirmedMadman ? false : player.autoSelfRivalWolfSide === true,
     autoConfirmedWhite: player.autoConfirmedWhite === true,
     mediumConfirmedRoleGuess: ["villager", "werewolf"].includes(player.mediumConfirmedRoleGuess)
       ? player.mediumConfirmedRoleGuess
