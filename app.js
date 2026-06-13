@@ -1158,7 +1158,8 @@ function getRoleGuessClass(value) {
 function isAutoConfirmedWhiteCandidate(player, seers = getSeers()) {
   if (player.status !== "alive" || (!player.manualRoleOverride && player.role)) return false;
   if (!seers.length || seers.some((seer) => seer.id === player.id)) return false;
-  return seers.every((seer) => isHumanOrExposedHumanForSeer(player, seer));
+  const confirmedSeers = seers.filter(isConfirmedSeerForResults);
+  return confirmedSeers.length > 0 && confirmedSeers.every((seer) => isHumanOrExposedHumanForSeer(player, seer));
 }
 
 function getPreferredConfirmedEvidenceValue(player) {
@@ -2367,7 +2368,8 @@ function reconcileAutoConfirmedWhites(seers) {
       player.status === "alive" &&
       seers.length > 0 &&
       !seers.some((seer) => seer.id === player.id) &&
-      seers.every((seer) => isHumanOrExposedHumanForSeer(player, seer));
+      seers.filter(isConfirmedSeerForResults).length > 0 &&
+      seers.filter(isConfirmedSeerForResults).every((seer) => isHumanOrExposedHumanForSeer(player, seer));
     if (remainsConfirmedWhite) return;
     if (!player.manualRoleOverride && player.role === "confirmedWhite") {
       player.role = "";
@@ -2411,7 +2413,7 @@ function reconcileConfirmedRoleEvidence() {
     }
   });
   const singleSeer = getRoleClaimants("seer").length === 1 ? getRoleClaimants("seer")[0] : null;
-  if (singleSeer) {
+  if (singleSeer && isConfirmedSeerForResults(singleSeer)) {
     state.results
       .filter((result) => result.seerId === singleSeer.id)
       .forEach((result) => addEvidence(result.targetId, {
@@ -2729,6 +2731,7 @@ function applyHumanOrWerewolfRoleGuess(target, resultValue) {
 
 function isConfirmedRoleActor(player, role) {
   if (!player) return false;
+  if (role === "seer") return isConfirmedSeerForResults(player);
   if (isPriorityPlayer(player) && (player.role === role || getRoleGuessDisplay(player).value === role)) return true;
   if (player.trueRole === role) return true;
   const claimants = getRoleClaimants(role);
@@ -2782,7 +2785,17 @@ function setRoleGuess(player, role, { confirmed = false } = {}) {
 function shouldBecomeConfirmedWhite(player, seers = getSeers()) {
   if (player.role || player.status !== "alive") return false;
   if (seers.some((seer) => seer.id === player.id)) return false;
-  return seers.every((seer) => isHumanOrExposedHumanForSeer(player, seer));
+  const confirmedSeers = seers.filter(isConfirmedSeerForResults);
+  return confirmedSeers.length > 0 && confirmedSeers.every((seer) => isHumanOrExposedHumanForSeer(player, seer));
+}
+
+function isConfirmedSeerForResults(player) {
+  if (!player) return false;
+  if (player.trueRole === "seer") return true;
+  if (isPriorityPlayer(player) && getRoleGuessDisplay(player).value === "seer") return true;
+  const claimants = getRoleClaimants("seer");
+  const hasAttackedPlayer = getActivePlayers().some((candidate) => candidate.status === "attacked");
+  return !hasAttackedPlayer && claimants.length === 1 && claimants[0].id === player.id;
 }
 
 function isHumanOrExposedHumanForSeer(player, seer) {
