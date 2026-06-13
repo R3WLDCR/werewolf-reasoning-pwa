@@ -1023,6 +1023,15 @@ select:disabled {
   padding: 0 12px;
 }
 
+.app-version-text {
+  display: block;
+  padding: 2px 4px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  text-align: center;
+  opacity: 0.72;
+}
+
 .history-management-panel {
   border: 1px solid rgba(101, 57, 63, 0.9);
   border-radius: 8px;

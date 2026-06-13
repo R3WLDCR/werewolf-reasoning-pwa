@@ -1,6 +1,7 @@
 const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
+const APP_VERSION = "1.54";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -277,6 +278,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "syncSignedInPanel",
     "syncAccountEmail",
     "lastSyncText",
+    "appVersionText",
     "loginForm",
     "loginEmailInput",
     "loginPasswordInput",
@@ -302,6 +304,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   restore();
+  els.appVersionText.textContent = `アプリ v${APP_VERSION}`;
   ensureMatchDefaults();
   bindEvents();
   render();
@@ -1331,7 +1334,7 @@ function saveDivinationResult({ silent = false } = {}) {
       value,
     });
   }
-  applyConfirmedSeerResultRoleGuess(target, seer, value);
+  if (isPriorityPlayer(seer)) applyConfirmedSeerResultRoleGuess(target, seer, value);
   autoStartGameFromBoardInput();
   if (!silent) renderAndStore();
   return true;
@@ -2393,6 +2396,7 @@ function getOutsiderExposureIdsForSeer(seer) {
 
 function applyConfirmedWhiteUpdates() {
   getActivePlayers().filter((player) => player.attackedWolfSideConfirmedMadman).forEach(setConfirmedMadman);
+  reconcileStaleNonSelfSingleSeerHumanGuesses();
   reconcileConfirmedRoleEvidence();
   reconcileMediumHumanConversions();
   reconcileAttackConfirmedSeerConflicts();
@@ -2401,6 +2405,36 @@ function applyConfirmedWhiteUpdates() {
   applyMediumConfirmedRoleGuesses();
   applySelfPerspectiveRivalRoleGuesses();
   reconcileConfirmedWhiteRoleGuessLocks(currentSeerClaimants);
+}
+
+function reconcileStaleNonSelfSingleSeerHumanGuesses() {
+  const currentSeers = getCurrentSeerClaimants();
+  if (currentSeers.length < 2) return;
+  const currentSeerIds = new Set(currentSeers.map((seer) => seer.id));
+  getActivePlayers().forEach((player) => {
+    if (
+      player.status !== "alive" ||
+      player.manualRoleGuess ||
+      getRoleGuessDisplay(player).value !== "villager" ||
+      player.confirmedRoleEvidence?.some((evidence) => evidence.role === "medium")
+    ) {
+      return;
+    }
+    const hasNonSelfHumanResult = state.results.some((result) => {
+      const seer = findPlayer(result.seerId);
+      return (
+        result.targetId === player.id &&
+        result.value === "human" &&
+        currentSeerIds.has(result.seerId) &&
+        !isPriorityPlayer(seer) &&
+        seer?.trueRole !== "seer"
+      );
+    });
+    if (!hasNonSelfHumanResult || shouldBecomeConfirmedWhite(player, currentSeers)) return;
+    player.roleGuessCandidates = ["unknown"];
+    player.primaryRoleGuess = "";
+    player.confirmedRolePreviousGuess = null;
+  });
 }
 
 function reconcileConfirmedWhiteRoleGuessLocks(seers) {
@@ -2544,10 +2578,12 @@ function reconcileConfirmedRoleEvidence() {
     }
     const usesLimitedMediumHumanConversion = preferred.role === "medium" && preferred.value === "villager";
     if (!player.confirmedRolePreviousGuess && !usesLimitedMediumHumanConversion) {
+      player.confirmedRolePreviousGuess = getPreviousGuessBeforeConfirmedEvidence(player, preferred);
+    } else if (isLegacySingleSeerPreviousGuess(player, preferred)) {
       player.confirmedRolePreviousGuess = {
-        roleGuessCandidates: [...player.roleGuessCandidates],
-        primaryRoleGuess: player.primaryRoleGuess,
-        manualRoleGuess: player.manualRoleGuess,
+        roleGuessCandidates: ["unknown"],
+        primaryRoleGuess: "",
+        manualRoleGuess: false,
       };
     }
     player.confirmedRoleEvidence = validEntries;
@@ -2559,6 +2595,36 @@ function reconcileConfirmedRoleEvidence() {
       setRoleGuess(player, preferred.value, { confirmed: true });
     }
   });
+}
+
+function isLegacySingleSeerPreviousGuess(player, preferred) {
+  const previous = player.confirmedRolePreviousGuess;
+  if (!previous || preferred.role !== "seer" || previous.manualRoleGuess) return false;
+  return (
+    player.status === "alive" &&
+    normalizePrimaryRoleGuess(previous.primaryRoleGuess, previous.roleGuessCandidates) === preferred.value
+  );
+}
+
+function getPreviousGuessBeforeConfirmedEvidence(player, preferred) {
+  const currentValue = getRoleGuessDisplay(player).value;
+  const isLegacySingleSeerAutoGuess =
+    preferred.role === "seer" &&
+    player.status === "alive" &&
+    !player.manualRoleGuess &&
+    currentValue === preferred.value;
+  if (isLegacySingleSeerAutoGuess) {
+    return {
+      roleGuessCandidates: ["unknown"],
+      primaryRoleGuess: "",
+      manualRoleGuess: false,
+    };
+  }
+  return {
+    roleGuessCandidates: [...player.roleGuessCandidates],
+    primaryRoleGuess: player.primaryRoleGuess,
+    manualRoleGuess: player.manualRoleGuess,
+  };
 }
 
 function restoreRoleGuessBeforeConfirmation(player) {
