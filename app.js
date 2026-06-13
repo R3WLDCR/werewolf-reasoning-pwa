@@ -2423,17 +2423,35 @@ function reconcileConfirmedWhiteRoleGuessLocks(seers) {
 }
 
 function setAutoConfirmedWhiteRoleGuess(player) {
-  if (!player.autoConfirmedWhitePreviousGuess) {
-    player.autoConfirmedWhitePreviousGuess = {
-      roleGuessCandidates: [...player.roleGuessCandidates],
-      primaryRoleGuess: player.primaryRoleGuess,
-      manualRoleGuess: player.manualRoleGuess,
-    };
+  const singleSeerPreviousGuess = getSingleSeerResultPreviousGuess(player);
+  if (singleSeerPreviousGuess) {
+    player.autoConfirmedWhitePreviousGuess = singleSeerPreviousGuess;
+  } else if (!player.autoConfirmedWhitePreviousGuess) {
+    player.autoConfirmedWhitePreviousGuess = getRoleGuessBeforeAutoConfirmedWhite(player);
   }
   player.roleGuessCandidates = ["confirmedWhite"];
   player.primaryRoleGuess = "confirmedWhite";
   player.manualRoleGuess = false;
   player.autoSelfRivalWolfSide = false;
+}
+
+function getRoleGuessBeforeAutoConfirmedWhite(player) {
+  return {
+    roleGuessCandidates: [...player.roleGuessCandidates],
+    primaryRoleGuess: player.primaryRoleGuess,
+    manualRoleGuess: player.manualRoleGuess,
+  };
+}
+
+function getSingleSeerResultPreviousGuess(player) {
+  if (!player.confirmedRoleEvidence?.some((evidence) => evidence.role === "seer")) return null;
+  const previous = player.confirmedRolePreviousGuess;
+  if (!previous) return null;
+  return {
+    roleGuessCandidates: [...previous.roleGuessCandidates],
+    primaryRoleGuess: previous.primaryRoleGuess,
+    manualRoleGuess: previous.manualRoleGuess,
+  };
 }
 
 function restoreRoleGuessBeforeAutoConfirmedWhite(player) {
