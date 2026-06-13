@@ -1163,8 +1163,7 @@ function getRoleGuessClass(value) {
 function isAutoConfirmedWhiteCandidate(player, seers = getSeers()) {
   if (player.status !== "alive" || (!player.manualRoleOverride && player.role)) return false;
   if (!seers.length || seers.some((seer) => seer.id === player.id)) return false;
-  const confirmedSeers = seers.filter(isConfirmedSeerForResults);
-  return confirmedSeers.length > 0 && confirmedSeers.every((seer) => isHumanOrExposedHumanForSeer(player, seer));
+  return canSeersEstablishConfirmedWhite(seers) && seers.every((seer) => hasRecordedHumanResultForSeer(player.id, seer.id));
 }
 
 function getPreferredConfirmedEvidenceValue(player) {
@@ -2404,8 +2403,8 @@ function reconcileAutoConfirmedWhites(seers) {
       player.status === "alive" &&
       seers.length > 0 &&
       !seers.some((seer) => seer.id === player.id) &&
-      seers.filter(isConfirmedSeerForResults).length > 0 &&
-      seers.filter(isConfirmedSeerForResults).every((seer) => isHumanOrExposedHumanForSeer(player, seer));
+      canSeersEstablishConfirmedWhite(seers) &&
+      seers.every((seer) => hasRecordedHumanResultForSeer(player.id, seer.id));
     if (remainsConfirmedWhite) return;
     if (!player.manualRoleOverride && player.role === "confirmedWhite") {
       player.role = "";
@@ -2416,6 +2415,11 @@ function reconcileAutoConfirmedWhites(seers) {
       player.primaryRoleGuess = "";
     }
     player.autoConfirmedWhite = false;
+    const selfSeer = getSelfPerspectivePlayer();
+    const selfResult = selfSeer
+      ? state.results.find((result) => result.seerId === selfSeer.id && result.targetId === player.id && result.value === "human")
+      : null;
+    if (selfResult) applyConfirmedSeerResultRoleGuess(player, selfSeer, selfResult.value);
   });
 }
 
@@ -2821,8 +2825,17 @@ function setRoleGuess(player, role, { confirmed = false } = {}) {
 function shouldBecomeConfirmedWhite(player, seers = getSeers()) {
   if (player.role || player.status !== "alive") return false;
   if (seers.some((seer) => seer.id === player.id)) return false;
-  const confirmedSeers = seers.filter(isConfirmedSeerForResults);
-  return confirmedSeers.length > 0 && confirmedSeers.every((seer) => isHumanOrExposedHumanForSeer(player, seer));
+  return canSeersEstablishConfirmedWhite(seers) && seers.every((seer) => hasRecordedHumanResultForSeer(player.id, seer.id));
+}
+
+function canSeersEstablishConfirmedWhite(seers = getSeers()) {
+  return seers.length > 0 && !(seers.length === 1 && isPriorityPlayer(seers[0]));
+}
+
+function hasRecordedHumanResultForSeer(playerId, seerId) {
+  const override = getSeerColumnOverride(seerId, playerId);
+  if (override) return override.value === "human";
+  return state.results.some((result) => result.seerId === seerId && result.targetId === playerId && result.value === "human");
 }
 
 function isConfirmedSeerForResults(player) {
