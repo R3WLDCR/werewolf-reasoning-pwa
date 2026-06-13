@@ -1163,7 +1163,7 @@ function getRoleGuessClass(value) {
 function isAutoConfirmedWhiteCandidate(player, seers = getCurrentSeerClaimants()) {
   if (player.status !== "alive") return false;
   if (!seers.length || seers.some((seer) => seer.id === player.id)) return false;
-  return canSeersEstablishConfirmedWhite(seers) && seers.every((seer) => hasRecordedHumanResultForSeer(player.id, seer.id));
+  return canSeersEstablishConfirmedWhite(seers) && seers.every((seer) => isHumanViewForConfirmedWhite(player, seer));
 }
 
 function getPreferredConfirmedEvidenceValue(player) {
@@ -2223,8 +2223,12 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
       const exposedHumanClaim = getExposedHumanClaimForSeer(player, seer);
       const autoVillagerClaim = roleClaim || manualMediumGuess || getAutoVillagerClaimForSeer(player, seer.id) || exposedHumanClaim;
       if (!result) {
+        const displayLabel =
+          exposedHumanClaim && player.autoConfirmedWhite
+            ? `${exposedHumanClaim} / ${ROLE_LABELS.confirmedWhite}`
+            : autoVillagerClaim;
         return autoVillagerClaim
-          ? `<span class="seer-result-label ${manualMediumGuess ? "role-medium" : exposedHumanClaim ? "judgement-human" : getAutoVillagerClass(player)}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(autoVillagerClaim)}</span>`
+          ? `<span class="seer-result-label ${manualMediumGuess ? "role-medium" : exposedHumanClaim ? "judgement-human" : getAutoVillagerClass(player)}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(displayLabel)}</span>`
           : `<span class="seer-result-label empty" data-seer-id="${escapeHtml(seer.id)}" aria-hidden="true"></span>`;
       }
       const className = manualMediumGuess
@@ -2412,7 +2416,7 @@ function reconcileAutoConfirmedWhites(seers) {
       seers.length > 0 &&
       !seers.some((seer) => seer.id === player.id) &&
       canSeersEstablishConfirmedWhite(seers) &&
-      seers.every((seer) => hasRecordedHumanResultForSeer(player.id, seer.id));
+      seers.every((seer) => isHumanViewForConfirmedWhite(player, seer));
     if (remainsConfirmedWhite) return;
     if (!player.manualRoleOverride && player.role === "confirmedWhite") {
       player.role = "";
@@ -2833,7 +2837,7 @@ function setRoleGuess(player, role, { confirmed = false } = {}) {
 function shouldBecomeConfirmedWhite(player, seers = getCurrentSeerClaimants()) {
   if (player.status !== "alive") return false;
   if (seers.some((seer) => seer.id === player.id)) return false;
-  return canSeersEstablishConfirmedWhite(seers) && seers.every((seer) => hasRecordedHumanResultForSeer(player.id, seer.id));
+  return canSeersEstablishConfirmedWhite(seers) && seers.every((seer) => isHumanViewForConfirmedWhite(player, seer));
 }
 
 function canSeersEstablishConfirmedWhite(seers = getCurrentSeerClaimants()) {
@@ -2848,6 +2852,10 @@ function hasRecordedHumanResultForSeer(playerId, seerId) {
   const override = getSeerColumnOverride(seerId, playerId);
   if (override) return override.value === "human";
   return state.results.some((result) => result.seerId === seerId && result.targetId === playerId && result.value === "human");
+}
+
+function isHumanViewForConfirmedWhite(player, seer) {
+  return hasRecordedHumanResultForSeer(player.id, seer.id) || Boolean(getExposedHumanClaimForSeer(player, seer));
 }
 
 function isConfirmedSeerForResults(player) {
