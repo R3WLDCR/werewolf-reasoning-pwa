@@ -1,7 +1,7 @@
 const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
-const APP_VERSION = "1.54";
+const APP_VERSION = "1.55";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -304,7 +304,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   restore();
-  els.appVersionText.textContent = `アプリ v${APP_VERSION}`;
+  els.appVersionText.textContent = `v${APP_VERSION}`;
   ensureMatchDefaults();
   bindEvents();
   render();

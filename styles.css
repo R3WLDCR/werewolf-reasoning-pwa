@@ -97,6 +97,27 @@ button {
   text-transform: uppercase;
 }
 
+.app-title-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.app-version-badge {
+  display: inline-grid;
+  place-items: center;
+  min-height: 22px;
+  padding: 2px 7px;
+  border: 1px solid #496264;
+  border-radius: 999px;
+  background: #1d2d2e;
+  color: #a9d9d3;
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 h1,
 h2 {
   margin: 0;
@@ -1021,15 +1042,6 @@ select:disabled {
 
 .sync-conflict-panel .sync-actions {
   padding: 0 12px;
-}
-
-.app-version-text {
-  display: block;
-  padding: 2px 4px;
-  color: var(--muted);
-  font-size: 0.68rem;
-  text-align: center;
-  opacity: 0.72;
 }
 
 .history-management-panel {
