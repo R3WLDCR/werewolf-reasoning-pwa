@@ -1,7 +1,7 @@
 const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
-const APP_VERSION = "1.65";
+const APP_VERSION = "1.66";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -1415,6 +1415,7 @@ function getBlackTargetCandidates() {
       !player.wolfTeammate &&
       player.status !== "attacked" &&
       player.blackTargetPreference !== "exclude" &&
+      getRoleGuessDisplay(player).value !== "madman" &&
       !isConfirmedCitizenForBlackTarget(player),
   );
 }
