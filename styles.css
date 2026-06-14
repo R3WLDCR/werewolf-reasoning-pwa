@@ -1678,6 +1678,38 @@ select:disabled {
   font-weight: 900;
 }
 
+.finish-role-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.finish-true-role-field.invalid select,
+select.invalid,
+input.invalid {
+  border-color: #d45b66;
+  box-shadow: 0 0 0 2px rgba(212, 91, 102, 0.18);
+}
+
+.finish-game-error {
+  padding: 11px 12px;
+  border: 1px solid #b94b57;
+  border-radius: 8px;
+  background: #241114;
+  color: #ffd9dc;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.finish-game-error strong {
+  display: block;
+  margin-bottom: 5px;
+}
+
+.finish-game-error ul {
+  margin: 0;
+  padding-left: 1.3em;
+}
+
 .toast {
   position: fixed;
   left: 50%;

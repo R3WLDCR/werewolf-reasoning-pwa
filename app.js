@@ -1,7 +1,7 @@
 const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
-const APP_VERSION = "1.67";
+const APP_VERSION = "1.69";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -224,7 +224,9 @@ document.addEventListener("DOMContentLoaded", () => {
     "winnerSelect",
     "otherWinnerField",
     "otherWinnerInput",
+    "fillRemainingVillagersBtn",
     "finishTrueRoleFields",
+    "finishGameError",
     "historyEditDialog",
     "historyEditForm",
     "historyEditTitle",
@@ -407,7 +409,10 @@ function bindEvents() {
   els.closeFinishGameBtn.addEventListener("click", closeFinishGameDialog);
   els.winnerSelect.addEventListener("change", () => {
     els.otherWinnerField.hidden = els.winnerSelect.value !== "その他";
+    updateFinishGameValidation();
   });
+  els.otherWinnerInput.addEventListener("input", updateFinishGameValidation);
+  els.fillRemainingVillagersBtn.addEventListener("click", fillRemainingTrueRolesAsVillager);
   els.finishGameForm.addEventListener("submit", (event) => {
     event.preventDefault();
     finishGame();
@@ -659,6 +664,7 @@ function openFinishGameDialog() {
   els.otherWinnerInput.value = "";
   els.otherWinnerField.hidden = true;
   renderFinishTrueRoleFields();
+  updateFinishGameValidation();
   els.finishGameDialog.showModal();
 }
 
@@ -668,25 +674,36 @@ function closeFinishGameDialog() {
 
 function finishGame() {
   if (!isGameInProgress()) return;
+  const validation = updateFinishGameValidation({ focusFirstInvalid: true });
+  if (!validation.valid) return;
   const selectedWinner = els.winnerSelect.value;
   const winner = selectedWinner === "その他" ? els.otherWinnerInput.value.trim() : selectedWinner;
-  if (!winner) return toast("勝利陣営を選んでください");
   const trueRoles = getFinishTrueRoles();
-  const compositionError = getTrueRoleCompositionError(trueRoles);
-  if (compositionError) return toast(compositionError);
-  removeInvalidCurrentMediumResults();
-  applyConfirmedWhiteUpdates();
-  const history = createGameHistory(winner, trueRoles);
-  state.gameHistories.unshift(history);
-  state.players.forEach((player) => {
-    player.trueRole = trueRoles.get(player.id) || "";
-  });
-  state.gameStatus = "finished";
-  state.pendingExileContinuationPlayerId = "";
-  state.activeView = "reasoning";
-  selectedHistoryId = state.gameHistories[0].id;
+  const stateBeforeFinish = structuredClone(state);
+  const selectedHistoryIdBeforeFinish = selectedHistoryId;
+  try {
+    removeInvalidCurrentMediumResults();
+    applyConfirmedWhiteUpdates();
+    const history = createGameHistory(winner, trueRoles);
+    state.gameHistories.unshift(history);
+    state.players.forEach((player) => {
+      player.trueRole = trueRoles.get(player.id) || "";
+    });
+    state.gameStatus = "finished";
+    state.pendingExileContinuationPlayerId = "";
+    state.activeView = "reasoning";
+    selectedHistoryId = state.gameHistories[0].id;
+    if (!store()) throw new Error("Local state could not be saved");
+  } catch (error) {
+    console.error("Failed to finish game", error);
+    Object.keys(state).forEach((key) => delete state[key]);
+    Object.assign(state, stateBeforeFinish);
+    selectedHistoryId = selectedHistoryIdBeforeFinish;
+    showFinishGameError(["端末への保存に失敗しました。空き容量を確認して、もう一度お試しください。"]);
+    return;
+  }
   closeFinishGameDialog();
-  renderAndStore();
+  render();
   toast("ゲームを終了して盤面を保存しました");
 }
 
@@ -707,7 +724,7 @@ function renderFinishTrueRoleFields() {
       (player) => `
         <label class="finish-true-role-field">
           <span>${escapeHtml(player.name)}</span>
-          <select data-true-role-player-id="${escapeHtml(player.id)}" required>
+          <select data-true-role-player-id="${escapeHtml(player.id)}">
             <option value="">役職を選択</option>
             ${getTrueRoleOptionsHtml(player.primaryRoleGuess)}
           </select>
@@ -716,9 +733,8 @@ function renderFinishTrueRoleFields() {
     )
     .join("");
   els.finishTrueRoleFields.querySelectorAll("[data-true-role-player-id]").forEach((select) => {
-    select.addEventListener("change", autoFillRemainingTrueRolesAsVillager);
+    select.addEventListener("change", updateFinishGameValidation);
   });
-  autoFillRemainingTrueRolesAsVillager();
 }
 
 function getTrueRoleOptionsHtml(selectedRole = "") {
@@ -736,13 +752,12 @@ function getFinishTrueRoles() {
   return new Map(entries);
 }
 
-function autoFillRemainingTrueRolesAsVillager() {
+function fillRemainingTrueRolesAsVillager() {
   const selects = Array.from(els.finishTrueRoleFields.querySelectorAll("[data-true-role-player-id]"));
-  const counts = countSelectedTrueRoles(selects);
-  if (!hasRequiredTrueRoleComposition(counts)) return;
   selects.filter((select) => !select.value).forEach((select) => {
     select.value = "villager";
   });
+  updateFinishGameValidation();
 }
 
 function countSelectedTrueRoles(selects = []) {
@@ -752,33 +767,77 @@ function countSelectedTrueRoles(selects = []) {
   }, {});
 }
 
-function hasRequiredTrueRoleComposition(counts) {
-  return (
-    (counts.werewolf || 0) === state.wolfCount &&
-    (counts.madman || 0) === 1 &&
-    (counts.guard || 0) === 1 &&
-    (counts.seer || 0) === 1 &&
-    (counts.medium || 0) === 1
-  );
+function getFinishGameValidation() {
+  const messages = [];
+  const invalidElements = [];
+  const selectedWinner = els.winnerSelect.value;
+  if (!selectedWinner) {
+    messages.push("勝利陣営を選んでください。");
+    invalidElements.push(els.winnerSelect);
+  } else if (selectedWinner === "その他" && !els.otherWinnerInput.value.trim()) {
+    messages.push("「その他」の勝利陣営名を入力してください。");
+    invalidElements.push(els.otherWinnerInput);
+  }
+
+  const selects = Array.from(els.finishTrueRoleFields.querySelectorAll("[data-true-role-player-id]"));
+  const unselected = selects.filter((select) => !select.value);
+  if (unselected.length) {
+    const names = unselected
+      .map((select) => findPlayer(select.dataset.trueRolePlayerId)?.name)
+      .filter(Boolean);
+    messages.push(`真の役職が未選択です（${names.join("、")}）。`);
+    invalidElements.push(...unselected);
+  }
+
+  const counts = countSelectedTrueRoles(selects);
+  [
+    ["人狼", "werewolf", state.wolfCount],
+    ["裏切り者", "madman", 1],
+    ["ボディガード", "guard", 1],
+    ["預言者", "seer", 1],
+    ["霊媒師", "medium", 1],
+  ].forEach(([label, role, expected]) => {
+    const actual = counts[role] || 0;
+    if (actual !== expected) {
+      messages.push(`${label}は${expected}人必要です（現在${actual}人）。`);
+      if (actual > expected) invalidElements.push(...selects.filter((select) => select.value === role));
+    }
+  });
+
+  return { valid: messages.length === 0, messages, invalidElements };
 }
 
-function getTrueRoleCompositionError(trueRoles) {
-  if (!trueRoles || trueRoles.size !== getActivePlayers().length) return "参加者全員の真の役職を選んでください";
-  const counts = [...trueRoles.values()].reduce((result, role) => {
-    if (role) result[role] = (result[role] || 0) + 1;
-    return result;
-  }, {});
-  const errors = [
-    ["人狼", counts.werewolf || 0, state.wolfCount],
-    ["裏切り者", counts.madman || 0, 1],
-    ["ボディガード", counts.guard || 0, 1],
-    ["預言者", counts.seer || 0, 1],
-    ["霊媒師", counts.medium || 0, 1],
-  ]
-    .filter(([, actual, expected]) => actual !== expected)
-    .map(([label, actual, expected]) => `${label}${actual}/${expected}`);
-  if ([...trueRoles.values()].some((role) => !role)) errors.push("未選択あり");
-  return errors.length ? `役職構成を確認してください: ${errors.join("、")}` : "";
+function updateFinishGameValidation({ focusFirstInvalid = false } = {}) {
+  const validation = getFinishGameValidation();
+  const invalidElements = new Set(validation.invalidElements);
+  els.finishTrueRoleFields.querySelectorAll(".finish-true-role-field").forEach((field) => {
+    const select = field.querySelector("[data-true-role-player-id]");
+    field.classList.toggle("invalid", invalidElements.has(select));
+  });
+  els.winnerSelect.classList.toggle("invalid", invalidElements.has(els.winnerSelect));
+  els.otherWinnerInput.classList.toggle("invalid", invalidElements.has(els.otherWinnerInput));
+  els.fillRemainingVillagersBtn.disabled = !Array.from(
+    els.finishTrueRoleFields.querySelectorAll("[data-true-role-player-id]"),
+  ).some((select) => !select.value);
+  if (validation.valid) {
+    els.finishGameError.hidden = true;
+    els.finishGameError.innerHTML = "";
+  } else {
+    showFinishGameError(validation.messages);
+  }
+  if (focusFirstInvalid && !validation.valid) {
+    const target = validation.invalidElements[0] || els.finishGameError;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    window.setTimeout(() => target.focus({ preventScroll: true }), 250);
+  }
+  return validation;
+}
+
+function showFinishGameError(messages) {
+  els.finishGameError.innerHTML = `<strong>保存する前に確認してください</strong><ul>${messages
+    .map((message) => `<li>${escapeHtml(message)}</li>`)
+    .join("")}</ul>`;
+  els.finishGameError.hidden = false;
 }
 
 function createGameHistory(winner, trueRoles = new Map()) {
@@ -1778,14 +1837,16 @@ function renderMatchMeta() {
 function renderGameLifecycle() {
   const inProgress = isGameInProgress();
   const finished = isGameFinished();
+  const participantView = state.activeView === "participants";
+  const reasoningView = state.activeView === "reasoning";
   els.gameStatusBadge.textContent = finished ? "終了済み" : inProgress ? "進行中" : "準備中";
   els.gameStatusBadge.classList.toggle("in-progress", inProgress);
   els.gameStatusBadge.classList.toggle("finished", finished);
-  els.startGameBtn.hidden = inProgress || finished;
-  els.returnSetupBtn.hidden = !inProgress;
-  els.resetBoardBtn.hidden = finished;
-  els.finishGameBtn.hidden = !inProgress;
-  els.nextGameBtn.hidden = !finished;
+  els.startGameBtn.hidden = !participantView || inProgress || finished;
+  els.returnSetupBtn.hidden = !reasoningView || !inProgress;
+  els.resetBoardBtn.hidden = !reasoningView || finished;
+  els.finishGameBtn.hidden = !reasoningView || !inProgress;
+  els.nextGameBtn.hidden = !reasoningView || !finished;
   [
     els.tournamentSelect,
     els.addTournamentBtn,
@@ -4378,18 +4439,28 @@ function renderAndStore() {
 }
 
 function store({ markDirty = true } = {}) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  const signature = getSyncPayloadSignature();
-  if (markDirty && !applyingCloudState && signature !== syncMeta.lastPayloadSignature) {
-    syncMeta.localUpdatedAt = new Date().toISOString();
-    syncMeta.dirty = true;
-    syncMeta.lastPayloadSignature = signature;
-    saveSyncMeta();
-    scheduleAutoSync();
-  } else if (!syncMeta.lastPayloadSignature) {
-    syncMeta.lastPayloadSignature = signature;
-    saveSyncMeta();
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (error) {
+    console.error("Failed to save local state", error);
+    return false;
   }
+  try {
+    const signature = getSyncPayloadSignature();
+    if (markDirty && !applyingCloudState && signature !== syncMeta.lastPayloadSignature) {
+      syncMeta.localUpdatedAt = new Date().toISOString();
+      syncMeta.dirty = true;
+      syncMeta.lastPayloadSignature = signature;
+      saveSyncMeta();
+      scheduleAutoSync();
+    } else if (!syncMeta.lastPayloadSignature) {
+      syncMeta.lastPayloadSignature = signature;
+      saveSyncMeta();
+    }
+  } catch (error) {
+    console.error("Failed to save sync metadata", error);
+  }
+  return true;
 }
 
 function restore() {

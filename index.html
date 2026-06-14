@@ -349,7 +349,7 @@
         </div>
         <label class="field">
           <span>勝利陣営</span>
-          <select id="winnerSelect" required>
+          <select id="winnerSelect">
             <option value="">選択してください</option>
             <option value="市民陣営">市民陣営</option>
             <option value="人狼陣営">人狼陣営</option>
@@ -362,7 +362,11 @@
           <span>勝利陣営名</span>
           <input id="otherWinnerInput" type="text" maxlength="30" placeholder="勝利陣営名" />
         </label>
+        <div id="finishGameError" class="finish-game-error" role="alert" tabindex="-1" hidden></div>
         <div class="field-title">真の役職</div>
+        <div class="finish-role-actions">
+          <button id="fillRemainingVillagersBtn" class="secondary-button" type="button">残りを市民にする</button>
+        </div>
         <div id="finishTrueRoleFields" class="finish-true-role-fields"></div>
         <button class="danger-button wide" type="submit">終了して履歴へ保存</button>
       </form>
