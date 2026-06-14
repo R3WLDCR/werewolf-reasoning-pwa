@@ -1,4 +1,4 @@
-const CACHE_NAME = "werewolf-reasoning-note-v169";
+const CACHE_NAME = "werewolf-reasoning-note-v170";
 const ASSETS = [
   "./",
   "./index.html",
@@ -26,15 +26,29 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
-  if (new URL(event.request.url).pathname.endsWith("/sync-config.js")) {
+  const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin) return;
+  const networkFirst =
+    event.request.mode === "navigate" ||
+    ["/index.html", "/app.js", "/styles.css", "/sync-config.js", "/manifest.json"].some((path) =>
+      url.pathname.endsWith(path),
+    );
+  if (networkFirst) {
     event.respondWith(
-      fetch(event.request)
+      fetch(event.request, { cache: "no-store" })
         .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          }
           return response;
         })
-        .catch(() => caches.match(event.request)),
+        .catch(() =>
+          caches.match(event.request).then((cached) => {
+            if (cached) return cached;
+            return event.request.mode === "navigate" ? caches.match("./index.html") : Response.error();
+          }),
+        ),
     );
     return;
   }
