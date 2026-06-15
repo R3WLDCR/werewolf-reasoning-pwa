@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.77";
+const APP_VERSION = "1.79";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -198,7 +198,10 @@ document.addEventListener("DOMContentLoaded", () => {
     "addTournamentBtn",
     "renameTournamentBtn",
     "eventDateInput",
+    "dateInputWrap",
     "openDatePickerBtn",
+    "eventDateText",
+    "dateActionText",
     "clearDateBtn",
     "gameNumberInput",
     "matchSummary",
@@ -2055,7 +2058,10 @@ function renderMatchMeta() {
     )
     .join("");
   els.eventDateInput.value = state.eventDate;
-  els.openDatePickerBtn.textContent = state.eventDate || "日付未選択";
+  els.eventDateText.textContent = state.eventDate || "日付未選択";
+  els.dateActionText.textContent = state.eventDate ? "変更" : "選択";
+  els.clearDateBtn.hidden = !state.eventDate;
+  els.dateInputWrap.classList.toggle("has-date", Boolean(state.eventDate));
   els.gameNumberInput.value = String(state.gameNumber);
   document.querySelectorAll("[data-roster-filter]").forEach((button) => {
     button.classList.toggle("active", button.dataset.rosterFilter === state.rosterFilter);
@@ -2077,11 +2083,13 @@ function renderGameLifecycle() {
   els.boardActionsBtn.hidden = !reasoningView || finished;
   els.finishGameBtn.hidden = !reasoningView || !inProgress;
   els.nextGameBtn.hidden = !reasoningView || !finished;
+  els.dateInputWrap.classList.toggle("locked", inProgress || finished);
   [
     els.tournamentSelect,
     els.addTournamentBtn,
     els.renameTournamentBtn,
     els.eventDateInput,
+    els.openDatePickerBtn,
     els.clearDateBtn,
     els.gameNumberInput,
     els.playerNameInput,
@@ -4425,7 +4433,9 @@ function buildHistoryTimeline(history) {
       .forEach((result) => {
         const seer = history.players.find((player) => player.id === result.seerId);
         const target = history.players.find((player) => player.id === result.targetId);
-        if (seer && target) events.push(`占い: ${seer.name} -> ${target.name} ${RESULT_LABELS[result.value]}`);
+        if (seer && target) {
+          events.push(`占い: ${formatTimelineActorName(seer)} -> ${target.name} ${RESULT_LABELS[result.value]}`);
+        }
       });
     activePlayers
       .filter((player) => player.status === "exiled" && (Number(player.statusDay) || 1) === day)
@@ -4474,7 +4484,9 @@ function buildCurrentTimeline() {
       .forEach((result) => {
         const seer = findPlayer(result.seerId);
         const target = findPlayer(result.targetId);
-        if (seer && target) events.push(`占い: ${seer.name} -> ${target.name} ${RESULT_LABELS[result.value]}`);
+        if (seer && target) {
+          events.push(`占い: ${formatTimelineActorName(seer)} -> ${target.name} ${RESULT_LABELS[result.value]}`);
+        }
       });
     activePlayers
       .filter((player) => player.status === "exiled" && (Number(player.statusDay) || 1) === day)
@@ -4503,11 +4515,12 @@ function getTrueRoleActions(actions, players) {
 function formatClaimEvent(event, players) {
   const player = players.find((item) => item.id === event.playerId);
   if (!player) return "";
-  if (event.type === "withdraw") return `CO撤回: ${player.name} ${ROLE_LABELS[event.previousRole] || "役職"}`;
+  const playerName = formatTimelineActorName(player);
+  if (event.type === "withdraw") return `CO撤回: ${playerName} ${ROLE_LABELS[event.previousRole] || "役職"}`;
   if (event.type === "change") {
-    return `CO変更: ${player.name} ${ROLE_LABELS[event.previousRole] || "役職"} → ${ROLE_LABELS[event.role] || "役職"}`;
+    return `CO変更: ${playerName} ${ROLE_LABELS[event.previousRole] || "役職"} → ${ROLE_LABELS[event.role] || "役職"}`;
   }
-  return `CO: ${player.name} ${ROLE_LABELS[event.role] || "役職"}`;
+  return `CO: ${playerName} ${ROLE_LABELS[event.role] || "役職"}`;
 }
 
 function formatRoleActionEvent(action, players) {
@@ -4516,7 +4529,13 @@ function formatRoleActionEvent(action, players) {
   const resultLabel = ROLE_ACTION_RESULT_LABELS[action.role]?.[action.result] || ROLE_ACTION_RESULT_LABELS[action.role]?.unknown || "不明";
   if (!actor || !target || !ROLE_ACTION_ROLES.has(action.role)) return "";
   const note = action.note ? ` / ${action.note}` : "";
-  return `${ROLE_LABELS[action.role]}: ${actor.name} -> ${target.name} ${resultLabel}${note}`;
+  return `${ROLE_LABELS[action.role]}: ${formatTimelineActorName(actor)} -> ${target.name} ${resultLabel}${note}`;
+}
+
+function formatTimelineActorName(player) {
+  if (!player?.trueRole || player.trueRole === "villager") return player?.name || "";
+  const trueRoleLabel = ROLE_GUESS_LABELS[player.trueRole] || ROLE_LABELS[player.trueRole];
+  return trueRoleLabel ? `${player.name}（真: ${trueRoleLabel}）` : player.name;
 }
 
 function formatImpressionForExport(player) {

@@ -53,13 +53,18 @@
                 <button id="renameTournamentBtn" class="secondary-button" type="button">名称変更</button>
               </div>
             </div>
-            <div class="field date-field">
-              <span>開催日</span>
-              <span class="date-input-wrap">
-                <button id="openDatePickerBtn" class="date-display-button" type="button">日付未選択</button>
+            <div class="date-field">
+              <div id="dateInputWrap" class="date-input-wrap">
+                <button id="openDatePickerBtn" class="date-display-button" type="button">
+                  <span class="date-display-copy">
+                    <small>開催日</small>
+                    <strong id="eventDateText">日付未選択</strong>
+                  </span>
+                  <span id="dateActionText" class="date-action-text">選択</span>
+                </button>
                 <input id="eventDateInput" class="native-date-input" type="date" aria-label="開催日を選択" />
                 <button id="clearDateBtn" class="date-clear-button" type="button" aria-label="開催日を未選択に戻す">×</button>
-              </span>
+              </div>
             </div>
             <label class="field">
               <span>試合</span>
