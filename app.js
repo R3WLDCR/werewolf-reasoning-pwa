@@ -1,7 +1,8 @@
 const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
-const APP_VERSION = "1.72";
+const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
+const APP_VERSION = "1.74";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -92,6 +93,26 @@ const ROLE_GUESS_LABELS = {
   teruteru: "てるてる",
 };
 const WOLF_MODE_COVER_ROLES = new Set(["unknown", "villager", "seer", "medium", "guard", "hunter"]);
+const BOARD_STATE_FIELDS = [
+  "day",
+  "eventName",
+  "eventDate",
+  "gameNumber",
+  "selectedTournamentId",
+  "wolfCount",
+  "wolfModeActive",
+  "wolfModeCoverRole",
+  "players",
+  "results",
+  "seerColumnOverrides",
+  "rivalPerspectiveOverrides",
+  "rivalPerspectiveVersion",
+  "roleActions",
+  "claimEvents",
+  "gameStatus",
+  "startedAt",
+  "pendingExileContinuationPlayerId",
+];
 
 const state = {
   day: 1,
@@ -117,6 +138,7 @@ const state = {
   pendingExileContinuationPlayerId: "",
   gameHistories: [],
   customImpressionReasons: [],
+  boards: [],
 };
 
 const els = {};
@@ -144,6 +166,8 @@ let supabaseClient = null;
 let syncUser = null;
 let pendingCloudRecord = null;
 let applyingCloudState = false;
+let activeBoardId = localStorage.getItem(ACTIVE_BOARD_KEY) || "";
+let switchingBoard = false;
 let hadLocalDataAtStartup = Boolean(localStorage.getItem(STORAGE_KEY));
 let syncMeta = restoreSyncMeta();
 const deviceId = getOrCreateDeviceId();
@@ -161,6 +185,14 @@ document.addEventListener("DOMContentLoaded", () => {
     "exportView",
     "syncView",
     "remoteUpdateBanner",
+    "boardSwitcherBtn",
+    "activeBoardName",
+    "boardManagerDialog",
+    "closeBoardManagerBtn",
+    "boardList",
+    "newBoardNameInput",
+    "newBoardTournamentSelect",
+    "createBoardBtn",
     "tournamentSelect",
     "addTournamentBtn",
     "renameTournamentBtn",
@@ -351,7 +383,6 @@ function bindEvents() {
     state.eventDate = normalizeDateValue(els.eventDateInput.value);
     renderAndStore();
   });
-  els.openDatePickerBtn.addEventListener("click", openDatePicker);
   els.clearDateBtn.addEventListener("click", () => {
     if (isGameLocked()) return toast("進行中・終了済みは開催日を変更できません");
     state.eventDate = "";
@@ -364,6 +395,12 @@ function bindEvents() {
   els.gameNumberKeypad.addEventListener("click", handleGameNumberKey);
   els.gameNumberDialog.addEventListener("click", (event) => {
     if (event.target === els.gameNumberDialog) closeGameNumberDialog();
+  });
+  els.boardSwitcherBtn.addEventListener("click", openBoardManager);
+  els.closeBoardManagerBtn.addEventListener("click", closeBoardManager);
+  els.createBoardBtn.addEventListener("click", createBoardFromDialog);
+  els.boardManagerDialog.addEventListener("click", (event) => {
+    if (event.target === els.boardManagerDialog) closeBoardManager();
   });
   els.addPlayerForm.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -497,21 +534,29 @@ function bindEvents() {
   });
 }
 
-function openDatePicker() {
-  if (typeof els.eventDateInput.showPicker === "function") {
-    els.eventDateInput.showPicker();
-    return;
-  }
-  els.eventDateInput.focus();
-  els.eventDateInput.click();
-}
-
 function openGameNumberDialog() {
   if (isGameLocked()) return toast("進行中・終了済みは試合番号を変更できません");
   gameNumberDraft = String(state.gameNumber);
   gameNumberDraftFresh = true;
   renderGameNumberDraft();
   els.gameNumberDialog.showModal();
+}
+
+function openBoardManager() {
+  renderBoardManager();
+  els.boardManagerDialog.showModal();
+}
+
+function closeBoardManager() {
+  els.boardManagerDialog.close();
+}
+
+function createBoardFromDialog() {
+  const tournamentId = els.newBoardTournamentSelect.value || state.selectedTournamentId;
+  const tournamentName = state.tournaments.find((tournament) => tournament.id === tournamentId)?.name || "新しい盤面";
+  createBoard(els.newBoardNameInput.value.trim() || `${tournamentName} 第1試合`, tournamentId);
+  els.newBoardNameInput.value = "";
+  toast("新しい盤面を作成しました");
 }
 
 function closeGameNumberDialog() {
@@ -921,7 +966,171 @@ function createGameHistory(winner, trueRoles = new Map()) {
     roleActions: structuredClone(state.roleActions),
     claimEvents: structuredClone(state.claimEvents),
     selectedTournamentId: state.selectedTournamentId,
+    boardId: activeBoardId,
   };
+}
+
+function getBoardPayload() {
+  return Object.fromEntries(BOARD_STATE_FIELDS.map((field) => [field, structuredClone(state[field])]));
+}
+
+function getActiveBoard() {
+  return state.boards.find((board) => board.id === activeBoardId);
+}
+
+function getDefaultBoardName() {
+  const tournamentName = getSelectedTournament()?.name || state.eventName || "新しい盤面";
+  return `${tournamentName} 第${state.gameNumber}試合`;
+}
+
+function saveCurrentBoardSnapshot() {
+  if (switchingBoard) return;
+  if (!activeBoardId) activeBoardId = crypto.randomUUID();
+  synchronizeSharedRosterAcrossBoards();
+  const payload = getBoardPayload();
+  const existing = getActiveBoard();
+  if (!existing) {
+    state.boards.push({
+      id: activeBoardId,
+      name: getDefaultBoardName(),
+      updatedAt: new Date().toISOString(),
+      payload,
+    });
+  } else if (JSON.stringify(existing.payload) !== JSON.stringify(payload)) {
+    existing.payload = payload;
+    existing.updatedAt = new Date().toISOString();
+  }
+  localStorage.setItem(ACTIVE_BOARD_KEY, activeBoardId);
+}
+
+function synchronizeSharedRosterAcrossBoards() {
+  const sharedPlayers = new Map(
+    state.players.map((player) => [
+      player.id,
+      {
+        id: player.id,
+        name: player.name,
+        tournamentIds: structuredClone(player.tournamentIds),
+        participationByTournament: structuredClone(player.participationByTournament),
+      },
+    ]),
+  );
+  state.boards.forEach((board) => {
+    if (!Array.isArray(board.payload?.players)) return;
+    const boardPlayers = new Map(board.payload.players.map((player) => [player.id, player]));
+    sharedPlayers.forEach((shared, id) => {
+      const player = boardPlayers.get(id);
+      if (player) {
+        Object.assign(player, structuredClone(shared));
+      } else {
+        const added = normalizePlayer(shared);
+        added.participating =
+          shared.tournamentIds.includes(board.payload.selectedTournamentId) &&
+          shared.participationByTournament[board.payload.selectedTournamentId] !== false;
+        board.payload.players.push(added);
+      }
+    });
+  });
+}
+
+function loadBoard(boardId, { storeAfter = true } = {}) {
+  const board = state.boards.find((item) => item.id === boardId);
+  if (!board?.payload) return false;
+  switchingBoard = true;
+  closeAllDialogs();
+  BOARD_STATE_FIELDS.forEach((field) => {
+    state[field] = structuredClone(board.payload[field]);
+  });
+  activeBoardId = board.id;
+  localStorage.setItem(ACTIVE_BOARD_KEY, activeBoardId);
+  switchingBoard = false;
+  ensureMatchDefaults();
+  removeInvalidCurrentMediumResults();
+  applyConfirmedWhiteUpdates();
+  if (storeAfter) renderAndStore();
+  return true;
+}
+
+function closeAllDialogs() {
+  document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
+  editingPlayerId = "";
+  editingSeerId = "";
+  membershipPlayerId = "";
+  statusPlayerId = "";
+  impressionPlayerId = "";
+  roleGuessPlayerId = "";
+  rivalPerspectiveRole = "";
+  rivalPerspectiveViewerId = "";
+  rivalPerspectiveTargetId = "";
+}
+
+function createBoard(name, tournamentId) {
+  saveCurrentBoardSnapshot();
+  const selectedTournamentId = state.tournaments.some((tournament) => tournament.id === tournamentId)
+    ? tournamentId
+    : state.selectedTournamentId;
+  const players = state.players.map((player) => {
+    const fresh = normalizePlayer({
+      id: player.id,
+      name: player.name,
+      tournamentIds: player.tournamentIds,
+      participationByTournament: player.participationByTournament,
+    });
+    fresh.participating =
+      fresh.tournamentIds.includes(selectedTournamentId) &&
+      fresh.participationByTournament[selectedTournamentId] !== false;
+    return fresh;
+  });
+  const id = crypto.randomUUID();
+  const tournamentName = state.tournaments.find((tournament) => tournament.id === selectedTournamentId)?.name || "新しい盤面";
+  const payload = {
+    ...getBoardPayload(),
+    day: 1,
+    eventName: tournamentName,
+    eventDate: "",
+    gameNumber: 1,
+    selectedTournamentId,
+    wolfCount: 2,
+    wolfModeActive: false,
+    wolfModeCoverRole: "",
+    players,
+    results: [],
+    seerColumnOverrides: [],
+    rivalPerspectiveOverrides: [],
+    rivalPerspectiveVersion: 2,
+    roleActions: [],
+    claimEvents: [],
+    gameStatus: "preparing",
+    startedAt: "",
+    pendingExileContinuationPlayerId: "",
+  };
+  state.boards.push({ id, name: name.trim() || `${tournamentName} 第1試合`, updatedAt: new Date().toISOString(), payload });
+  loadBoard(id);
+}
+
+function renameBoard(boardId) {
+  const board = state.boards.find((item) => item.id === boardId);
+  if (!board) return;
+  const name = prompt("盤面名を変更", board.name);
+  if (!name?.trim()) return;
+  board.name = name.trim();
+  board.updatedAt = new Date().toISOString();
+  renderAndStore();
+  if (els.boardManagerDialog.open) renderBoardManager();
+}
+
+function deleteBoard(boardId) {
+  if (state.boards.length <= 1) return toast("最後の盤面は削除できません");
+  const board = state.boards.find((item) => item.id === boardId);
+  if (!board || !confirm(`「${board.name}」を削除しますか？終了済み履歴と共通名簿は残ります。`)) return;
+  state.boards = state.boards.filter((item) => item.id !== boardId);
+  if (boardId === activeBoardId) {
+    const next = [...state.boards].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))[0];
+    loadBoard(next.id, { storeAfter: false });
+  }
+  renderAndStore();
+  if (els.boardManagerDialog.open) renderBoardManager();
+  toast("盤面を削除しました");
 }
 
 function resetBoardState() {
@@ -1832,6 +2041,7 @@ function render() {
   renderMatchMeta();
   renderGameLifecycle();
   renderSyncStatus();
+  renderBoardSwitcher();
   els.wolfCountSelect.value = String(state.wolfCount);
   els.playerCountBadge.textContent = `参加${getActivePlayers().length}/${getSelectedTournamentPlayers().length}人`;
   if (state.activeView === "participants") renderParticipantRows();
@@ -1908,7 +2118,7 @@ function renderGameLifecycle() {
     els.tournamentSelect,
     els.addTournamentBtn,
     els.renameTournamentBtn,
-    els.openDatePickerBtn,
+    els.eventDateInput,
     els.clearDateBtn,
     els.gameNumberInput,
     els.playerNameInput,
@@ -4498,6 +4708,7 @@ function renderAndStore() {
 
 function store({ markDirty = true } = {}) {
   try {
+    saveCurrentBoardSnapshot();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (error) {
     console.error("Failed to save local state", error);
@@ -4576,13 +4787,28 @@ function applySavedState(saved) {
     state.pendingExileContinuationPlayerId = "";
   }
   state.gameHistories = Array.isArray(saved.gameHistories) ? saved.gameHistories.map(normalizeGameHistory).filter(Boolean) : [];
+  state.boards = Array.isArray(saved.boards) ? saved.boards.map(normalizeBoard).filter(Boolean) : [];
   migrateLegacyRoster(saved.eventName);
   backfillStatusDays();
   applyConfirmedWhiteUpdates();
+  if (!state.boards.length) {
+    activeBoardId = activeBoardId || crypto.randomUUID();
+    state.boards = [
+      {
+        id: activeBoardId,
+        name: getDefaultBoardName(),
+        updatedAt: new Date().toISOString(),
+        payload: getBoardPayload(),
+      },
+    ];
+  }
+  const preferredBoard = state.boards.find((board) => board.id === activeBoardId) || state.boards[0];
+  if (preferredBoard) loadBoard(preferredBoard.id, { storeAfter: false });
 }
 
 function getSyncPayload() {
   const payload = structuredClone(state);
+  BOARD_STATE_FIELDS.forEach((field) => delete payload[field]);
   delete payload.activeView;
   delete payload.rosterFilter;
   return payload;
@@ -4689,6 +4915,65 @@ async function initializeSync() {
     await synchronizeNow({ initial: true });
   }
   renderSyncStatus();
+  renderBoardSwitcher();
+}
+
+function renderBoardSwitcher() {
+  const board = getActiveBoard();
+  els.activeBoardName.textContent = board?.name || getDefaultBoardName();
+}
+
+function renderBoardManager() {
+  saveCurrentBoardSnapshot();
+  els.newBoardTournamentSelect.innerHTML = state.tournaments
+    .map(
+      (tournament) =>
+        `<option value="${escapeHtml(tournament.id)}" ${tournament.id === state.selectedTournamentId ? "selected" : ""}>${escapeHtml(tournament.name)}</option>`,
+    )
+    .join("");
+  els.boardList.innerHTML = [...state.boards]
+    .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
+    .map((board) => {
+      const payload = board.payload || {};
+      const tournamentName =
+        state.tournaments.find((tournament) => tournament.id === payload.selectedTournamentId)?.name ||
+        payload.eventName ||
+        "未設定";
+      const status = payload.gameStatus === "finished" ? "終了済み" : payload.gameStatus === "in_progress" ? "進行中" : "準備中";
+      return `
+        <div class="board-list-item ${board.id === activeBoardId ? "active" : ""}" data-board-id="${escapeHtml(board.id)}">
+          <button class="board-select-button" type="button">
+            <strong>${escapeHtml(board.name)}</strong>
+            <span>${escapeHtml(tournamentName)} / ${escapeHtml(payload.eventDate || "日付未選択")} / 第${normalizeGameNumber(payload.gameNumber)}試合</span>
+            <small>${status} / ${escapeHtml(formatBoardUpdatedAt(board.updatedAt))}</small>
+          </button>
+          <button class="board-rename-button secondary-button" type="button">名称変更</button>
+          <button class="board-delete-button danger-button" type="button" ${state.boards.length <= 1 ? "disabled" : ""}>削除</button>
+        </div>
+      `;
+    })
+    .join("");
+  els.boardList.querySelectorAll(".board-list-item").forEach((row) => {
+    const boardId = row.dataset.boardId;
+    row.querySelector(".board-select-button").addEventListener("click", () => {
+      saveCurrentBoardSnapshot();
+      loadBoard(boardId);
+    });
+    row.querySelector(".board-rename-button").addEventListener("click", () => renameBoard(boardId));
+    row.querySelector(".board-delete-button").addEventListener("click", () => deleteBoard(boardId));
+  });
+}
+
+function formatBoardUpdatedAt(value) {
+  if (!value) return "更新時刻なし";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "更新時刻なし";
+  return new Intl.DateTimeFormat("ja-JP", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }
 
 async function handleLogin(event) {
@@ -4789,7 +5074,10 @@ function resetStateToDefaults() {
     pendingExileContinuationPlayerId: "",
     gameHistories: [],
     customImpressionReasons: [],
+    boards: [],
   });
+  activeBoardId = "";
+  localStorage.removeItem(ACTIVE_BOARD_KEY);
 }
 
 function ensureSyncConfigured() {
@@ -4899,6 +5187,7 @@ async function applyCloudRecord(record) {
   state.activeView = activeView;
   state.rosterFilter = rosterFilter;
   ensureMatchDefaults();
+  saveCurrentBoardSnapshot();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   applyingCloudState = false;
   pendingCloudRecord = null;
@@ -4960,8 +5249,17 @@ function ensureMatchDefaults() {
   state.gameNumber = normalizeGameNumber(state.gameNumber);
   state.activeView = normalizeActiveView(state.activeView);
   state.rosterFilter = normalizeRosterFilter(state.rosterFilter);
-  applySelectedTournamentParticipation();
   backfillRoleClaimOrders(state.players);
+  if (!state.boards.length) {
+    activeBoardId = activeBoardId || crypto.randomUUID();
+    state.boards.push({
+      id: activeBoardId,
+      name: getDefaultBoardName(),
+      updatedAt: new Date().toISOString(),
+      payload: getBoardPayload(),
+    });
+    localStorage.setItem(ACTIVE_BOARD_KEY, activeBoardId);
+  }
 }
 
 function migrateLegacyRoster(savedEventName = "") {
@@ -5326,6 +5624,7 @@ function normalizeGameHistory(history) {
     startedAt: String(history.startedAt || ""),
     finishedAt: String(history.finishedAt || ""),
     selectedTournamentId: String(history.selectedTournamentId || ""),
+    boardId: String(history.boardId || ""),
     players: history.players.map(normalizePlayer),
     results: history.results.map(normalizeResult).filter(Boolean),
     seerColumnOverrides: Array.isArray(history.seerColumnOverrides)
@@ -5343,6 +5642,45 @@ function normalizeGameHistory(history) {
   };
   backfillRoleClaimOrders(normalized.players);
   return normalized;
+}
+
+function normalizeBoard(board) {
+  if (!board?.id || !board.payload || typeof board.payload !== "object") return null;
+  const payload = structuredClone(board.payload);
+  payload.day = Number.isFinite(Number(payload.day)) ? Math.max(1, Number(payload.day)) : 1;
+  payload.eventName = normalizeEventName(payload.eventName);
+  payload.eventDate = normalizeDateValue(payload.eventDate);
+  payload.gameNumber = normalizeGameNumber(payload.gameNumber);
+  payload.selectedTournamentId = String(payload.selectedTournamentId || "");
+  payload.wolfCount = normalizeWolfCount(payload.wolfCount);
+  payload.wolfModeActive = payload.wolfModeActive === true;
+  payload.wolfModeCoverRole = WOLF_MODE_COVER_ROLES.has(payload.wolfModeCoverRole) ? payload.wolfModeCoverRole : "";
+  payload.players = Array.isArray(payload.players) ? payload.players.map(normalizePlayer) : [];
+  payload.results = Array.isArray(payload.results) ? payload.results.map(normalizeResult).filter(Boolean) : [];
+  payload.seerColumnOverrides = Array.isArray(payload.seerColumnOverrides)
+    ? dedupeSeerColumnOverrides(payload.seerColumnOverrides.map(normalizeSeerColumnOverride).filter(Boolean))
+    : [];
+  payload.rivalPerspectiveOverrides = Array.isArray(payload.rivalPerspectiveOverrides)
+    ? migrateRivalPerspectiveOverrides(
+        payload.rivalPerspectiveOverrides.map(normalizeRivalPerspectiveOverride).filter(Boolean),
+        payload.rivalPerspectiveVersion,
+      )
+    : [];
+  payload.rivalPerspectiveVersion = 2;
+  payload.roleActions = Array.isArray(payload.roleActions) ? payload.roleActions.map(normalizeRoleAction).filter(Boolean) : [];
+  payload.claimEvents = Array.isArray(payload.claimEvents) ? payload.claimEvents.map(normalizeClaimEvent).filter(Boolean) : [];
+  payload.gameStatus = ["in_progress", "finished"].includes(payload.gameStatus) ? payload.gameStatus : "preparing";
+  payload.startedAt = payload.gameStatus !== "preparing" ? String(payload.startedAt || "") : "";
+  payload.pendingExileContinuationPlayerId = String(payload.pendingExileContinuationPlayerId || "");
+  if (!payload.players.some((player) => player.id === payload.pendingExileContinuationPlayerId && player.status === "exiled")) {
+    payload.pendingExileContinuationPlayerId = "";
+  }
+  return {
+    id: String(board.id),
+    name: String(board.name || "").trim().slice(0, 40) || "盤面",
+    updatedAt: String(board.updatedAt || ""),
+    payload,
+  };
 }
 
 function findPlayer(id) {

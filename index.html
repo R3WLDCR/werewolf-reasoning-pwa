@@ -32,6 +32,13 @@
           <button id="nextGameBtn" class="primary-button" type="button" hidden>次試合へ</button>
         </div>
       </header>
+      <button id="boardSwitcherBtn" class="board-switcher-button" type="button">
+        <span>
+          <small>現在の盤面</small>
+          <strong id="activeBoardName">盤面</strong>
+        </span>
+        <span aria-hidden="true">切替</span>
+      </button>
       <button id="remoteUpdateBanner" class="remote-update-banner" type="button" hidden>
         別端末の更新があります
         <span>同期画面で確認</span>
@@ -48,14 +55,14 @@
                 <button id="renameTournamentBtn" class="secondary-button" type="button">名称変更</button>
               </div>
             </div>
-            <label class="field date-field">
+            <div class="field date-field">
               <span>開催日</span>
               <span class="date-input-wrap">
-                <input id="eventDateInput" class="native-date-input" type="date" />
                 <button id="openDatePickerBtn" class="date-display-button" type="button">日付未選択</button>
+                <input id="eventDateInput" class="native-date-input" type="date" aria-label="開催日を選択" />
                 <button id="clearDateBtn" class="date-clear-button" type="button" aria-label="開催日を未選択に戻す">×</button>
               </span>
-            </label>
+            </div>
             <div class="field">
               <span>試合</span>
               <button id="gameNumberInput" class="game-number-button" type="button">第1試合</button>
@@ -352,6 +359,32 @@
         <div class="game-number-dialog-actions">
           <button id="cancelGameNumberBtn" class="secondary-button" type="button">キャンセル</button>
           <button id="confirmGameNumberBtn" class="primary-button" type="button">決定</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="boardManagerDialog" class="board-manager-dialog">
+      <form method="dialog">
+        <div class="sheet-handle" aria-hidden="true"></div>
+        <div class="sheet-heading">
+          <div>
+            <p class="kicker">Boards</p>
+            <h2>盤面を切り替える</h2>
+          </div>
+          <button id="closeBoardManagerBtn" class="round-button" type="button" aria-label="閉じる">×</button>
+        </div>
+        <div id="boardList" class="board-list"></div>
+        <div class="field-group">
+          <strong>新しい盤面</strong>
+          <label class="field">
+            <span>盤面名</span>
+            <input id="newBoardNameInput" type="text" maxlength="40" placeholder="例: おさかな視聴用" />
+          </label>
+          <label class="field">
+            <span>大会</span>
+            <select id="newBoardTournamentSelect"></select>
+          </label>
+          <button id="createBoardBtn" class="primary-button wide" type="button">盤面を作成</button>
         </div>
       </form>
     </dialog>

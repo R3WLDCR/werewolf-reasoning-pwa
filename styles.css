@@ -154,6 +154,45 @@ h2 {
   gap: 12px;
 }
 
+.board-switcher-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  margin-bottom: 12px;
+  padding: 7px 11px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel);
+  color: var(--ink);
+  text-align: left;
+}
+
+.board-switcher-button span:first-child {
+  display: grid;
+  min-width: 0;
+}
+
+.board-switcher-button small {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 900;
+}
+
+.board-switcher-button strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-switcher-button > span:last-child {
+  color: var(--accent-strong);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
 .view-stack {
   display: grid;
   gap: 12px;
@@ -253,16 +292,19 @@ textarea:focus {
 
 .native-date-input {
   position: absolute;
+  z-index: 2;
+  top: 0;
   left: 0;
-  bottom: 0;
-  width: 1px;
-  min-height: 1px;
-  height: 1px;
+  width: calc(100% - 52px);
+  min-height: 44px;
+  height: 44px;
   opacity: 0;
-  pointer-events: none;
+  cursor: pointer;
 }
 
 .date-display-button {
+  position: relative;
+  z-index: 1;
   min-width: 0;
   min-height: 44px;
   overflow: hidden;
@@ -275,6 +317,8 @@ textarea:focus {
 }
 
 .date-clear-button {
+  position: relative;
+  z-index: 3;
   min-height: 44px;
   border-radius: 7px;
   background: #263637;
@@ -1243,6 +1287,7 @@ select:disabled {
 .membership-dialog,
 .status-dialog,
 .game-number-dialog,
+.board-manager-dialog,
 .edit-dialog,
 .action-dialog,
 .history-edit-dialog,
@@ -1261,6 +1306,7 @@ select:disabled {
 .membership-dialog::backdrop,
 .status-dialog::backdrop,
 .game-number-dialog::backdrop,
+.board-manager-dialog::backdrop,
 .edit-dialog::backdrop,
 .action-dialog::backdrop,
 .history-edit-dialog::backdrop,
@@ -1273,6 +1319,7 @@ select:disabled {
 .membership-dialog form,
 .status-dialog form,
 .game-number-dialog form,
+.board-manager-dialog form,
 .edit-dialog form,
 .action-dialog form,
 .history-edit-dialog form,
@@ -1341,6 +1388,66 @@ select:disabled {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
+}
+
+.board-list {
+  display: grid;
+  gap: 8px;
+}
+
+.board-list-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 6px;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+.board-list-item.active {
+  border-color: var(--accent);
+}
+
+.board-select-button {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 4px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+
+.board-select-button strong,
+.board-select-button span,
+.board-select-button small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-select-button span,
+.board-select-button small {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.board-list-item .secondary-button,
+.board-list-item .danger-button {
+  min-height: 38px;
+  padding-inline: 9px;
+  font-size: 0.76rem;
+}
+
+@media (max-width: 520px) {
+  .board-list-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .board-select-button {
+    grid-row: span 2;
+  }
 }
 
 .role-guess-options,
