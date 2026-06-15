@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.76";
+const APP_VERSION = "1.77";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -174,8 +174,11 @@ document.addEventListener("DOMContentLoaded", () => {
   [
     "gameStatusBadge",
     "startGameBtn",
-    "returnSetupBtn",
-    "resetBoardBtn",
+    "boardActionsBtn",
+    "boardActionsDialog",
+    "closeBoardActionsBtn",
+    "changeSettingsBtn",
+    "initializeBoardBtn",
     "finishGameBtn",
     "nextGameBtn",
     "participantsView",
@@ -401,8 +404,13 @@ function bindEvents() {
     renderAndStore();
   });
   els.startGameBtn.addEventListener("click", startGame);
-  els.returnSetupBtn.addEventListener("click", returnToSetup);
-  els.resetBoardBtn.addEventListener("click", resetBoardForTesting);
+  els.boardActionsBtn.addEventListener("click", openBoardActionsDialog);
+  els.closeBoardActionsBtn.addEventListener("click", closeBoardActionsDialog);
+  els.changeSettingsBtn.addEventListener("click", returnToSetup);
+  els.initializeBoardBtn.addEventListener("click", resetBoardForTesting);
+  els.boardActionsDialog.addEventListener("click", (event) => {
+    if (event.target === els.boardActionsDialog) closeBoardActionsDialog();
+  });
   els.finishGameBtn.addEventListener("click", openFinishGameDialog);
   els.nextGameBtn.addEventListener("click", prepareNextGame);
   els.copyExportBtn.addEventListener("click", copyExport);
@@ -685,6 +693,7 @@ function hasBoardProgress() {
 
 function returnToSetup() {
   if (!isGameInProgress()) return;
+  closeBoardActionsDialog();
   if (!confirm("盤面を残したまま準備中へ戻りますか？")) return;
   state.gameStatus = "preparing";
   state.startedAt = "";
@@ -695,13 +704,24 @@ function returnToSetup() {
 
 function resetBoardForTesting() {
   if (isGameFinished()) return toast("終了済み盤面は次試合へ進んでからリセットしてください");
-  if (!confirm("CO、占い、役職行動、追放・襲撃、メモ、印象、役職推理を消して初日に戻しますか？")) return;
+  closeBoardActionsDialog();
+  if (!confirm("CO・推理・結果・生死・メモ・人狼モードを消去し、盤面を初期化しますか？\n\n大会、開催日、試合番号、参加・休憩状態、人狼数は残ります。")) return;
   state.gameStatus = "preparing";
   state.startedAt = "";
   resetBoardState();
   state.activeView = "participants";
   renderAndStore();
   toast("盤面を初日に戻しました");
+}
+
+function openBoardActionsDialog() {
+  if (isGameFinished() || state.activeView !== "reasoning") return;
+  els.changeSettingsBtn.hidden = !isGameInProgress();
+  els.boardActionsDialog.showModal();
+}
+
+function closeBoardActionsDialog() {
+  if (els.boardActionsDialog.open) els.boardActionsDialog.close();
 }
 
 function openFinishGameDialog() {
@@ -2054,8 +2074,7 @@ function renderGameLifecycle() {
   els.gameStatusBadge.classList.toggle("in-progress", inProgress);
   els.gameStatusBadge.classList.toggle("finished", finished);
   els.startGameBtn.hidden = !participantView || inProgress || finished;
-  els.returnSetupBtn.hidden = !reasoningView || !inProgress;
-  els.resetBoardBtn.hidden = !reasoningView || finished;
+  els.boardActionsBtn.hidden = !reasoningView || finished;
   els.finishGameBtn.hidden = !reasoningView || !inProgress;
   els.nextGameBtn.hidden = !reasoningView || !finished;
   [

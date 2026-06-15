@@ -1697,6 +1697,41 @@ select:disabled {
   gap: 9px;
 }
 
+.board-action-choices {
+  display: grid;
+  gap: 9px;
+}
+
+.board-action-choice {
+  display: grid;
+  gap: 5px;
+  min-height: 72px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  text-align: left;
+}
+
+.board-action-choice strong {
+  font-size: 1rem;
+}
+
+.board-action-choice span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.board-action-choice.danger {
+  border-color: #73373d;
+}
+
+.board-action-choice.danger strong {
+  color: var(--wolf);
+}
+
 .status-choice {
   min-height: 52px;
   border-radius: 8px;

@@ -25,8 +25,7 @@
         <div class="game-controls">
           <span id="gameStatusBadge" class="game-status-badge">準備中</span>
           <button id="startGameBtn" class="primary-button" type="button">ゲーム開始</button>
-          <button id="returnSetupBtn" class="secondary-button" type="button" hidden>準備へ戻る</button>
-          <button id="resetBoardBtn" class="secondary-button" type="button">盤面リセット</button>
+          <button id="boardActionsBtn" class="secondary-button" type="button">盤面操作</button>
           <button id="finishGameBtn" class="danger-button" type="button" hidden>ゲーム終了</button>
           <button id="nextGameBtn" class="primary-button" type="button" hidden>次試合へ</button>
         </div>
@@ -339,6 +338,29 @@
           <button id="markExiledBtn" class="status-choice exiled" type="button">追放</button>
           <button id="markAttackedBtn" class="status-choice attacked" type="button">襲撃</button>
           <button id="markAliveBtn" class="status-choice alive" type="button">生存に戻す</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="boardActionsDialog" class="action-dialog">
+      <form method="dialog">
+        <div class="sheet-handle" aria-hidden="true"></div>
+        <div class="sheet-heading">
+          <div>
+            <p class="kicker">Board Actions</p>
+            <h2>盤面操作</h2>
+          </div>
+          <button id="closeBoardActionsBtn" class="round-button" type="button" aria-label="閉じる">×</button>
+        </div>
+        <div class="board-action-choices">
+          <button id="changeSettingsBtn" class="board-action-choice" type="button">
+            <strong>設定を変更</strong>
+            <span>CO・推理・結果・生死・メモを残したまま、参加者や人狼数を変更します。</span>
+          </button>
+          <button id="initializeBoardBtn" class="board-action-choice danger" type="button">
+            <strong>盤面を初期化</strong>
+            <span>CO・推理・結果・生死・メモ・人狼モードを消去し、準備中へ戻します。</span>
+          </button>
         </div>
       </form>
     </dialog>
