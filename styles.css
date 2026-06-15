@@ -1286,7 +1286,6 @@ select:disabled {
 
 .membership-dialog,
 .status-dialog,
-.game-number-dialog,
 .board-manager-dialog,
 .edit-dialog,
 .action-dialog,
@@ -1305,7 +1304,6 @@ select:disabled {
 
 .membership-dialog::backdrop,
 .status-dialog::backdrop,
-.game-number-dialog::backdrop,
 .board-manager-dialog::backdrop,
 .edit-dialog::backdrop,
 .action-dialog::backdrop,
@@ -1318,7 +1316,6 @@ select:disabled {
 
 .membership-dialog form,
 .status-dialog form,
-.game-number-dialog form,
 .board-manager-dialog form,
 .edit-dialog form,
 .action-dialog form,
@@ -1337,57 +1334,6 @@ select:disabled {
 
 .impression-dialog form {
   max-height: 92dvh;
-}
-
-.game-number-button {
-  min-height: 44px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--paper);
-  color: var(--ink);
-  font-size: 1rem;
-  font-weight: 900;
-  text-align: left;
-}
-
-.game-number-display {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  min-height: 64px;
-  padding: 6px 14px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #070a0b;
-  color: var(--ink);
-  font-size: 2rem;
-  font-weight: 900;
-}
-
-.game-number-keypad {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.game-number-keypad button {
-  min-height: 58px;
-  border-radius: 7px;
-  background: #263637;
-  color: var(--ink);
-  font-size: 1.35rem;
-  font-weight: 900;
-}
-
-.game-number-keypad .keypad-secondary {
-  color: var(--muted);
-  font-size: 0.88rem;
-}
-
-.game-number-dialog-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
 }
 
 .board-list {

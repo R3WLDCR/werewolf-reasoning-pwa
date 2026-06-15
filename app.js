@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.74";
+const APP_VERSION = "1.76";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -159,8 +159,6 @@ let rivalPerspectiveRole = "";
 let rivalPerspectiveViewerId = "";
 let rivalPerspectiveTargetId = "";
 let toastTimer = null;
-let gameNumberDraft = "";
-let gameNumberDraftFresh = false;
 let syncTimer = null;
 let supabaseClient = null;
 let syncUser = null;
@@ -200,12 +198,6 @@ document.addEventListener("DOMContentLoaded", () => {
     "openDatePickerBtn",
     "clearDateBtn",
     "gameNumberInput",
-    "gameNumberDialog",
-    "gameNumberDisplay",
-    "gameNumberKeypad",
-    "closeGameNumberBtn",
-    "cancelGameNumberBtn",
-    "confirmGameNumberBtn",
     "matchSummary",
     "wolfCountSelect",
     "wolfCountBadge",
@@ -388,13 +380,10 @@ function bindEvents() {
     state.eventDate = "";
     renderAndStore();
   });
-  els.gameNumberInput.addEventListener("click", openGameNumberDialog);
-  els.closeGameNumberBtn.addEventListener("click", closeGameNumberDialog);
-  els.cancelGameNumberBtn.addEventListener("click", closeGameNumberDialog);
-  els.confirmGameNumberBtn.addEventListener("click", confirmGameNumber);
-  els.gameNumberKeypad.addEventListener("click", handleGameNumberKey);
-  els.gameNumberDialog.addEventListener("click", (event) => {
-    if (event.target === els.gameNumberDialog) closeGameNumberDialog();
+  els.gameNumberInput.addEventListener("change", () => {
+    if (isGameLocked()) return render();
+    state.gameNumber = normalizeGameNumber(els.gameNumberInput.value);
+    renderAndStore();
   });
   els.boardSwitcherBtn.addEventListener("click", openBoardManager);
   els.closeBoardManagerBtn.addEventListener("click", closeBoardManager);
@@ -534,14 +523,6 @@ function bindEvents() {
   });
 }
 
-function openGameNumberDialog() {
-  if (isGameLocked()) return toast("進行中・終了済みは試合番号を変更できません");
-  gameNumberDraft = String(state.gameNumber);
-  gameNumberDraftFresh = true;
-  renderGameNumberDraft();
-  els.gameNumberDialog.showModal();
-}
-
 function openBoardManager() {
   renderBoardManager();
   els.boardManagerDialog.showModal();
@@ -557,43 +538,6 @@ function createBoardFromDialog() {
   createBoard(els.newBoardNameInput.value.trim() || `${tournamentName} 第1試合`, tournamentId);
   els.newBoardNameInput.value = "";
   toast("新しい盤面を作成しました");
-}
-
-function closeGameNumberDialog() {
-  gameNumberDraft = "";
-  gameNumberDraftFresh = false;
-  els.gameNumberDialog.close();
-}
-
-function handleGameNumberKey(event) {
-  const key = event.target.closest("[data-game-number-key]")?.dataset.gameNumberKey;
-  if (!key) return;
-  if (key === "clear") {
-    gameNumberDraft = "";
-    gameNumberDraftFresh = false;
-  } else if (key === "backspace") {
-    gameNumberDraft = gameNumberDraft.slice(0, -1);
-    gameNumberDraftFresh = false;
-  } else {
-    const next = `${gameNumberDraftFresh ? "" : gameNumberDraft}${key}`.replace(/^0+/, "");
-    if (next && Number(next) > 99) return toast("試合番号は99までです");
-    gameNumberDraft = next;
-    gameNumberDraftFresh = false;
-  }
-  renderGameNumberDraft();
-}
-
-function renderGameNumberDraft() {
-  els.gameNumberDisplay.textContent = gameNumberDraft || "－";
-  els.confirmGameNumberBtn.disabled = !gameNumberDraft || Number(gameNumberDraft) < 1 || Number(gameNumberDraft) > 99;
-}
-
-function confirmGameNumber() {
-  const value = Number(gameNumberDraft);
-  if (!Number.isInteger(value) || value < 1 || value > 99) return;
-  state.gameNumber = value;
-  closeGameNumberDialog();
-  renderAndStore();
 }
 
 function addTournament() {
@@ -2092,7 +2036,7 @@ function renderMatchMeta() {
     .join("");
   els.eventDateInput.value = state.eventDate;
   els.openDatePickerBtn.textContent = state.eventDate || "日付未選択";
-  els.gameNumberInput.textContent = `第${state.gameNumber}試合`;
+  els.gameNumberInput.value = String(state.gameNumber);
   document.querySelectorAll("[data-roster-filter]").forEach((button) => {
     button.classList.toggle("active", button.dataset.rosterFilter === state.rosterFilter);
   });
@@ -5319,7 +5263,7 @@ function normalizeDateValue(value) {
 
 function normalizeGameNumber(value) {
   const number = Number(value);
-  return Number.isFinite(number) ? Math.min(99, Math.max(1, Math.trunc(number))) : 1;
+  return Number.isFinite(number) ? Math.min(12, Math.max(1, Math.trunc(number))) : 1;
 }
 
 function normalizeActiveView(value) {
