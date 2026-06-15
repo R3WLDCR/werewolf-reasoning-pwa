@@ -56,9 +56,18 @@
                 <button id="clearDateBtn" class="date-clear-button" type="button" aria-label="開催日を未選択に戻す">×</button>
               </span>
             </label>
-            <label class="field">
+            <div class="field">
               <span>試合</span>
-              <input id="gameNumberInput" type="number" inputmode="numeric" min="1" step="1" />
+              <button id="gameNumberInput" class="game-number-button" type="button">第1試合</button>
+            </div>
+            <label class="field">
+              <span>人狼数</span>
+              <select id="wolfCountSelect" aria-label="人狼数">
+                <option value="1">1人</option>
+                <option value="2">2人</option>
+                <option value="3">3人</option>
+                <option value="4">4人</option>
+              </select>
             </label>
           </section>
 
@@ -85,20 +94,13 @@
         </section>
 
         <section id="reasoningView" class="view-stack" aria-label="推理">
-          <section class="setup-panel" aria-label="卓情報と人狼数">
+          <section class="setup-panel" aria-label="卓情報">
             <div id="matchSummary" class="match-summary">未設定 / 第1試合</div>
-          <label class="wolf-count-card">
-            <span>人狼</span>
-            <select id="wolfCountSelect" aria-label="人狼数">
-              <option value="1">1</option>
-              <option value="2">2</option>
-              <option value="3">3</option>
-              <option value="4">4</option>
-            </select>
-          </label>
-
-          <div id="ropeCountBadge" class="rope-count-badge" aria-label="残り縄数">残り0縄</div>
-        </section>
+            <div class="reasoning-counts">
+              <div id="wolfCountBadge" class="wolf-count-badge" aria-label="設定済み人狼数">人狼 2人</div>
+              <div id="ropeCountBadge" class="rope-count-badge" aria-label="残り縄数">残り0縄</div>
+            </div>
+          </section>
 
         <section class="table-panel" aria-label="全プレイヤー一覧">
           <div id="playerRows" class="player-rows"></div>
@@ -322,6 +324,38 @@
       </form>
     </dialog>
 
+    <dialog id="gameNumberDialog" class="game-number-dialog">
+      <form method="dialog">
+        <div class="sheet-handle" aria-hidden="true"></div>
+        <div class="sheet-heading">
+          <div>
+            <p class="kicker">Game Number</p>
+            <h2>試合番号</h2>
+          </div>
+          <button id="closeGameNumberBtn" class="round-button" type="button" aria-label="キャンセル">×</button>
+        </div>
+        <output id="gameNumberDisplay" class="game-number-display" aria-live="polite">1</output>
+        <div id="gameNumberKeypad" class="game-number-keypad" aria-label="試合番号テンキー">
+          <button type="button" data-game-number-key="1">1</button>
+          <button type="button" data-game-number-key="2">2</button>
+          <button type="button" data-game-number-key="3">3</button>
+          <button type="button" data-game-number-key="4">4</button>
+          <button type="button" data-game-number-key="5">5</button>
+          <button type="button" data-game-number-key="6">6</button>
+          <button type="button" data-game-number-key="7">7</button>
+          <button type="button" data-game-number-key="8">8</button>
+          <button type="button" data-game-number-key="9">9</button>
+          <button class="keypad-secondary" type="button" data-game-number-key="clear">クリア</button>
+          <button type="button" data-game-number-key="0">0</button>
+          <button class="keypad-secondary" type="button" data-game-number-key="backspace" aria-label="1文字削除">⌫</button>
+        </div>
+        <div class="game-number-dialog-actions">
+          <button id="cancelGameNumberBtn" class="secondary-button" type="button">キャンセル</button>
+          <button id="confirmGameNumberBtn" class="primary-button" type="button">決定</button>
+        </div>
+      </form>
+    </dialog>
+
     <dialog id="membershipDialog" class="membership-dialog">
       <form id="membershipForm" method="dialog">
         <div class="sheet-handle" aria-hidden="true"></div>
@@ -385,7 +419,7 @@
         <div class="history-meta-grid">
           <label class="field"><span>大会名</span><input id="historyEventNameInput" type="text" /></label>
           <label class="field"><span>開催日</span><input id="historyEventDateInput" type="date" /></label>
-          <label class="field"><span>試合</span><input id="historyGameNumberInput" type="number" min="1" /></label>
+          <label class="field"><span>試合</span><input id="historyGameNumberInput" type="number" min="1" max="99" /></label>
           <label class="field">
             <span>勝利陣営</span>
             <input id="historyWinnerInput" type="text" maxlength="30" />

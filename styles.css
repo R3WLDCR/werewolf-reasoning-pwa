@@ -178,26 +178,22 @@ h2 {
   padding: 12px;
 }
 
-.wolf-count-card {
-  display: grid;
-  grid-template-columns: auto 82px;
-  align-items: center;
+.reasoning-counts {
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  min-height: 48px;
-  padding: 0 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--paper);
 }
 
-.wolf-count-card span {
-  color: var(--muted);
-  font-size: 0.86rem;
-  font-weight: 900;
-}
-
-.wolf-count-card select {
-  min-height: 36px;
+.wolf-count-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 11px;
+  border: 1px solid rgba(185, 75, 87, 0.72);
+  border-radius: 7px;
+  background: #241114;
+  color: #ffd9dc;
+  font-size: 0.88rem;
   font-weight: 900;
 }
 
@@ -1246,6 +1242,7 @@ select:disabled {
 
 .membership-dialog,
 .status-dialog,
+.game-number-dialog,
 .edit-dialog,
 .action-dialog,
 .history-edit-dialog,
@@ -1263,6 +1260,7 @@ select:disabled {
 
 .membership-dialog::backdrop,
 .status-dialog::backdrop,
+.game-number-dialog::backdrop,
 .edit-dialog::backdrop,
 .action-dialog::backdrop,
 .history-edit-dialog::backdrop,
@@ -1274,6 +1272,7 @@ select:disabled {
 
 .membership-dialog form,
 .status-dialog form,
+.game-number-dialog form,
 .edit-dialog form,
 .action-dialog form,
 .history-edit-dialog form,
@@ -1291,6 +1290,57 @@ select:disabled {
 
 .impression-dialog form {
   max-height: 92dvh;
+}
+
+.game-number-button {
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 900;
+  text-align: left;
+}
+
+.game-number-display {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 64px;
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #070a0b;
+  color: var(--ink);
+  font-size: 2rem;
+  font-weight: 900;
+}
+
+.game-number-keypad {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.game-number-keypad button {
+  min-height: 58px;
+  border-radius: 7px;
+  background: #263637;
+  color: var(--ink);
+  font-size: 1.35rem;
+  font-weight: 900;
+}
+
+.game-number-keypad .keypad-secondary {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.game-number-dialog-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
 }
 
 .role-guess-options,
