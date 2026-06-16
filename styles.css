@@ -1454,6 +1454,30 @@ select:disabled {
   gap: 7px;
 }
 
+.wolf-mode-entry-hint {
+  min-height: 42px;
+  display: grid;
+  align-items: center;
+  padding: 9px 11px;
+  border: 1px solid rgba(185, 75, 87, 0.48);
+  border-radius: 8px;
+  background: #241114;
+  color: #ffd9dc;
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.wolf-mode-entry-hint.active {
+  border-color: rgba(185, 75, 87, 0.82);
+  background: #35191d;
+}
+
+.wolf-mode-entry-hint.disabled {
+  border-color: var(--line);
+  background: var(--paper);
+  color: var(--muted);
+}
+
 .role-guess-option,
 .history-role-guess-option {
   display: flex;

@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.79";
+const APP_VERSION = "1.80";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -305,6 +305,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "closeImpressionBtn",
     "roleGuessDialog",
     "roleGuessPlayerName",
+    "wolfModeEntryHint",
     "roleGuessCandidateOptions",
     "blackTargetField",
     "blackTargetSelect",
@@ -1393,6 +1394,7 @@ function saveRivalPerspectiveOverride() {
 function renderRoleGuessDialog(player) {
   const editingWolfModeMember = isWolfMode() && isWolfModeMember(player);
   const selectedValue = editingWolfModeMember ? getWolfModeCoverRole(player) : getRoleGuessDisplay(player).value;
+  renderWolfModeEntryHint(player);
   renderBlackTargetOptions(player);
   const options = editingWolfModeMember
     ? Object.entries(ROLE_GUESS_LABELS).filter(([value]) => WOLF_MODE_COVER_ROLES.has(value))
@@ -1480,10 +1482,10 @@ function saveRoleGuess() {
     return toast("表向き役職を保存しました");
   }
   const wasWolfMode = isWolfMode();
-  if (selectedWerewolfForSelf && !wasWolfMode && state.gameStatus !== "preparing") {
-    return toast("人狼モードは準備中に設定してください");
+  if (selectedWerewolfForSelf && !wasWolfMode && player.participating === false) {
+    return toast("参加中にすると人狼モードを開始できます");
   }
-  const entersWolfMode = state.gameStatus === "preparing" && selectedWerewolfForSelf && !wasWolfMode;
+  const entersWolfMode = selectedWerewolfForSelf && !wasWolfMode;
   const teammateLimit = Math.max(0, state.wolfCount - 1);
   const shouldRegisterWolfTeammate =
     isWolfMode() &&
@@ -1520,6 +1522,23 @@ function saveRoleGuess() {
         ? `仲間の人狼を選択しました（残り${teammateLimit - getWolfTeammates().length}人）`
         : "役職推理を保存しました",
   );
+}
+
+function renderWolfModeEntryHint(player) {
+  const show = isPriorityPlayer(player);
+  els.wolfModeEntryHint.hidden = !show;
+  if (!show) {
+    els.wolfModeEntryHint.textContent = "";
+    els.wolfModeEntryHint.className = "wolf-mode-entry-hint";
+    return;
+  }
+  const inactive = player.participating === false;
+  els.wolfModeEntryHint.className = `wolf-mode-entry-hint ${isWolfMode() ? "active" : inactive ? "disabled" : ""}`;
+  els.wolfModeEntryHint.textContent = isWolfMode()
+    ? "人狼モード中"
+    : inactive
+      ? "参加中にすると人狼モードを開始できます"
+      : "人狼を選ぶと人狼モードを開始します";
 }
 
 function exitWolfMode() {
