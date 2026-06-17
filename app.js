@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.80";
+const APP_VERSION = "1.81";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -638,6 +638,7 @@ function addPlayer() {
     blackTargetFixedRank: 0,
     blackTargetRank: 0,
     autoSelfRivalWolfSide: false,
+    autoSingleClaimRoleGuess: null,
     autoConfirmedWhite: false,
     autoConfirmedWhitePreviousGuess: null,
     mediumConfirmedRoleGuess: "",
@@ -1124,6 +1125,7 @@ function resetBoardState() {
     blackTargetFixedRank: 0,
     blackTargetRank: 0,
     autoSelfRivalWolfSide: false,
+    autoSingleClaimRoleGuess: null,
     autoConfirmedWhite: false,
     autoConfirmedWhitePreviousGuess: null,
     mediumConfirmedRoleGuess: "",
@@ -3025,6 +3027,7 @@ function applyConfirmedWhiteUpdates() {
   reconcileWolfTeammates();
   getActivePlayers().filter((player) => player.attackedWolfSideConfirmedMadman).forEach(setConfirmedMadman);
   reconcileStaleNonSelfSingleSeerHumanGuesses();
+  reconcileSingleClaimRoleGuesses();
   reconcileConfirmedRoleEvidence();
   reconcileMediumHumanConversions();
   reconcileAttackConfirmedSeerConflicts();
@@ -3034,6 +3037,37 @@ function applyConfirmedWhiteUpdates() {
   applySelfPerspectiveRivalRoleGuesses();
   reconcileConfirmedWhiteRoleGuessLocks(currentSeerClaimants);
   reconcileBlackTargets();
+}
+
+function reconcileSingleClaimRoleGuesses() {
+  SELF_RIVAL_GUESS_ROLES.forEach((role) => {
+    const claimants = getRoleClaimants(role);
+    getActivePlayers().forEach((player) => {
+      const current = player.autoSingleClaimRoleGuess;
+      const shouldApply = claimants.length === 1 && claimants[0].id === player.id && player.role === role;
+      if (current?.role === role && !shouldApply) {
+        restoreSingleClaimRoleGuess(player);
+      }
+      if (!shouldApply || player.manualRoleGuess || player.autoSingleClaimRoleGuess) return;
+      player.autoSingleClaimRoleGuess = getRoleGuessSnapshot(player);
+      player.autoSingleClaimRoleGuess.role = role;
+      player.roleGuessCandidates = [role];
+      player.primaryRoleGuess = role;
+      player.manualRoleGuess = false;
+      player.autoSelfRivalWolfSide = false;
+    });
+  });
+}
+
+function restoreSingleClaimRoleGuess(player) {
+  const previous = player.autoSingleClaimRoleGuess;
+  if (!previous) return;
+  if (!player.manualRoleGuess && getRoleGuessDisplay(player).value === previous.role) {
+    player.roleGuessCandidates = normalizeRoleGuessCandidates(previous.roleGuessCandidates, previous.primaryRoleGuess);
+    player.primaryRoleGuess = normalizePrimaryRoleGuess(previous.primaryRoleGuess, player.roleGuessCandidates);
+    player.manualRoleGuess = previous.manualRoleGuess === true;
+  }
+  player.autoSingleClaimRoleGuess = null;
 }
 
 function reconcileStaleNonSelfSingleSeerHumanGuesses() {
@@ -5423,6 +5457,9 @@ function normalizePlayer(player) {
         : 0,
     blackTargetRank: Math.max(0, Math.min(4, Number(player.blackTargetRank) || 0)),
     autoSelfRivalWolfSide: attackedWolfSideConfirmedMadman ? false : player.autoSelfRivalWolfSide === true,
+    autoSingleClaimRoleGuess: attackedWolfSideConfirmedMadman
+      ? null
+      : normalizeSingleClaimRoleGuess(player.autoSingleClaimRoleGuess),
     autoConfirmedWhite: player.autoConfirmedWhite === true,
     autoConfirmedWhitePreviousGuess: normalizeConfirmedRolePreviousGuess(player.autoConfirmedWhitePreviousGuess),
     mediumConfirmedRoleGuess: ["villager", "werewolf"].includes(player.mediumConfirmedRoleGuess)
@@ -5446,6 +5483,15 @@ function normalizePlayer(player) {
       normalizedIndependentRole && getRoleClaimOrder(player) < Number.MAX_SAFE_INTEGER
         ? Math.max(1, getRoleClaimOrder(player))
         : null,
+  };
+}
+
+function normalizeSingleClaimRoleGuess(previous) {
+  const normalized = normalizeConfirmedRolePreviousGuess(previous);
+  if (!normalized || !SELF_RIVAL_GUESS_ROLES.has(previous.role)) return null;
+  return {
+    ...normalized,
+    role: previous.role,
   };
 }
 
