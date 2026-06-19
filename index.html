@@ -245,9 +245,15 @@
               <span>この端末 <strong id="localUpdatedText">-</strong></span>
               <span>クラウド <strong id="cloudUpdatedText">-</strong></span>
             </div>
-            <div class="sync-actions">
-              <button id="downloadCloudBtn" class="secondary-button" type="button">クラウドから取得</button>
-              <button id="uploadLocalBtn" class="primary-button" type="button">この端末で上書き</button>
+            <div class="sync-conflict-actions">
+              <div class="sync-choice-card">
+                <button id="downloadCloudBtn" class="primary-button wide" type="button">別端末の内容を取り込む</button>
+                <span>PCやiPhoneなど、別端末で保存された内容をこの端末に反映します。</span>
+              </div>
+              <div class="sync-choice-card danger">
+                <button id="uploadLocalBtn" class="danger-button wide" type="button">この端末の内容で上書き</button>
+                <span>この端末の現在の内容をクラウドへ送り、別端末側の更新を上書きします。</span>
+              </div>
             </div>
           </section>
         </section>
