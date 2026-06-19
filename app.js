@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.85";
+const APP_VERSION = "1.86";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -93,6 +93,10 @@ const ROLE_GUESS_LABELS = {
   teruteru: "てるてる",
 };
 const WOLF_MODE_COVER_ROLES = new Set(["unknown", "villager", "seer", "medium", "guard", "hunter"]);
+
+function normalizeCitizenText(value) {
+  return String(value || "").replaceAll("村人", "市民");
+}
 const BOARD_STATE_FIELDS = [
   "day",
   "eventName",
@@ -775,7 +779,7 @@ function finishGame() {
   const validation = updateFinishGameValidation({ focusFirstInvalid: true });
   if (!validation.valid) return;
   const selectedWinner = els.winnerSelect.value;
-  const winner = selectedWinner === "その他" ? els.otherWinnerInput.value.trim() : selectedWinner;
+  const winner = normalizeCitizenText(selectedWinner === "その他" ? els.otherWinnerInput.value.trim() : selectedWinner);
   const trueRoles = getFinishTrueRoles();
   const stateBeforeFinish = structuredClone(state);
   const selectedHistoryIdBeforeFinish = selectedHistoryId;
@@ -951,7 +955,7 @@ function createGameHistory(winner, trueRoles = new Map()) {
     wolfCount: state.wolfCount,
     wolfModeActive: state.wolfModeActive,
     wolfModeCoverRole: players.find(isPriorityPlayer)?.wolfModeCoverRole || state.wolfModeCoverRole,
-    winner,
+    winner: normalizeCitizenText(winner),
     startedAt: state.startedAt,
     finishedAt: new Date().toISOString(),
     players,
@@ -2327,7 +2331,7 @@ function renderHistories() {
         <strong>${escapeHtml(history.eventName || "未設定")} / 第${normalizeGameNumber(history.gameNumber)}試合</strong>
         <span>${escapeHtml(history.eventDate || "日付未選択")}</span>
       </span>
-      <span class="winner-label">${escapeHtml(history.winner || "勝利陣営未設定")}</span>
+      <span class="winner-label">${escapeHtml(normalizeCitizenText(history.winner) || "勝利陣営未設定")}</span>
     `;
     button.addEventListener("click", () => openHistoryDetail(history.id));
     row.append(checkbox, button);
@@ -4058,7 +4062,7 @@ function openHistoryEditDialog() {
   els.historyEventNameInput.value = history.eventName || "";
   els.historyEventDateInput.value = history.eventDate || "";
   els.historyGameNumberInput.value = String(history.gameNumber || 1);
-  els.historyWinnerInput.value = history.winner || "";
+  els.historyWinnerInput.value = normalizeCitizenText(history.winner);
   renderHistoryEditor(history);
   els.historyEditDialog.showModal();
 }
@@ -4477,7 +4481,7 @@ function saveHistoryEdits() {
   history.eventName = els.historyEventNameInput.value.trim() || "未設定";
   history.eventDate = normalizeDateValue(els.historyEventDateInput.value);
   history.gameNumber = normalizeGameNumber(els.historyGameNumberInput.value);
-  history.winner = els.historyWinnerInput.value.trim() || "勝利陣営未設定";
+  history.winner = normalizeCitizenText(els.historyWinnerInput.value.trim()) || "勝利陣営未設定";
   els.historyPlayerEditor.querySelectorAll("[data-player-id]").forEach((row) => {
     const player = history.players.find((item) => item.id === row.dataset.playerId);
     if (!player) return;
@@ -4650,7 +4654,7 @@ function buildExportText() {
 function buildHistoryText(history) {
   const lines = [
     `${history.eventName || "未設定"} / ${history.eventDate || "日付未選択"} / 第${history.gameNumber}試合`,
-    `勝利: ${history.winner || "未設定"}`,
+    `勝利: ${normalizeCitizenText(history.winner) || "未設定"}`,
     `人狼: ${history.wolfCount}`,
     "",
     "真の役職",
@@ -5938,7 +5942,7 @@ function normalizeGameHistory(history) {
     wolfCount: normalizeWolfCount(history.wolfCount),
     wolfModeActive: history.wolfModeActive === true || history.players.some((player) => player.wolfTeammate === true),
     wolfModeCoverRole: WOLF_MODE_COVER_ROLES.has(history.wolfModeCoverRole) ? history.wolfModeCoverRole : "",
-    winner: String(history.winner || "勝利陣営未設定"),
+    winner: normalizeCitizenText(history.winner || "勝利陣営未設定"),
     startedAt: String(history.startedAt || ""),
     finishedAt: String(history.finishedAt || ""),
     selectedTournamentId: String(history.selectedTournamentId || ""),
