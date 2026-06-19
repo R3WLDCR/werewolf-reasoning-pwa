@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.82";
+const APP_VERSION = "1.83";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -468,6 +468,8 @@ function bindEvents() {
   els.closeVoteBtn.addEventListener("click", closeVoteDialog);
   els.addVoteBtn.addEventListener("click", addVoteFromDialog);
   els.saveVotesBtn.addEventListener("click", saveVoteDialog);
+  els.voteDayInput.addEventListener("input", updateVoteVoterOptions);
+  els.voteRoundInput.addEventListener("input", updateVoteVoterOptions);
   els.voteDialog.addEventListener("click", (event) => {
     if (event.target === els.voteDialog) closeVoteDialog();
   });
@@ -1871,10 +1873,10 @@ function openVoteDialog() {
   const currentDay = getCurrentLogDay();
   els.voteDayInput.value = currentDay;
   els.voteRoundInput.value = getNextVoteRound(currentDay, editingVotesDraft);
-  els.voteVoterSelect.innerHTML = getVotePlayerOptionsHtml(players);
   els.voteTargetSelect.innerHTML = getVoteTargetOptionsHtml(players);
   els.voteNoteInput.value = "";
   renderVoteHistoryList();
+  updateVoteVoterOptions();
   els.voteDialog.showModal();
 }
 
@@ -1896,7 +1898,9 @@ function addVoteFromDialog() {
   if (!vote) return toast("投票者と投票先を選んでください");
   editingVotesDraft.push(vote);
   els.voteNoteInput.value = "";
+  advanceVoteRoundIfComplete();
   renderVoteHistoryList();
+  updateVoteVoterOptions();
 }
 
 function saveVoteDialog() {
@@ -1932,6 +1936,38 @@ function renderVoteHistoryList() {
   bindVoteDeleteButtons(els.voteHistoryList, editingVotesDraft, renderVoteHistoryList);
 }
 
+function updateVoteVoterOptions() {
+  editingVotesDraft = readVoteRows(els.voteHistoryList);
+  const players = getActivePlayers();
+  const day = Number(els.voteDayInput.value) || 1;
+  const round = Number(els.voteRoundInput.value) || 1;
+  const previousValue = els.voteVoterSelect.value;
+  const availablePlayers = getVoteAvailableVoters(players, day, round, editingVotesDraft);
+  els.voteVoterSelect.innerHTML = getVotePlayerOptionsHtml(availablePlayers);
+  if (availablePlayers.some((player) => player.id === previousValue)) {
+    els.voteVoterSelect.value = previousValue;
+  }
+  els.addVoteBtn.disabled = availablePlayers.length === 0;
+}
+
+function getVoteAvailableVoters(players, day, round, votes) {
+  const votedIds = new Set(
+    votes
+      .filter((vote) => Number(vote.day) === Number(day) && Number(vote.round) === Number(round))
+      .map((vote) => vote.voterId),
+  );
+  return players.filter((player) => !votedIds.has(player.id));
+}
+
+function advanceVoteRoundIfComplete() {
+  const players = getActivePlayers();
+  const day = Number(els.voteDayInput.value) || 1;
+  const round = Number(els.voteRoundInput.value) || 1;
+  if (!players.length) return;
+  if (getVoteAvailableVoters(players, day, round, editingVotesDraft).length > 0) return;
+  els.voteRoundInput.value = round + 1;
+}
+
 function getVoteEditorRowHtml(vote, players) {
   return `
     <div class="vote-edit-row" data-vote-id="${escapeHtml(vote.id)}">
@@ -1952,6 +1988,7 @@ function bindVoteDeleteButtons(root, votes, renderCallback) {
       const index = votes.findIndex((vote) => vote.id === row.dataset.voteId);
       if (index >= 0) votes.splice(index, 1);
       renderCallback();
+      if (root === els.voteHistoryList) updateVoteVoterOptions();
     });
   });
 }
