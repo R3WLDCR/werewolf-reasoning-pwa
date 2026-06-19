@@ -122,6 +122,7 @@
             <div class="reasoning-counts">
               <div id="wolfCountBadge" class="wolf-count-badge" aria-label="設定済み人狼数">人狼 2人</div>
               <div id="ropeCountBadge" class="rope-count-badge" aria-label="残り縄数">残り0縄</div>
+              <button id="openVoteDialogBtn" class="secondary-button" type="button">投票</button>
             </div>
           </section>
 
@@ -347,6 +348,29 @@
       </form>
     </dialog>
 
+    <dialog id="voteDialog" class="vote-dialog">
+      <form method="dialog">
+        <div class="sheet-handle" aria-hidden="true"></div>
+        <div class="sheet-heading">
+          <div>
+            <p class="kicker">Votes</p>
+            <h2>投票履歴</h2>
+          </div>
+          <button id="closeVoteBtn" class="round-button" type="button" aria-label="閉じる">×</button>
+        </div>
+        <div class="vote-entry-grid">
+          <label class="field"><span>日付</span><input id="voteDayInput" type="number" min="1" /></label>
+          <label class="field"><span>投票回</span><input id="voteRoundInput" type="number" min="1" /></label>
+          <label class="field"><span>投票者</span><select id="voteVoterSelect"></select></label>
+          <label class="field"><span>投票先</span><select id="voteTargetSelect"></select></label>
+          <label class="field vote-note-field"><span>メモ</span><input id="voteNoteInput" type="text" maxlength="60" placeholder="任意" /></label>
+          <button id="addVoteBtn" class="primary-button" type="button">1票追加</button>
+        </div>
+        <div id="voteHistoryList" class="role-action-list"></div>
+        <button id="saveVotesBtn" class="primary-button wide" type="button">投票履歴を保存</button>
+      </form>
+    </dialog>
+
     <dialog id="boardActionsDialog" class="action-dialog">
       <form method="dialog">
         <div class="sheet-handle" aria-hidden="true"></div>
@@ -487,6 +511,11 @@
           <button id="addHistoryClaimEventBtn" class="secondary-button" type="button">CO履歴を追加</button>
         </div>
         <div id="historyClaimEventEditor" class="history-role-action-editor"></div>
+        <div class="section-heading flush">
+          <div class="field-title">投票履歴</div>
+          <button id="addHistoryVoteBtn" class="secondary-button" type="button">投票を追加</button>
+        </div>
+        <div id="historyVoteEditor" class="history-role-action-editor"></div>
         <div class="section-heading flush">
           <div class="field-title">役職行動結果</div>
           <button id="addHistoryRoleActionBtn" class="secondary-button" type="button">行動結果を追加</button>

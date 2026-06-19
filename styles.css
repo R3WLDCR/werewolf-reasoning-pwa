@@ -1343,6 +1343,7 @@ select:disabled {
 .history-edit-dialog,
 .impression-dialog,
 .role-guess-dialog,
+.vote-dialog,
 .rival-perspective-dialog {
   width: min(760px, 100%);
   max-width: 100%;
@@ -1361,6 +1362,7 @@ select:disabled {
 .history-edit-dialog::backdrop,
 .impression-dialog::backdrop,
 .role-guess-dialog::backdrop,
+.vote-dialog::backdrop,
 .rival-perspective-dialog::backdrop {
   background: rgba(22, 35, 38, 0.42);
 }
@@ -1373,6 +1375,7 @@ select:disabled {
 .history-edit-dialog form,
 .impression-dialog form,
 .role-guess-dialog form,
+.vote-dialog form,
 .rival-perspective-dialog form {
   display: grid;
   gap: 13px;
@@ -1620,6 +1623,7 @@ select:disabled {
 .history-player-editor,
 .history-result-editor,
 .history-role-action-editor,
+.history-vote-editor,
 .role-action-list {
   display: grid;
   gap: 8px;
@@ -1632,6 +1636,7 @@ select:disabled {
 .history-player-edit,
 .history-result-edit,
 .history-role-action-edit,
+.vote-edit-row,
 .role-action-edit {
   display: grid;
   gap: 7px;
@@ -1658,6 +1663,26 @@ select:disabled {
 .history-role-action-edit [data-field="note"],
 .history-role-action-edit .danger-button {
   grid-column: 1 / -1;
+}
+
+.vote-entry-grid {
+  display: grid;
+  grid-template-columns: 72px 72px minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  align-items: end;
+}
+
+.vote-note-field {
+  grid-column: 1 / -2;
+}
+
+.vote-entry-grid .primary-button {
+  min-height: 44px;
+}
+
+.vote-edit-row {
+  grid-template-columns: 60px 60px minmax(0, 1fr) minmax(0, 1fr) minmax(120px, 1fr) auto;
+  align-items: center;
 }
 
 .history-player-edit {
@@ -2135,7 +2160,9 @@ input.invalid {
 
   .history-meta-grid,
   .history-player-edit,
-  .history-result-edit {
+  .history-result-edit,
+  .vote-entry-grid,
+  .vote-edit-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -2149,6 +2176,12 @@ input.invalid {
   }
 
   .history-result-edit .danger-button {
+    grid-column: 1 / -1;
+  }
+
+  .vote-note-field,
+  .vote-edit-row [data-field="note"],
+  .vote-edit-row .danger-button {
     grid-column: 1 / -1;
   }
 

@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.81";
+const APP_VERSION = "1.82";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -109,6 +109,7 @@ const BOARD_STATE_FIELDS = [
   "rivalPerspectiveVersion",
   "roleActions",
   "claimEvents",
+  "voteHistories",
   "gameStatus",
   "startedAt",
   "pendingExileContinuationPlayerId",
@@ -133,6 +134,7 @@ const state = {
   rivalPerspectiveVersion: 2,
   roleActions: [],
   claimEvents: [],
+  voteHistories: [],
   gameStatus: "preparing",
   startedAt: "",
   pendingExileContinuationPlayerId: "",
@@ -158,6 +160,7 @@ let roleGuessPlayerId = "";
 let rivalPerspectiveRole = "";
 let rivalPerspectiveViewerId = "";
 let rivalPerspectiveTargetId = "";
+let editingVotesDraft = [];
 let toastTimer = null;
 let syncTimer = null;
 let supabaseClient = null;
@@ -213,6 +216,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "participantRows",
     "participantEmptyState",
     "ropeCountBadge",
+    "openVoteDialogBtn",
     "playerRows",
     "emptyState",
     "exportSummary",
@@ -252,6 +256,16 @@ document.addEventListener("DOMContentLoaded", () => {
     "markExiledBtn",
     "markAttackedBtn",
     "markAliveBtn",
+    "voteDialog",
+    "closeVoteBtn",
+    "voteDayInput",
+    "voteRoundInput",
+    "voteVoterSelect",
+    "voteTargetSelect",
+    "voteNoteInput",
+    "addVoteBtn",
+    "voteHistoryList",
+    "saveVotesBtn",
     "membershipDialog",
     "membershipForm",
     "membershipPlayerName",
@@ -285,6 +299,8 @@ document.addEventListener("DOMContentLoaded", () => {
     "addHistoryRoleActionBtn",
     "historyClaimEventEditor",
     "addHistoryClaimEventBtn",
+    "historyVoteEditor",
+    "addHistoryVoteBtn",
     "bulkDeleteHistoryDialog",
     "bulkDeleteHistoryForm",
     "bulkDeleteHistoryTitle",
@@ -448,6 +464,13 @@ function bindEvents() {
   els.markExiledBtn.addEventListener("click", () => setPlayerStatus("exiled"));
   els.markAttackedBtn.addEventListener("click", () => setPlayerStatus("attacked"));
   els.markAliveBtn.addEventListener("click", () => setPlayerStatus("alive"));
+  els.openVoteDialogBtn.addEventListener("click", openVoteDialog);
+  els.closeVoteBtn.addEventListener("click", closeVoteDialog);
+  els.addVoteBtn.addEventListener("click", addVoteFromDialog);
+  els.saveVotesBtn.addEventListener("click", saveVoteDialog);
+  els.voteDialog.addEventListener("click", (event) => {
+    if (event.target === els.voteDialog) closeVoteDialog();
+  });
   els.closeMembershipBtn.addEventListener("click", closeMembershipDialog);
   els.membershipDialog.addEventListener("click", (event) => {
     if (event.target === els.membershipDialog) closeMembershipDialog();
@@ -480,6 +503,7 @@ function bindEvents() {
   els.addHistoryRivalPerspectiveOverrideBtn.addEventListener("click", addHistoryRivalPerspectiveOverrideEditorRow);
   els.addHistoryRoleActionBtn.addEventListener("click", addHistoryRoleActionEditorRow);
   els.addHistoryClaimEventBtn.addEventListener("click", addHistoryClaimEventEditorRow);
+  els.addHistoryVoteBtn.addEventListener("click", addHistoryVoteEditorRow);
   els.historyEditDialog.addEventListener("click", (event) => {
     if (event.target === els.historyEditDialog) closeHistoryEditDialog();
   });
@@ -685,6 +709,7 @@ function hasBoardProgress() {
   if (state.rivalPerspectiveOverrides.length) return true;
   if (state.roleActions.length) return true;
   if (state.claimEvents.length) return true;
+  if (state.voteHistories.length) return true;
   return getActivePlayers().some(
     (player) =>
       Boolean(player.role) ||
@@ -934,6 +959,7 @@ function createGameHistory(winner, trueRoles = new Map()) {
     rivalPerspectiveVersion: 2,
     roleActions: structuredClone(state.roleActions),
     claimEvents: structuredClone(state.claimEvents),
+    voteHistories: structuredClone(state.voteHistories),
     selectedTournamentId: state.selectedTournamentId,
     boardId: activeBoardId,
   };
@@ -1069,6 +1095,7 @@ function createBoard(name, tournamentId) {
     rivalPerspectiveVersion: 2,
     roleActions: [],
     claimEvents: [],
+    voteHistories: [],
     gameStatus: "preparing",
     startedAt: "",
     pendingExileContinuationPlayerId: "",
@@ -1146,6 +1173,7 @@ function resetBoardState() {
   state.rivalPerspectiveOverrides = [];
   state.roleActions = [];
   state.claimEvents = [];
+  state.voteHistories = [];
 }
 
 function applySelectedTournamentParticipation() {
@@ -1835,6 +1863,120 @@ function closeStatusDialog() {
   els.statusDialog.close();
 }
 
+function openVoteDialog() {
+  if (isGameFinished()) return toast("終了済み盤面は編集できません");
+  const players = getActivePlayers();
+  if (!players.length) return toast("参加者がいません");
+  editingVotesDraft = state.voteHistories.map((vote) => ({ ...vote }));
+  const currentDay = getCurrentLogDay();
+  els.voteDayInput.value = currentDay;
+  els.voteRoundInput.value = getNextVoteRound(currentDay, editingVotesDraft);
+  els.voteVoterSelect.innerHTML = getVotePlayerOptionsHtml(players);
+  els.voteTargetSelect.innerHTML = getVoteTargetOptionsHtml(players);
+  els.voteNoteInput.value = "";
+  renderVoteHistoryList();
+  els.voteDialog.showModal();
+}
+
+function closeVoteDialog() {
+  editingVotesDraft = [];
+  els.voteDialog.close();
+}
+
+function addVoteFromDialog() {
+  editingVotesDraft = readVoteRows(els.voteHistoryList);
+  const vote = normalizeVoteHistory({
+    id: crypto.randomUUID(),
+    day: els.voteDayInput.value,
+    round: els.voteRoundInput.value,
+    voterId: els.voteVoterSelect.value,
+    targetId: els.voteTargetSelect.value,
+    note: els.voteNoteInput.value,
+  });
+  if (!vote) return toast("投票者と投票先を選んでください");
+  editingVotesDraft.push(vote);
+  els.voteNoteInput.value = "";
+  renderVoteHistoryList();
+}
+
+function saveVoteDialog() {
+  state.voteHistories = readVoteRows(els.voteHistoryList);
+  closeVoteDialog();
+  renderAndStore();
+  toast("投票履歴を保存しました");
+}
+
+function readVoteRows(root) {
+  return Array.from(root.querySelectorAll("[data-vote-id]"))
+    .map((row) =>
+      normalizeVoteHistory({
+        id: row.dataset.voteId.startsWith("new-") ? crypto.randomUUID() : row.dataset.voteId,
+        day: row.querySelector('[data-field="day"]').value,
+        round: row.querySelector('[data-field="round"]').value,
+        voterId: row.querySelector('[data-field="voterId"]').value,
+        targetId: row.querySelector('[data-field="targetId"]').value,
+        note: row.querySelector('[data-field="note"]').value,
+      }),
+    )
+    .filter(Boolean);
+}
+
+function renderVoteHistoryList() {
+  const players = getActivePlayers();
+  const sortedVotes = editingVotesDraft
+    .slice()
+    .sort((a, b) => a.day - b.day || a.round - b.round);
+  els.voteHistoryList.innerHTML = sortedVotes.length
+    ? sortedVotes.map((vote) => getVoteEditorRowHtml(vote, players)).join("")
+    : '<div class="empty-inline">投票履歴なし</div>';
+  bindVoteDeleteButtons(els.voteHistoryList, editingVotesDraft, renderVoteHistoryList);
+}
+
+function getVoteEditorRowHtml(vote, players) {
+  return `
+    <div class="vote-edit-row" data-vote-id="${escapeHtml(vote.id)}">
+      <input data-field="day" type="number" min="1" value="${Number(vote.day) || 1}" aria-label="日付" />
+      <input data-field="round" type="number" min="1" value="${Number(vote.round) || 1}" aria-label="投票回" />
+      <select data-field="voterId" aria-label="投票者">${getVotePlayerOptionsHtml(players, vote.voterId)}</select>
+      <select data-field="targetId" aria-label="投票先">${getVoteTargetOptionsHtml(players, vote.targetId)}</select>
+      <input data-field="note" type="text" maxlength="60" value="${escapeHtml(vote.note || "")}" placeholder="メモ" aria-label="メモ" />
+      <button class="danger-button" type="button" data-delete-vote>削除</button>
+    </div>
+  `;
+}
+
+function bindVoteDeleteButtons(root, votes, renderCallback) {
+  root.querySelectorAll("[data-delete-vote]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const row = button.closest("[data-vote-id]");
+      const index = votes.findIndex((vote) => vote.id === row.dataset.voteId);
+      if (index >= 0) votes.splice(index, 1);
+      renderCallback();
+    });
+  });
+}
+
+function getVotePlayerOptionsHtml(players, selectedId = "") {
+  return players
+    .map((player) => `<option value="${escapeHtml(player.id)}" ${player.id === selectedId ? "selected" : ""}>${escapeHtml(player.name)}</option>`)
+    .join("");
+}
+
+function getVoteTargetOptionsHtml(players, selectedId = "") {
+  return [
+    ["abstain", "棄権"],
+    ...players.map((player) => [player.id, player.name]),
+  ]
+    .map(([value, label]) => `<option value="${escapeHtml(value)}" ${value === selectedId ? "selected" : ""}>${escapeHtml(label)}</option>`)
+    .join("");
+}
+function getNextVoteRound(day, votes = state.voteHistories) {
+  const rounds = votes
+    .filter((vote) => Number(vote.day) === Number(day))
+    .map((vote) => Number(vote.round) || 1);
+  return rounds.length ? Math.max(...rounds) + 1 : 1;
+}
+
 function setPlayerStatus(status) {
   const player = findPlayer(statusPlayerId);
   if (!player) return;
@@ -2104,6 +2246,7 @@ function renderGameLifecycle() {
   els.boardActionsBtn.hidden = !reasoningView || finished;
   els.finishGameBtn.hidden = !reasoningView || !inProgress;
   els.nextGameBtn.hidden = !reasoningView || !finished;
+  els.openVoteDialogBtn.hidden = !reasoningView || finished;
   els.dateInputWrap.classList.toggle("locked", inProgress || finished);
   [
     els.tournamentSelect,
@@ -2758,6 +2901,7 @@ function getCurrentLogDay() {
   const resultDay = state.results.map(getDivinationOrder).reduce((max, day) => Math.max(max, day), 0);
   const actionDay = state.roleActions.map((action) => Number(action.day) || 1).reduce((max, day) => Math.max(max, day), 0);
   const claimDay = state.claimEvents.map((event) => Number(event.day) || 1).reduce((max, day) => Math.max(max, day), 0);
+  const voteDay = state.voteHistories.map((vote) => Number(vote.day) || 1).reduce((max, day) => Math.max(max, day), 0);
   const exiledDay = getMaxStatusDay("exiled");
   const attackedDay = getMaxStatusDay("attacked");
   const guardDay = state.roleActions
@@ -2768,7 +2912,7 @@ function getCurrentLogDay() {
     exiledDay > 0 && Math.max(attackedDay, guardDay) >= exiledDay
       ? exiledDay + 1
       : Math.max(exiledDay, attackedDay);
-  return Math.max(1, resultDay, actionDay, claimDay, completedStatusDay);
+  return Math.max(1, resultDay, actionDay, claimDay, voteDay, completedStatusDay);
 }
 
 function getNextRoleActionDay(actorId, role) {
@@ -3959,6 +4103,9 @@ function renderHistoryEditor(history) {
   els.historyClaimEventEditor.innerHTML = history.claimEvents?.length
     ? history.claimEvents.map((event) => getHistoryClaimEventEditorRowHtml(event, activePlayers)).join("")
     : '<div class="empty-inline">CO履歴なし</div>';
+  els.historyVoteEditor.innerHTML = history.voteHistories?.length
+    ? history.voteHistories.map((vote) => getVoteEditorRowHtml(vote, activePlayers)).join("")
+    : '<div class="empty-inline">投票履歴なし</div>';
   els.historyRoleActionEditor.innerHTML = history.roleActions?.length
     ? history.roleActions
         .map((action) => getHistoryRoleActionEditorRowHtml(action, activePlayers))
@@ -3968,6 +4115,7 @@ function renderHistoryEditor(history) {
   bindHistorySeerColumnOverrideDeleteButtons();
   bindHistoryRivalPerspectiveOverrideDeleteButtons();
   bindHistoryClaimEventDeleteButtons();
+  bindHistoryVoteDeleteButtons();
   bindHistoryRoleActionDeleteButtons();
   bindHistoryRoleGuessControls();
 }
@@ -4212,6 +4360,33 @@ function addHistoryClaimEventEditorRow() {
   bindHistoryClaimEventDeleteButtons();
 }
 
+function bindHistoryVoteDeleteButtons() {
+  els.historyVoteEditor.querySelectorAll("[data-delete-vote]").forEach((button) => {
+    button.addEventListener("click", () => button.closest("[data-vote-id]").remove());
+  });
+}
+
+function addHistoryVoteEditorRow() {
+  const history = state.gameHistories.find((item) => item.id === editingHistoryId);
+  const players = history ? getHistoryActivePlayers(history) : [];
+  if (!players.length) return;
+  els.historyVoteEditor.querySelector(".empty-inline")?.remove();
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = getVoteEditorRowHtml(
+    {
+      id: `new-${crypto.randomUUID()}`,
+      day: 1,
+      round: 1,
+      voterId: players[0].id,
+      targetId: players[0].id,
+      note: "",
+    },
+    players,
+  );
+  els.historyVoteEditor.appendChild(wrapper.firstElementChild);
+  bindHistoryVoteDeleteButtons();
+}
+
 function getHistoryClaimEventEditorRowHtml(event, players) {
   return `
     <div class="history-role-action-edit" data-claim-event-id="${escapeHtml(event.id)}" data-created-at="${escapeHtml(event.createdAt || "")}">
@@ -4350,6 +4525,18 @@ function saveHistoryEdits() {
       }),
     )
     .filter(Boolean);
+  history.voteHistories = Array.from(els.historyVoteEditor.querySelectorAll("[data-vote-id]"))
+    .map((row) =>
+      normalizeVoteHistory({
+        id: row.dataset.voteId.startsWith("new-") ? crypto.randomUUID() : row.dataset.voteId,
+        day: row.querySelector('[data-field="day"]').value,
+        round: row.querySelector('[data-field="round"]').value,
+        voterId: row.querySelector('[data-field="voterId"]').value,
+        targetId: row.querySelector('[data-field="targetId"]').value,
+        note: row.querySelector('[data-field="note"]').value,
+      }),
+    )
+    .filter(Boolean);
   history.roleActions = Array.from(els.historyRoleActionEditor.querySelectorAll("[data-role-action-id]"))
     .map((row) =>
       normalizeRoleAction({
@@ -4464,11 +4651,13 @@ function buildHistoryTimeline(history) {
   const results = history.results;
   const roleActions = history.roleActions || [];
   const claimEvents = history.claimEvents || [];
+  const voteHistories = history.voteHistories || [];
   const maxDay = Math.max(
     0,
     ...results.map(getDivinationOrder),
     ...roleActions.map((action) => Number(action.day) || 1),
     ...claimEvents.map((event) => Number(event.day) || 1),
+    ...voteHistories.map((vote) => Number(vote.day) || 1),
     ...activePlayers.filter((player) => isInactiveStatus(player.status)).map((player) => Number(player.statusDay) || 1),
   );
   if (!maxDay) return ["- 出来事なし"];
@@ -4496,6 +4685,12 @@ function buildHistoryTimeline(history) {
     activePlayers
       .filter((player) => player.status === "attacked" && (Number(player.statusDay) || 1) === day)
       .forEach((player) => events.push(`襲撃: ${player.name}`));
+    voteHistories
+      .filter((vote) => (Number(vote.day) || 1) === day)
+      .forEach((vote) => {
+        const line = formatVoteEvent(vote, history.players);
+        if (line) events.push(line);
+      });
     roleActions
       .filter((action) => (Number(action.day) || 1) === day)
       .forEach((action) => {
@@ -4515,11 +4710,13 @@ function buildCurrentTimeline() {
   const results = state.results;
   const roleActions = state.roleActions;
   const claimEvents = state.claimEvents;
+  const voteHistories = state.voteHistories;
   const maxDay = Math.max(
     0,
     ...results.map(getDivinationOrder),
     ...roleActions.map((action) => Number(action.day) || 1),
     ...claimEvents.map((event) => Number(event.day) || 1),
+    ...voteHistories.map((vote) => Number(vote.day) || 1),
     ...activePlayers.filter((player) => isInactiveStatus(player.status)).map((player) => Number(player.statusDay) || 1),
   );
   if (!maxDay) return ["- 出来事なし"];
@@ -4547,6 +4744,12 @@ function buildCurrentTimeline() {
     activePlayers
       .filter((player) => player.status === "attacked" && (Number(player.statusDay) || 1) === day)
       .forEach((player) => events.push(`襲撃: ${player.name}`));
+    voteHistories
+      .filter((vote) => (Number(vote.day) || 1) === day)
+      .forEach((vote) => {
+        const line = formatVoteEvent(vote, state.players);
+        if (line) events.push(line);
+      });
     roleActions
       .filter((action) => (Number(action.day) || 1) === day)
       .forEach((action) => {
@@ -4583,6 +4786,15 @@ function formatRoleActionEvent(action, players) {
   if (!actor || !target || !ROLE_ACTION_ROLES.has(action.role)) return "";
   const note = action.note ? ` / ${action.note}` : "";
   return `${ROLE_LABELS[action.role]}: ${formatTimelineActorName(actor)} -> ${target.name} ${resultLabel}${note}`;
+}
+
+function formatVoteEvent(vote, players) {
+  const voter = players.find((player) => player.id === vote.voterId);
+  const target = vote.targetId === "abstain" ? null : players.find((player) => player.id === vote.targetId);
+  if (!voter || (!target && vote.targetId !== "abstain")) return "";
+  const targetName = vote.targetId === "abstain" ? "棄権" : target.name;
+  const note = vote.note ? ` / ${vote.note}` : "";
+  return `投票${Number(vote.round) || 1}: ${voter.name} -> ${targetName}${note}`;
 }
 
 function formatTimelineActorName(player) {
@@ -4653,6 +4865,14 @@ function getMeaningfulProgressSignature() {
       day,
       targetId,
       result,
+      note,
+    })),
+    voteHistories: sortById(state.voteHistories).map(({ id, day, round, voterId, targetId, note }) => ({
+      id,
+      day,
+      round,
+      voterId,
+      targetId,
       note,
     })),
   });
@@ -4812,6 +5032,7 @@ function applySavedState(saved) {
   state.roleActions = Array.isArray(saved.roleActions) ? saved.roleActions.map(normalizeRoleAction).filter(Boolean) : [];
   removeInvalidCurrentMediumResults();
   state.claimEvents = Array.isArray(saved.claimEvents) ? saved.claimEvents.map(normalizeClaimEvent).filter(Boolean) : [];
+  state.voteHistories = Array.isArray(saved.voteHistories) ? saved.voteHistories.map(normalizeVoteHistory).filter(Boolean) : [];
   state.customImpressionReasons = Array.isArray(saved.customImpressionReasons)
     ? saved.customImpressionReasons.map(normalizeImpressionReason).filter((reason) => reason?.custom)
     : [];
@@ -5104,6 +5325,7 @@ function resetStateToDefaults() {
     rivalPerspectiveVersion: 2,
     roleActions: [],
     claimEvents: [],
+    voteHistories: [],
     gameStatus: "preparing",
     startedAt: "",
     pendingExileContinuationPlayerId: "",
@@ -5657,6 +5879,18 @@ function normalizeClaimEvent(event) {
   };
 }
 
+function normalizeVoteHistory(vote) {
+  if (!vote?.voterId || !vote.targetId) return null;
+  return {
+    id: vote.id || crypto.randomUUID(),
+    day: Number.isFinite(Number(vote.day)) ? Math.max(1, Number(vote.day)) : 1,
+    round: Number.isFinite(Number(vote.round)) ? Math.max(1, Number(vote.round)) : 1,
+    voterId: String(vote.voterId),
+    targetId: vote.targetId === "abstain" ? "abstain" : String(vote.targetId),
+    note: String(vote.note || "").trim().slice(0, 60),
+  };
+}
+
 function normalizeGameHistory(history) {
   if (!history?.id || !Array.isArray(history.players) || !Array.isArray(history.results)) return null;
   const normalized = {
@@ -5686,6 +5920,7 @@ function normalizeGameHistory(history) {
     rivalPerspectiveVersion: 2,
     roleActions: Array.isArray(history.roleActions) ? history.roleActions.map(normalizeRoleAction).filter(Boolean) : [],
     claimEvents: Array.isArray(history.claimEvents) ? history.claimEvents.map(normalizeClaimEvent).filter(Boolean) : [],
+    voteHistories: Array.isArray(history.voteHistories) ? history.voteHistories.map(normalizeVoteHistory).filter(Boolean) : [],
   };
   backfillRoleClaimOrders(normalized.players);
   return normalized;
@@ -5716,6 +5951,7 @@ function normalizeBoard(board) {
   payload.rivalPerspectiveVersion = 2;
   payload.roleActions = Array.isArray(payload.roleActions) ? payload.roleActions.map(normalizeRoleAction).filter(Boolean) : [];
   payload.claimEvents = Array.isArray(payload.claimEvents) ? payload.claimEvents.map(normalizeClaimEvent).filter(Boolean) : [];
+  payload.voteHistories = Array.isArray(payload.voteHistories) ? payload.voteHistories.map(normalizeVoteHistory).filter(Boolean) : [];
   payload.gameStatus = ["in_progress", "finished"].includes(payload.gameStatus) ? payload.gameStatus : "preparing";
   payload.startedAt = payload.gameStatus !== "preparing" ? String(payload.startedAt || "") : "";
   payload.pendingExileContinuationPlayerId = String(payload.pendingExileContinuationPlayerId || "");
