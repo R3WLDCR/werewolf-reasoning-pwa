@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.84";
+const APP_VERSION = "1.85";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -4713,7 +4713,7 @@ function buildHistoryTimeline(history) {
         const seer = history.players.find((player) => player.id === result.seerId);
         const target = history.players.find((player) => player.id === result.targetId);
         if (seer && target) {
-          events.push(`占い: ${formatTimelineActorName(seer)} -> ${target.name} ${RESULT_LABELS[result.value]}`);
+          events.push(`占い: ${formatTimelineActorName(seer)} -> ${target.name}　${RESULT_LABELS[result.value]}`);
         }
       });
     activePlayers
@@ -4772,7 +4772,7 @@ function buildCurrentTimeline() {
         const seer = findPlayer(result.seerId);
         const target = findPlayer(result.targetId);
         if (seer && target) {
-          events.push(`占い: ${formatTimelineActorName(seer)} -> ${target.name} ${RESULT_LABELS[result.value]}`);
+          events.push(`占い: ${formatTimelineActorName(seer)} -> ${target.name}　${RESULT_LABELS[result.value]}`);
         }
       });
     activePlayers
@@ -4822,7 +4822,7 @@ function formatRoleActionEvent(action, players) {
   const resultLabel = ROLE_ACTION_RESULT_LABELS[action.role]?.[action.result] || ROLE_ACTION_RESULT_LABELS[action.role]?.unknown || "不明";
   if (!actor || !target || !ROLE_ACTION_ROLES.has(action.role)) return "";
   const note = action.note ? ` / ${action.note}` : "";
-  return `${ROLE_LABELS[action.role]}: ${formatTimelineActorName(actor)} -> ${target.name} ${resultLabel}${note}`;
+  return `${ROLE_LABELS[action.role]}: ${formatTimelineActorName(actor)} -> ${target.name}　${resultLabel}${note}`;
 }
 
 function formatVoteEvent(vote, players) {
