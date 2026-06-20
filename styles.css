@@ -1690,13 +1690,9 @@ select:disabled {
 
 .vote-entry-grid {
   display: grid;
-  grid-template-columns: 72px 72px minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: 72px 72px minmax(0, 1fr) minmax(0, 1fr) auto;
   gap: 8px;
   align-items: end;
-}
-
-.vote-note-field {
-  grid-column: 1 / -2;
 }
 
 .vote-entry-grid .primary-button {
@@ -1704,7 +1700,7 @@ select:disabled {
 }
 
 .vote-edit-row {
-  grid-template-columns: 60px 60px minmax(0, 1fr) minmax(0, 1fr) minmax(120px, 1fr) auto;
+  grid-template-columns: 60px 60px minmax(0, 1fr) minmax(0, 1fr) auto;
   align-items: center;
 }
 
@@ -2202,8 +2198,6 @@ input.invalid {
     grid-column: 1 / -1;
   }
 
-  .vote-note-field,
-  .vote-edit-row [data-field="note"],
   .vote-edit-row .danger-button {
     grid-column: 1 / -1;
   }

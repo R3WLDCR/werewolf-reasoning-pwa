@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.86";
+const APP_VERSION = "1.87";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -266,7 +266,6 @@ document.addEventListener("DOMContentLoaded", () => {
     "voteRoundInput",
     "voteVoterSelect",
     "voteTargetSelect",
-    "voteNoteInput",
     "addVoteBtn",
     "voteHistoryList",
     "saveVotesBtn",
@@ -1878,7 +1877,6 @@ function openVoteDialog() {
   els.voteDayInput.value = currentDay;
   els.voteRoundInput.value = getNextVoteRound(currentDay, editingVotesDraft);
   els.voteTargetSelect.innerHTML = getVoteTargetOptionsHtml(players);
-  els.voteNoteInput.value = "";
   renderVoteHistoryList();
   updateVoteVoterOptions();
   els.voteDialog.showModal();
@@ -1897,11 +1895,10 @@ function addVoteFromDialog() {
     round: els.voteRoundInput.value,
     voterId: els.voteVoterSelect.value,
     targetId: els.voteTargetSelect.value,
-    note: els.voteNoteInput.value,
+    note: "",
   });
   if (!vote) return toast("投票者と投票先を選んでください");
   editingVotesDraft.push(vote);
-  els.voteNoteInput.value = "";
   advanceVoteRoundIfComplete();
   renderVoteHistoryList();
   updateVoteVoterOptions();
@@ -1923,7 +1920,7 @@ function readVoteRows(root) {
         round: row.querySelector('[data-field="round"]').value,
         voterId: row.querySelector('[data-field="voterId"]').value,
         targetId: row.querySelector('[data-field="targetId"]').value,
-        note: row.querySelector('[data-field="note"]').value,
+        note: "",
       }),
     )
     .filter(Boolean);
@@ -1979,7 +1976,6 @@ function getVoteEditorRowHtml(vote, players) {
       <input data-field="round" type="number" min="1" value="${Number(vote.round) || 1}" aria-label="投票回" />
       <select data-field="voterId" aria-label="投票者">${getVotePlayerOptionsHtml(players, vote.voterId)}</select>
       <select data-field="targetId" aria-label="投票先">${getVoteTargetOptionsHtml(players, vote.targetId)}</select>
-      <input data-field="note" type="text" maxlength="60" value="${escapeHtml(vote.note || "")}" placeholder="メモ" aria-label="メモ" />
       <button class="danger-button" type="button" data-delete-vote>削除</button>
     </div>
   `;
@@ -4574,7 +4570,7 @@ function saveHistoryEdits() {
         round: row.querySelector('[data-field="round"]').value,
         voterId: row.querySelector('[data-field="voterId"]').value,
         targetId: row.querySelector('[data-field="targetId"]').value,
-        note: row.querySelector('[data-field="note"]').value,
+        note: "",
       }),
     )
     .filter(Boolean);
@@ -4834,8 +4830,7 @@ function formatVoteEvent(vote, players) {
   const target = vote.targetId === "abstain" ? null : players.find((player) => player.id === vote.targetId);
   if (!voter || (!target && vote.targetId !== "abstain")) return "";
   const targetName = vote.targetId === "abstain" ? "棄権" : target.name;
-  const note = vote.note ? ` / ${vote.note}` : "";
-  return `投票${Number(vote.round) || 1}: ${voter.name} -> ${targetName}${note}`;
+  return `投票${Number(vote.round) || 1}: ${voter.name} -> ${targetName}`;
 }
 
 function formatTimelineActorName(player) {
@@ -4908,13 +4903,13 @@ function getMeaningfulProgressSignature() {
       result,
       note,
     })),
-    voteHistories: sortById(state.voteHistories).map(({ id, day, round, voterId, targetId, note }) => ({
+    voteHistories: sortById(state.voteHistories).map(({ id, day, round, voterId, targetId }) => ({
       id,
       day,
       round,
       voterId,
       targetId,
-      note,
+      note: "",
     })),
   });
 }
@@ -5928,7 +5923,7 @@ function normalizeVoteHistory(vote) {
     round: Number.isFinite(Number(vote.round)) ? Math.max(1, Number(vote.round)) : 1,
     voterId: String(vote.voterId),
     targetId: vote.targetId === "abstain" ? "abstain" : String(vote.targetId),
-    note: String(vote.note || "").trim().slice(0, 60),
+    note: "",
   };
 }
 
