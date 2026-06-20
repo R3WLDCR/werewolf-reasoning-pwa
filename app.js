@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.93";
+const APP_VERSION = "1.94";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -164,7 +164,6 @@ let roleGuessPlayerId = "";
 let rivalPerspectiveRole = "";
 let rivalPerspectiveViewerId = "";
 let rivalPerspectiveTargetId = "";
-let editingVotesDraft = [];
 let toastTimer = null;
 let syncTimer = null;
 let supabaseClient = null;
@@ -267,7 +266,6 @@ document.addEventListener("DOMContentLoaded", () => {
     "voteTargetSelect",
     "addVoteBtn",
     "voteHistoryList",
-    "saveVotesBtn",
     "membershipDialog",
     "membershipForm",
     "membershipPlayerName",
@@ -469,7 +467,6 @@ function bindEvents() {
   els.openVoteDialogBtn.addEventListener("click", openVoteDialog);
   els.closeVoteBtn.addEventListener("click", closeVoteDialog);
   els.addVoteBtn.addEventListener("click", addVoteFromDialog);
-  els.saveVotesBtn.addEventListener("click", saveVoteDialog);
   els.voteDayInput.addEventListener("input", updateVoteVoterOptions);
   els.voteDialog.addEventListener("click", (event) => {
     if (event.target === els.voteDialog) closeVoteDialog();
@@ -1870,7 +1867,6 @@ function openVoteDialog() {
   if (isGameFinished()) return toast("終了済み盤面は編集できません");
   const players = getActivePlayers();
   if (!players.length) return toast("参加者がいません");
-  editingVotesDraft = state.voteHistories.map((vote) => ({ ...vote }));
   els.voteDayInput.value = getDefaultVoteDialogDay();
   els.voteTargetSelect.innerHTML = getVoteTargetOptionsHtml(players);
   renderVoteHistoryList();
@@ -1879,32 +1875,31 @@ function openVoteDialog() {
 }
 
 function closeVoteDialog() {
-  editingVotesDraft = [];
+  persistVoteDialogChanges();
   els.voteDialog.close();
 }
 
 function addVoteFromDialog() {
-  editingVotesDraft = readVoteRows(els.voteHistoryList);
+  state.voteHistories = readVoteRows(els.voteHistoryList);
   const day = Number(els.voteDayInput.value) || 1;
   const vote = normalizeVoteHistory({
     id: crypto.randomUUID(),
     day,
-    order: getNextVoteOrder(day, editingVotesDraft),
+    order: getNextVoteOrder(day, state.voteHistories),
     voterId: els.voteVoterSelect.value,
     targetId: els.voteTargetSelect.value,
     note: "",
   });
   if (!vote) return toast("投票者と投票先を選んでください");
-  editingVotesDraft.push(vote);
+  state.voteHistories.push(vote);
+  renderAndStore();
   renderVoteHistoryList();
   updateVoteVoterOptions();
 }
 
-function saveVoteDialog() {
+function persistVoteDialogChanges() {
   state.voteHistories = readVoteRows(els.voteHistoryList);
-  closeVoteDialog();
   renderAndStore();
-  toast("投票履歴を保存しました");
 }
 
 function readVoteRows(root) {
@@ -1924,22 +1919,22 @@ function readVoteRows(root) {
 
 function renderVoteHistoryList() {
   const players = getActivePlayers();
-  const sortedVotes = editingVotesDraft
+  const sortedVotes = state.voteHistories
     .slice()
     .sort((a, b) => a.day - b.day || getVoteOrder(a) - getVoteOrder(b));
   els.voteHistoryList.innerHTML = sortedVotes.length
     ? sortedVotes.map((vote) => getVoteEditorRowHtml(vote, players)).join("")
     : '<div class="empty-inline">投票履歴なし</div>';
-  bindVoteDeleteButtons(els.voteHistoryList, editingVotesDraft, renderVoteHistoryList);
+  bindVoteEditorEvents(els.voteHistoryList);
 }
 
 function updateVoteVoterOptions() {
-  editingVotesDraft = readVoteRows(els.voteHistoryList);
+  const currentVotes = readVoteRows(els.voteHistoryList);
   const players = getActivePlayers();
   const day = Number(els.voteDayInput.value) || 1;
   const previousValue = els.voteVoterSelect.value;
   const previousTargetValue = els.voteTargetSelect.value;
-  const availablePlayers = getVoteAvailableVoters(players, day, editingVotesDraft);
+  const availablePlayers = getVoteAvailableVoters(players, day, currentVotes);
   const availableTargets = getVoteAvailableTargets(players, day);
   els.voteVoterSelect.innerHTML = getVotePlayerOptionsHtml(availablePlayers);
   els.voteTargetSelect.innerHTML = getVoteTargetOptionsHtml(availableTargets, previousTargetValue);
@@ -1980,14 +1975,22 @@ function getVoteEditorRowHtml(vote, players) {
   `;
 }
 
-function bindVoteDeleteButtons(root, votes, renderCallback) {
+function bindVoteEditorEvents(root) {
+  root.querySelectorAll("[data-field]").forEach((input) => {
+    input.addEventListener("change", () => {
+      persistVoteDialogChanges();
+      renderVoteHistoryList();
+      updateVoteVoterOptions();
+    });
+  });
   root.querySelectorAll("[data-delete-vote]").forEach((button) => {
     button.addEventListener("click", () => {
       const row = button.closest("[data-vote-id]");
-      const index = votes.findIndex((vote) => vote.id === row.dataset.voteId);
-      if (index >= 0) votes.splice(index, 1);
-      renderCallback();
-      if (root === els.voteHistoryList) updateVoteVoterOptions();
+      const voteId = row.dataset.voteId;
+      state.voteHistories = readVoteRows(root).filter((vote) => vote.id !== voteId);
+      renderAndStore();
+      renderVoteHistoryList();
+      updateVoteVoterOptions();
     });
   });
 }
