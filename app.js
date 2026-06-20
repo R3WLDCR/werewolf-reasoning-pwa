@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.89";
+const APP_VERSION = "1.90";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -1871,7 +1871,7 @@ function openVoteDialog() {
   const players = getActivePlayers();
   if (!players.length) return toast("参加者がいません");
   editingVotesDraft = state.voteHistories.map((vote) => ({ ...vote }));
-  els.voteDayInput.value = getCurrentLogDay();
+  els.voteDayInput.value = getDefaultVoteDialogDay();
   els.voteTargetSelect.innerHTML = getVoteTargetOptionsHtml(players);
   renderVoteHistoryList();
   updateVoteVoterOptions();
@@ -2003,6 +2003,11 @@ function getNextVoteOrder(day, votes = state.voteHistories) {
     .filter((vote) => Number(vote.day) === Number(day))
     .map(getVoteOrder);
   return orders.length ? Math.max(...orders) + 1 : 1;
+}
+
+function getDefaultVoteDialogDay() {
+  const voteDays = state.voteHistories.map((vote) => Number(vote.day) || 1);
+  return voteDays.length ? Math.max(...voteDays) : getCurrentLogDay();
 }
 function setPlayerStatus(status) {
   const player = findPlayer(statusPlayerId);
