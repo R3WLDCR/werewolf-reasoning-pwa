@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.94";
+const APP_VERSION = "1.95";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -265,6 +265,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "voteVoterSelect",
     "voteTargetSelect",
     "addVoteBtn",
+    "voteSummaryPanel",
     "voteHistoryList",
     "membershipDialog",
     "membershipForm",
@@ -1895,11 +1896,13 @@ function addVoteFromDialog() {
   renderAndStore();
   renderVoteHistoryList();
   updateVoteVoterOptions();
+  updateVoteSummaryPanel();
 }
 
 function persistVoteDialogChanges() {
   state.voteHistories = readVoteRows(els.voteHistoryList);
   renderAndStore();
+  updateVoteSummaryPanel();
 }
 
 function readVoteRows(root) {
@@ -1926,6 +1929,7 @@ function renderVoteHistoryList() {
     ? sortedVotes.map((vote) => getVoteEditorRowHtml(vote, players)).join("")
     : '<div class="empty-inline">投票履歴なし</div>';
   bindVoteEditorEvents(els.voteHistoryList);
+  updateVoteSummaryPanel();
 }
 
 function updateVoteVoterOptions() {
@@ -1942,6 +1946,17 @@ function updateVoteVoterOptions() {
     els.voteVoterSelect.value = previousValue;
   }
   els.addVoteBtn.disabled = availablePlayers.length === 0;
+  updateVoteSummaryPanel();
+}
+
+function updateVoteSummaryPanel() {
+  if (!els.voteSummaryPanel) return;
+  const day = Number(els.voteDayInput.value) || 1;
+  const votes = readVoteRows(els.voteHistoryList);
+  const summary = formatVoteSummaryForDay(votes, getActivePlayers(), day);
+  els.voteSummaryPanel.innerHTML = summary
+    ? `<strong>${day}日目 得票</strong><span>${escapeHtml(summary.replace(/^得票: /, ""))}</span>`
+    : `<strong>${day}日目 得票</strong><span>投票なし</span>`;
 }
 
 function getVoteAvailableVoters(players, day, votes) {
