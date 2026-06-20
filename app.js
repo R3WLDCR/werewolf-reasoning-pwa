@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.88";
+const APP_VERSION = "1.89";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -4718,6 +4718,8 @@ function buildHistoryTimeline(history) {
         const line = formatVoteEvent(vote, history.players);
         if (line) events.push(line);
       });
+    const voteSummary = formatVoteSummaryForDay(voteHistories, history.players, day);
+    if (voteSummary) events.push(voteSummary);
     roleActions
       .filter((action) => (Number(action.day) || 1) === day)
       .forEach((action) => {
@@ -4777,6 +4779,8 @@ function buildCurrentTimeline() {
         const line = formatVoteEvent(vote, state.players);
         if (line) events.push(line);
       });
+    const voteSummary = formatVoteSummaryForDay(voteHistories, state.players, day);
+    if (voteSummary) events.push(voteSummary);
     roleActions
       .filter((action) => (Number(action.day) || 1) === day)
       .forEach((action) => {
@@ -4823,6 +4827,41 @@ function formatVoteEvent(vote, players) {
   return `投票${getVoteOrder(vote)}番目: ${voter.name} -> ${targetName}`;
 }
 
+function formatVoteSummaryForDay(votes, players, day) {
+  const entries = votes
+    .filter((vote) => (Number(vote.day) || 1) === day)
+    .map((vote) => {
+      const voter = players.find((player) => player.id === vote.voterId);
+      const target = vote.targetId === "abstain" ? null : players.find((player) => player.id === vote.targetId);
+      if (!voter || (!target && vote.targetId !== "abstain")) return null;
+      return {
+        order: getVoteOrder(vote),
+        voterName: voter.name,
+        targetId: vote.targetId,
+        targetName: vote.targetId === "abstain" ? "棄権" : target.name,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.order - b.order);
+  if (!entries.length) return "";
+
+  const groups = new Map();
+  entries.forEach((entry, index) => {
+    if (!groups.has(entry.targetId)) {
+      groups.set(entry.targetId, {
+        targetName: entry.targetName,
+        firstIndex: index,
+        voters: [],
+      });
+    }
+    groups.get(entry.targetId).voters.push(entry.voterName);
+  });
+
+  const summaries = [...groups.values()]
+    .sort((a, b) => b.voters.length - a.voters.length || a.firstIndex - b.firstIndex)
+    .map((group) => `${group.targetName} ${group.voters.length}票（${group.voters.join(", ")}）`);
+  return `得票: ${summaries.join(" / ")}`;
+}
 function formatTimelineActorName(player) {
   if (!player?.trueRole || player.trueRole === "villager") return player?.name || "";
   const trueRoleLabel = ROLE_GUESS_LABELS[player.trueRole] || ROLE_LABELS[player.trueRole];
