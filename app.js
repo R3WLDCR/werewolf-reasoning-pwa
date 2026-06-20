@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.91";
+const APP_VERSION = "1.92";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -1938,8 +1938,11 @@ function updateVoteVoterOptions() {
   const players = getActivePlayers();
   const day = Number(els.voteDayInput.value) || 1;
   const previousValue = els.voteVoterSelect.value;
+  const previousTargetValue = els.voteTargetSelect.value;
   const availablePlayers = getVoteAvailableVoters(players, day, editingVotesDraft);
+  const availableTargets = getVoteAvailableTargets(players, day);
   els.voteVoterSelect.innerHTML = getVotePlayerOptionsHtml(availablePlayers);
+  els.voteTargetSelect.innerHTML = getVoteTargetOptionsHtml(availableTargets, previousTargetValue);
   if (availablePlayers.some((player) => player.id === previousValue)) {
     els.voteVoterSelect.value = previousValue;
   }
@@ -1959,6 +1962,10 @@ function canPlayerVoteOnDay(player, day) {
   if (!isInactiveStatus(player.status)) return true;
   const statusDay = Number(player.statusDay) || 1;
   return statusDay > (Number(day) || 1);
+}
+
+function getVoteAvailableTargets(players, day) {
+  return players.filter((player) => canPlayerVoteOnDay(player, day));
 }
 
 function getVoteEditorRowHtml(vote, players) {
