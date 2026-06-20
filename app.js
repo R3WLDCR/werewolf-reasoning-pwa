@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.92";
+const APP_VERSION = "1.93";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3044,14 +3044,14 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
       const roleClaim = player.autoConfirmedWhite ? "" : getSeerGridRoleLabel(player);
       const manualMediumGuess = getManualUnclaimedMediumGuess(player);
       const exposedHumanClaim = getExposedHumanClaimForSeer(player, seer);
-      const autoVillagerClaim = roleClaim || manualMediumGuess || getAutoVillagerClaimForSeer(player, seer.id) || exposedHumanClaim;
+      const autoVillagerClaim = exposedHumanClaim || roleClaim || manualMediumGuess || getAutoVillagerClaimForSeer(player, seer.id);
       if (!result) {
         const displayLabel =
           exposedHumanClaim && player.autoConfirmedWhite
             ? `${exposedHumanClaim} / ${ROLE_LABELS.confirmedWhite}`
             : autoVillagerClaim;
         return autoVillagerClaim
-          ? `<span class="seer-result-label ${manualMediumGuess ? "role-medium" : exposedHumanClaim ? "judgement-human" : getAutoVillagerClass(player)}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(displayLabel)}</span>`
+          ? `<span class="seer-result-label ${exposedHumanClaim ? "judgement-human" : manualMediumGuess ? "role-medium" : getAutoVillagerClass(player)}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(displayLabel)}</span>`
           : `<span class="seer-result-label empty" data-seer-id="${escapeHtml(seer.id)}" aria-hidden="true"></span>`;
       }
       const className = manualMediumGuess
@@ -3169,7 +3169,9 @@ function getAutoVillagerClaimForSeer(player, seerId) {
 function getExposedHumanClaimForSeer(player, seer) {
   if (isBrokenSeer(seer)) return "";
   if (!isFullOutsiderExposureForSeer(seer)) return "";
-  if (player.id === seer.id || player.role || isInactiveStatus(player.status)) return "";
+  if (player.id === seer.id || isInactiveStatus(player.status)) return "";
+  if (getSeers().some((claimant) => claimant.id === player.id)) return "";
+  if (["werewolf", "wolfSide", "madman"].includes(player.role)) return "";
   if (hasDivinationResultForSeer(player.id, seer.id)) return "";
   return "結果市民";
 }
