@@ -1690,7 +1690,7 @@ select:disabled {
 
 .vote-entry-grid {
   display: grid;
-  grid-template-columns: 72px 72px minmax(0, 1fr) minmax(0, 1fr) auto;
+  grid-template-columns: 72px minmax(0, 1fr) minmax(0, 1fr) auto;
   gap: 8px;
   align-items: end;
 }

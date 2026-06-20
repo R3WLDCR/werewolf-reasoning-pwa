@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.87";
+const APP_VERSION = "1.88";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -263,7 +263,6 @@ document.addEventListener("DOMContentLoaded", () => {
     "voteDialog",
     "closeVoteBtn",
     "voteDayInput",
-    "voteRoundInput",
     "voteVoterSelect",
     "voteTargetSelect",
     "addVoteBtn",
@@ -472,7 +471,6 @@ function bindEvents() {
   els.addVoteBtn.addEventListener("click", addVoteFromDialog);
   els.saveVotesBtn.addEventListener("click", saveVoteDialog);
   els.voteDayInput.addEventListener("input", updateVoteVoterOptions);
-  els.voteRoundInput.addEventListener("input", updateVoteVoterOptions);
   els.voteDialog.addEventListener("click", (event) => {
     if (event.target === els.voteDialog) closeVoteDialog();
   });
@@ -1873,9 +1871,7 @@ function openVoteDialog() {
   const players = getActivePlayers();
   if (!players.length) return toast("参加者がいません");
   editingVotesDraft = state.voteHistories.map((vote) => ({ ...vote }));
-  const currentDay = getCurrentLogDay();
-  els.voteDayInput.value = currentDay;
-  els.voteRoundInput.value = getNextVoteRound(currentDay, editingVotesDraft);
+  els.voteDayInput.value = getCurrentLogDay();
   els.voteTargetSelect.innerHTML = getVoteTargetOptionsHtml(players);
   renderVoteHistoryList();
   updateVoteVoterOptions();
@@ -1889,17 +1885,17 @@ function closeVoteDialog() {
 
 function addVoteFromDialog() {
   editingVotesDraft = readVoteRows(els.voteHistoryList);
+  const day = Number(els.voteDayInput.value) || 1;
   const vote = normalizeVoteHistory({
     id: crypto.randomUUID(),
-    day: els.voteDayInput.value,
-    round: els.voteRoundInput.value,
+    day,
+    order: getNextVoteOrder(day, editingVotesDraft),
     voterId: els.voteVoterSelect.value,
     targetId: els.voteTargetSelect.value,
     note: "",
   });
   if (!vote) return toast("投票者と投票先を選んでください");
   editingVotesDraft.push(vote);
-  advanceVoteRoundIfComplete();
   renderVoteHistoryList();
   updateVoteVoterOptions();
 }
@@ -1917,7 +1913,7 @@ function readVoteRows(root) {
       normalizeVoteHistory({
         id: row.dataset.voteId.startsWith("new-") ? crypto.randomUUID() : row.dataset.voteId,
         day: row.querySelector('[data-field="day"]').value,
-        round: row.querySelector('[data-field="round"]').value,
+        order: row.querySelector('[data-field="order"]').value,
         voterId: row.querySelector('[data-field="voterId"]').value,
         targetId: row.querySelector('[data-field="targetId"]').value,
         note: "",
@@ -1930,7 +1926,7 @@ function renderVoteHistoryList() {
   const players = getActivePlayers();
   const sortedVotes = editingVotesDraft
     .slice()
-    .sort((a, b) => a.day - b.day || a.round - b.round);
+    .sort((a, b) => a.day - b.day || getVoteOrder(a) - getVoteOrder(b));
   els.voteHistoryList.innerHTML = sortedVotes.length
     ? sortedVotes.map((vote) => getVoteEditorRowHtml(vote, players)).join("")
     : '<div class="empty-inline">投票履歴なし</div>';
@@ -1941,9 +1937,8 @@ function updateVoteVoterOptions() {
   editingVotesDraft = readVoteRows(els.voteHistoryList);
   const players = getActivePlayers();
   const day = Number(els.voteDayInput.value) || 1;
-  const round = Number(els.voteRoundInput.value) || 1;
   const previousValue = els.voteVoterSelect.value;
-  const availablePlayers = getVoteAvailableVoters(players, day, round, editingVotesDraft);
+  const availablePlayers = getVoteAvailableVoters(players, day, editingVotesDraft);
   els.voteVoterSelect.innerHTML = getVotePlayerOptionsHtml(availablePlayers);
   if (availablePlayers.some((player) => player.id === previousValue)) {
     els.voteVoterSelect.value = previousValue;
@@ -1951,29 +1946,20 @@ function updateVoteVoterOptions() {
   els.addVoteBtn.disabled = availablePlayers.length === 0;
 }
 
-function getVoteAvailableVoters(players, day, round, votes) {
+function getVoteAvailableVoters(players, day, votes) {
   const votedIds = new Set(
     votes
-      .filter((vote) => Number(vote.day) === Number(day) && Number(vote.round) === Number(round))
+      .filter((vote) => Number(vote.day) === Number(day))
       .map((vote) => vote.voterId),
   );
   return players.filter((player) => !votedIds.has(player.id));
-}
-
-function advanceVoteRoundIfComplete() {
-  const players = getActivePlayers();
-  const day = Number(els.voteDayInput.value) || 1;
-  const round = Number(els.voteRoundInput.value) || 1;
-  if (!players.length) return;
-  if (getVoteAvailableVoters(players, day, round, editingVotesDraft).length > 0) return;
-  els.voteRoundInput.value = round + 1;
 }
 
 function getVoteEditorRowHtml(vote, players) {
   return `
     <div class="vote-edit-row" data-vote-id="${escapeHtml(vote.id)}">
       <input data-field="day" type="number" min="1" value="${Number(vote.day) || 1}" aria-label="日付" />
-      <input data-field="round" type="number" min="1" value="${Number(vote.round) || 1}" aria-label="投票回" />
+      <input data-field="order" type="number" min="1" value="${getVoteOrder(vote)}" aria-label="投票順" />
       <select data-field="voterId" aria-label="投票者">${getVotePlayerOptionsHtml(players, vote.voterId)}</select>
       <select data-field="targetId" aria-label="投票先">${getVoteTargetOptionsHtml(players, vote.targetId)}</select>
       <button class="danger-button" type="button" data-delete-vote>削除</button>
@@ -2007,13 +1993,17 @@ function getVoteTargetOptionsHtml(players, selectedId = "") {
     .map(([value, label]) => `<option value="${escapeHtml(value)}" ${value === selectedId ? "selected" : ""}>${escapeHtml(label)}</option>`)
     .join("");
 }
-function getNextVoteRound(day, votes = state.voteHistories) {
-  const rounds = votes
-    .filter((vote) => Number(vote.day) === Number(day))
-    .map((vote) => Number(vote.round) || 1);
-  return rounds.length ? Math.max(...rounds) + 1 : 1;
+
+function getVoteOrder(vote) {
+  return Number.isFinite(Number(vote.order)) ? Math.max(1, Number(vote.order)) : Math.max(1, Number(vote.round) || 1);
 }
 
+function getNextVoteOrder(day, votes = state.voteHistories) {
+  const orders = votes
+    .filter((vote) => Number(vote.day) === Number(day))
+    .map(getVoteOrder);
+  return orders.length ? Math.max(...orders) + 1 : 1;
+}
 function setPlayerStatus(status) {
   const player = findPlayer(statusPlayerId);
   if (!player) return;
@@ -4413,7 +4403,7 @@ function addHistoryVoteEditorRow() {
     {
       id: `new-${crypto.randomUUID()}`,
       day: 1,
-      round: 1,
+      order: getNextVoteOrder(1, history.voteHistories || []),
       voterId: players[0].id,
       targetId: players[0].id,
       note: "",
@@ -4567,7 +4557,7 @@ function saveHistoryEdits() {
       normalizeVoteHistory({
         id: row.dataset.voteId.startsWith("new-") ? crypto.randomUUID() : row.dataset.voteId,
         day: row.querySelector('[data-field="day"]').value,
-        round: row.querySelector('[data-field="round"]').value,
+        order: row.querySelector('[data-field="order"]').value,
         voterId: row.querySelector('[data-field="voterId"]').value,
         targetId: row.querySelector('[data-field="targetId"]').value,
         note: "",
@@ -4830,7 +4820,7 @@ function formatVoteEvent(vote, players) {
   const target = vote.targetId === "abstain" ? null : players.find((player) => player.id === vote.targetId);
   if (!voter || (!target && vote.targetId !== "abstain")) return "";
   const targetName = vote.targetId === "abstain" ? "棄権" : target.name;
-  return `投票${Number(vote.round) || 1}: ${voter.name} -> ${targetName}`;
+  return `投票${getVoteOrder(vote)}番目: ${voter.name} -> ${targetName}`;
 }
 
 function formatTimelineActorName(player) {
@@ -4903,10 +4893,10 @@ function getMeaningfulProgressSignature() {
       result,
       note,
     })),
-    voteHistories: sortById(state.voteHistories).map(({ id, day, round, voterId, targetId }) => ({
+    voteHistories: sortById(state.voteHistories).map(({ id, day, order, voterId, targetId }) => ({
       id,
       day,
-      round,
+      order,
       voterId,
       targetId,
       note: "",
@@ -5920,7 +5910,7 @@ function normalizeVoteHistory(vote) {
   return {
     id: vote.id || crypto.randomUUID(),
     day: Number.isFinite(Number(vote.day)) ? Math.max(1, Number(vote.day)) : 1,
-    round: Number.isFinite(Number(vote.round)) ? Math.max(1, Number(vote.round)) : 1,
+    order: Number.isFinite(Number(vote.order ?? vote.round)) ? Math.max(1, Number(vote.order ?? vote.round)) : 1,
     voterId: String(vote.voterId),
     targetId: vote.targetId === "abstain" ? "abstain" : String(vote.targetId),
     note: "",
