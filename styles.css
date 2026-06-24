@@ -1718,6 +1718,41 @@ select:disabled {
   color: var(--muted);
 }
 
+.vote-summary-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vote-summary-section + .vote-summary-section {
+  margin-top: 5px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.vote-order-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.vote-order-item {
+  display: grid;
+  grid-template-columns: 1.6rem minmax(0, 1fr);
+  gap: 4px;
+  align-items: start;
+}
+
+.vote-order-number {
+  color: #f8fafc;
+  font-weight: 700;
+  text-align: center;
+}
+
+.vote-summary-empty {
+  color: var(--muted);
+}
+
 .vote-edit-row {
   grid-template-columns: 60px 60px minmax(0, 1fr) minmax(0, 1fr) auto;
   align-items: center;

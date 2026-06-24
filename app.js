@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.96";
+const APP_VERSION = "1.97";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -1954,9 +1954,29 @@ function updateVoteSummaryPanel() {
   const day = Number(els.voteDayInput.value) || 1;
   const votes = readVoteRows(els.voteHistoryList);
   const summary = formatVoteSummaryForDay(votes, getActivePlayers(), day);
-  els.voteSummaryPanel.innerHTML = summary
-    ? `<strong>${day}日目 得票</strong><span>${escapeHtml(summary.replace(/^得票: /, ""))}</span>`
-    : `<strong>${day}日目 得票</strong><span>投票なし</span>`;
+  const voteOrder = getVoteOrderEntriesForDay(votes, getActivePlayers(), day);
+  const voteOrderHtml = voteOrder.length
+    ? voteOrder
+        .map(
+          (entry) => `
+            <div class="vote-order-item">
+              <span class="vote-order-number">${escapeHtml(formatVoteOrderMarker(entry.order))}</span>
+              <span>${escapeHtml(entry.voterName)} → ${escapeHtml(entry.targetName)}</span>
+            </div>
+          `,
+        )
+        .join("")
+    : '<span class="vote-summary-empty">投票順なし</span>';
+  els.voteSummaryPanel.innerHTML = `
+    <div class="vote-summary-section">
+      <strong>${day}日目 得票</strong>
+      <span>${summary ? escapeHtml(summary.replace(/^得票: /, "")) : "投票なし"}</span>
+    </div>
+    <div class="vote-summary-section">
+      <strong>投票順</strong>
+      <div class="vote-order-list">${voteOrderHtml}</div>
+    </div>
+  `;
 }
 
 function getVoteAvailableVoters(players, day, votes) {
@@ -4900,6 +4920,31 @@ function formatVoteSummaryForDay(votes, players, day) {
     .map((group) => `${group.targetName} ${group.voters.length}票（${group.voters.join(", ")}）`);
   return `得票: ${summaries.join(" / ")}`;
 }
+
+function getVoteOrderEntriesForDay(votes, players, day) {
+  return votes
+    .map((vote, sourceIndex) => ({ vote, sourceIndex }))
+    .filter(({ vote }) => (Number(vote.day) || 1) === day)
+    .map(({ vote, sourceIndex }) => {
+      const voter = players.find((player) => player.id === vote.voterId);
+      const target = vote.targetId === "abstain" ? null : players.find((player) => player.id === vote.targetId);
+      if (!voter || (!target && vote.targetId !== "abstain")) return null;
+      return {
+        order: getVoteOrder(vote),
+        sourceIndex,
+        voterName: voter.name,
+        targetName: vote.targetId === "abstain" ? "棄権" : target.name,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.order - b.order || a.sourceIndex - b.sourceIndex);
+}
+
+function formatVoteOrderMarker(order) {
+  const circledNumbers = ["", "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩", "⑪", "⑫", "⑬", "⑭", "⑮", "⑯", "⑰", "⑱", "⑲", "⑳"];
+  return circledNumbers[order] || `${order}.`;
+}
+
 function formatTimelineActorName(player) {
   if (!player?.trueRole || player.trueRole === "villager") return player?.name || "";
   const trueRoleLabel = ROLE_GUESS_LABELS[player.trueRole] || ROLE_LABELS[player.trueRole];
