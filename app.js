@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.98";
+const APP_VERSION = "1.99";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -164,6 +164,7 @@ let roleGuessPlayerId = "";
 let rivalPerspectiveRole = "";
 let rivalPerspectiveViewerId = "";
 let rivalPerspectiveTargetId = "";
+let voteHistoryEditVisible = false;
 let toastTimer = null;
 let syncTimer = null;
 let supabaseClient = null;
@@ -266,6 +267,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "voteTargetSelect",
     "addVoteBtn",
     "voteSummaryPanel",
+    "toggleVoteHistoryEditBtn",
     "voteHistoryList",
     "membershipDialog",
     "membershipForm",
@@ -469,6 +471,10 @@ function bindEvents() {
   els.closeVoteBtn.addEventListener("click", closeVoteDialog);
   els.addVoteBtn.addEventListener("click", addVoteFromDialog);
   els.voteDayInput.addEventListener("input", updateVoteVoterOptions);
+  els.toggleVoteHistoryEditBtn.addEventListener("click", () => {
+    voteHistoryEditVisible = !voteHistoryEditVisible;
+    updateVoteHistoryEditVisibility();
+  });
   els.voteDialog.addEventListener("click", (event) => {
     if (event.target === els.voteDialog) closeVoteDialog();
   });
@@ -1868,6 +1874,7 @@ function openVoteDialog() {
   if (isGameFinished()) return toast("終了済み盤面は編集できません");
   const players = getActivePlayers();
   if (!players.length) return toast("参加者がいません");
+  voteHistoryEditVisible = false;
   els.voteDayInput.value = getDefaultVoteDialogDay();
   els.voteTargetSelect.innerHTML = getVoteTargetOptionsHtml(players);
   renderVoteHistoryList();
@@ -1929,7 +1936,14 @@ function renderVoteHistoryList() {
     ? sortedVotes.map((vote) => getVoteEditorRowHtml(vote, players)).join("")
     : '<div class="empty-inline">投票履歴なし</div>';
   bindVoteEditorEvents(els.voteHistoryList);
+  updateVoteHistoryEditVisibility();
   updateVoteSummaryPanel();
+}
+
+function updateVoteHistoryEditVisibility() {
+  if (!els.voteHistoryList || !els.toggleVoteHistoryEditBtn) return;
+  els.voteHistoryList.hidden = !voteHistoryEditVisible;
+  els.toggleVoteHistoryEditBtn.textContent = voteHistoryEditVisible ? "履歴編集を隠す" : "履歴編集を表示";
 }
 
 function updateVoteVoterOptions() {
