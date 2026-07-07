@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.99";
+const APP_VERSION = "1.100";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -1900,6 +1900,8 @@ function addVoteFromDialog() {
   });
   if (!vote) return toast("投票者と投票先を選んでください");
   state.voteHistories.push(vote);
+  const nextDay = getNextVoteInputDay(day, state.voteHistories);
+  els.voteDayInput.value = nextDay;
   renderAndStore();
   renderVoteHistoryList();
   updateVoteVoterOptions();
@@ -2022,6 +2024,10 @@ function getVoteAvailableVoters(players, day, votes) {
   return players.filter((player) => !votedIds.has(player.id) && canPlayerVoteOnDay(player, day));
 }
 
+function hasRemainingVotersForDay(day, votes = state.voteHistories) {
+  return getVoteAvailableVoters(getActivePlayers(), day, votes).length > 0;
+}
+
 function canPlayerVoteOnDay(player, day) {
   if (!isInactiveStatus(player.status)) return true;
   const statusDay = Number(player.statusDay) || 1;
@@ -2091,8 +2097,23 @@ function getNextVoteOrder(day, votes = state.voteHistories) {
 }
 
 function getDefaultVoteDialogDay() {
-  const voteDays = state.voteHistories.map((vote) => Number(vote.day) || 1);
-  return voteDays.length ? Math.max(...voteDays) : getCurrentLogDay();
+  const exiledMax = getMaxStatusDay("exiled");
+  if (exiledMax > 0) {
+    for (let day = 1; day <= exiledMax; day += 1) {
+      if (hasRemainingVotersForDay(day)) return day;
+    }
+    return exiledMax + 1;
+  }
+  const currentDay = Math.max(1, getCurrentLogDay());
+  return hasRemainingVotersForDay(currentDay) ? currentDay : 1;
+}
+
+function getNextVoteInputDay(currentDay, votes = state.voteHistories) {
+  const day = Number(currentDay) || 1;
+  const hasExileForDay = getActivePlayers().some(
+    (player) => player.status === "exiled" && (Number(player.statusDay) || 1) === day,
+  );
+  return hasExileForDay && !hasRemainingVotersForDay(day, votes) ? day + 1 : day;
 }
 function setPlayerStatus(status) {
   const player = findPlayer(statusPlayerId);
