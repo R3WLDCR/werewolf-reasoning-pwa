@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.97";
+const APP_VERSION = "1.98";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -1951,10 +1951,24 @@ function updateVoteVoterOptions() {
 
 function updateVoteSummaryPanel() {
   if (!els.voteSummaryPanel) return;
-  const day = Number(els.voteDayInput.value) || 1;
+  const selectedDay = Number(els.voteDayInput.value) || 1;
   const votes = readVoteRows(els.voteHistoryList);
-  const summary = formatVoteSummaryForDay(votes, getActivePlayers(), day);
-  const voteOrder = getVoteOrderEntriesForDay(votes, getActivePlayers(), day);
+  const players = getActivePlayers();
+  const days = getVoteSummaryDays(votes, selectedDay);
+  els.voteSummaryPanel.innerHTML = days
+    .map((day) => getVoteDaySummaryHtml(votes, players, day, day === selectedDay))
+    .join("");
+}
+
+function getVoteSummaryDays(votes, selectedDay) {
+  const days = new Set([Number(selectedDay) || 1]);
+  votes.forEach((vote) => days.add(Number(vote.day) || 1));
+  return [...days].sort((a, b) => a - b);
+}
+
+function getVoteDaySummaryHtml(votes, players, day, isSelected) {
+  const summary = formatVoteSummaryForDay(votes, players, day);
+  const voteOrder = getVoteOrderEntriesForDay(votes, players, day);
   const voteOrderHtml = voteOrder.length
     ? voteOrder
         .map(
@@ -1967,15 +1981,21 @@ function updateVoteSummaryPanel() {
         )
         .join("")
     : '<span class="vote-summary-empty">投票順なし</span>';
-  els.voteSummaryPanel.innerHTML = `
-    <div class="vote-summary-section">
-      <strong>${day}日目 得票</strong>
-      <span>${summary ? escapeHtml(summary.replace(/^得票: /, "")) : "投票なし"}</span>
-    </div>
-    <div class="vote-summary-section">
-      <strong>投票順</strong>
-      <div class="vote-order-list">${voteOrderHtml}</div>
-    </div>
+  return `
+    <section class="vote-day-summary ${isSelected ? "is-current" : ""}">
+      <div class="vote-day-summary-title">
+        <strong>${day}日目</strong>
+        ${isSelected ? '<span>入力中</span>' : ""}
+      </div>
+      <div class="vote-summary-section">
+        <strong>得票</strong>
+        <span>${summary ? escapeHtml(summary.replace(/^得票: /, "")) : "投票なし"}</span>
+      </div>
+      <div class="vote-summary-section">
+        <strong>投票順</strong>
+        <div class="vote-order-list">${voteOrderHtml}</div>
+      </div>
+    </section>
   `;
 }
 
