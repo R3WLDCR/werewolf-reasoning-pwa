@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.100";
+const APP_VERSION = "1.101";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -1979,7 +1979,7 @@ function updateVoteSummaryPanel() {
 function getVoteSummaryDays(votes, selectedDay) {
   const days = new Set([Number(selectedDay) || 1]);
   votes.forEach((vote) => days.add(Number(vote.day) || 1));
-  return [...days].sort((a, b) => a - b);
+  return [...days].sort((a, b) => b - a);
 }
 
 function getVoteDaySummaryHtml(votes, players, day, isSelected) {
