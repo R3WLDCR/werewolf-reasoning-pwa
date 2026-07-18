@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.102";
+const APP_VERSION = "1.103";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -1901,12 +1901,14 @@ function addVoteFromDialog() {
   });
   if (!vote) return toast("投票者と投票先を選んでください");
   state.voteHistories.push(vote);
+  const autoExileMessage = applyAutoExileFromCompletedVotes(day, state.voteHistories);
   const nextDay = getNextVoteInputDay(day, state.voteHistories);
   els.voteDayInput.value = nextDay;
   renderAndStore();
   renderVoteHistoryList();
   updateVoteVoterOptions();
   updateVoteSummaryPanel();
+  if (autoExileMessage) toast(autoExileMessage);
 }
 
 function persistVoteDialogChanges() {
@@ -2055,6 +2057,11 @@ function bindVoteEditorEvents(root) {
   root.querySelectorAll("[data-field]").forEach((input) => {
     input.addEventListener("change", () => {
       persistVoteDialogChanges();
+      const autoExileMessage = applyAutoExileFromCompletedVotes(Number(input.closest("[data-vote-id]")?.querySelector('[data-field="day"]')?.value) || 1);
+      if (autoExileMessage) {
+        renderAndStore();
+        toast(autoExileMessage);
+      }
       renderVoteHistoryList();
       updateVoteVoterOptions();
     });
@@ -2115,6 +2122,35 @@ function getNextVoteInputDay(currentDay, votes = state.voteHistories) {
     (player) => player.status === "exiled" && (Number(player.statusDay) || 1) === day,
   );
   return hasExileForDay && !hasRemainingVotersForDay(day, votes) ? day + 1 : day;
+}
+
+function applyAutoExileFromCompletedVotes(day, votes = state.voteHistories) {
+  const normalizedDay = Number(day) || 1;
+  if (hasRemainingVotersForDay(normalizedDay, votes)) return "";
+  const targetId = getUniqueTopVoteTargetIdForDay(votes, normalizedDay);
+  if (!targetId) return "";
+  const target = findPlayer(targetId);
+  if (!target || isInactiveStatus(target.status)) return "";
+  invalidateInferenceForStatusChange(target);
+  target.status = "exiled";
+  target.statusDay = normalizedDay;
+  removeInvalidCurrentMediumResults();
+  movePlayerToInactiveTop(target.id);
+  state.pendingExileContinuationPlayerId = target.id;
+  autoStartGameFromBoardInput();
+  return `${target.name}を${normalizedDay}日目追放にしました`;
+}
+
+function getUniqueTopVoteTargetIdForDay(votes, day) {
+  const groups = new Map();
+  votes
+    .filter((vote) => (Number(vote.day) || 1) === day && vote.targetId && vote.targetId !== "abstain")
+    .forEach((vote) => {
+      groups.set(vote.targetId, (groups.get(vote.targetId) || 0) + 1);
+    });
+  if (!groups.size) return "";
+  const sorted = [...groups.entries()].sort((a, b) => b[1] - a[1]);
+  return sorted.length === 1 || sorted[0][1] > sorted[1][1] ? sorted[0][0] : "";
 }
 function setPlayerStatus(status) {
   const player = findPlayer(statusPlayerId);
