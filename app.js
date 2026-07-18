@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.105";
+const APP_VERSION = "1.106";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -480,6 +480,7 @@ function bindEvents() {
   els.closeVoteBtn.addEventListener("click", closeVoteDialog);
   els.addVoteBtn.addEventListener("click", addVoteFromDialog);
   els.voteDayInput.addEventListener("input", updateVoteVoterOptions);
+  els.voteVoterSelect.addEventListener("change", updateVoteTargetOptionsForSelectedVoter);
   els.voteTargetSelect.addEventListener("change", () => {
     selectedRunoffTargetId = els.voteTargetSelect.value;
     updateVoteVoterOptions();
@@ -1916,6 +1917,7 @@ function addVoteFromDialog() {
     note: "",
   });
   if (!vote) return toast("投票者と投票先を選んでください");
+  if (vote.voterId === vote.targetId) return toast("自分には投票できません");
   state.voteHistories.push(vote);
   const autoExileMessage = applyAutoExileFromCompletedVotes(day, state.voteHistories);
   const nextDay = getNextVoteInputDay(day, state.voteHistories);
@@ -1988,17 +1990,39 @@ function updateVoteVoterOptions() {
     selectedRunoffTargetId = "";
   }
   els.voteVoterSelect.innerHTML = getVotePlayerOptionsHtml(availablePlayers);
-  els.voteTargetSelect.innerHTML = getVoteTargetOptionsHtml(availableTargets, previousTargetValue, context.type !== "runoff");
+  els.voteTargetSelect.innerHTML = getVoteTargetOptionsHtml(
+    getVoteTargetsForVoter(availableTargets, previousValue),
+    previousTargetValue,
+    context.type !== "runoff",
+  );
   if (selectedRunoffTargetId) {
     els.voteTargetSelect.value = selectedRunoffTargetId;
   }
   if (availablePlayers.some((player) => player.id === previousValue)) {
     els.voteVoterSelect.value = previousValue;
   }
+  updateVoteTargetOptionsForSelectedVoter();
   els.addVoteBtn.disabled = availablePlayers.length === 0;
   updateVoteModeNotice(context);
   renderRunoffQuickPanel(context);
   updateVoteSummaryPanel();
+}
+
+function updateVoteTargetOptionsForSelectedVoter() {
+  const currentVotes = readVoteRows(els.voteHistoryList);
+  const players = getActivePlayers();
+  const day = Number(els.voteDayInput.value) || 1;
+  const context = getVoteInputContext(day, currentVotes);
+  const previousTargetValue = els.voteTargetSelect.value;
+  const targets = getVoteTargetsForVoter(context.targetPlayers, els.voteVoterSelect.value);
+  els.voteTargetSelect.innerHTML = getVoteTargetOptionsHtml(targets, previousTargetValue, context.type !== "runoff");
+  if (context.type === "runoff" && selectedRunoffTargetId && targets.some((player) => player.id === selectedRunoffTargetId)) {
+    els.voteTargetSelect.value = selectedRunoffTargetId;
+  }
+}
+
+function getVoteTargetsForVoter(players, voterId) {
+  return players.filter((player) => player.id !== voterId);
 }
 
 function updateVoteModeNotice(context) {
