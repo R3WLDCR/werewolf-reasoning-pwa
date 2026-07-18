@@ -1723,6 +1723,61 @@ select:disabled {
   color: #fde68a;
 }
 
+.runoff-quick-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 8px 0 10px;
+  padding: 10px;
+  border: 1px solid rgba(245, 158, 11, 0.38);
+  border-radius: 8px;
+  background: rgba(24, 18, 10, 0.72);
+}
+
+.runoff-quick-section {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.runoff-quick-section strong {
+  color: #fde68a;
+  font-size: 0.8rem;
+}
+
+.runoff-target-list,
+.runoff-voter-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.runoff-target-button,
+.runoff-voter-button {
+  min-height: 36px;
+  padding: 7px 11px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 999px;
+  background: #263637;
+  color: var(--text);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.runoff-target-button.is-selected {
+  border-color: rgba(245, 158, 11, 0.84);
+  background: #4b3716;
+  color: #fde68a;
+}
+
+.runoff-voter-button {
+  background: #123f2e;
+}
+
+.runoff-voter-button:disabled {
+  opacity: 0.48;
+}
+
 .vote-summary-panel {
   display: flex;
   flex-direction: column;

@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.104";
+const APP_VERSION = "1.105";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -171,6 +171,7 @@ let rivalPerspectiveRole = "";
 let rivalPerspectiveViewerId = "";
 let rivalPerspectiveTargetId = "";
 let voteHistoryEditVisible = false;
+let selectedRunoffTargetId = "";
 let toastTimer = null;
 let syncTimer = null;
 let supabaseClient = null;
@@ -273,6 +274,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "voteTargetSelect",
     "addVoteBtn",
     "voteModeNotice",
+    "runoffQuickPanel",
     "voteSummaryPanel",
     "toggleVoteHistoryEditBtn",
     "voteHistoryList",
@@ -478,6 +480,10 @@ function bindEvents() {
   els.closeVoteBtn.addEventListener("click", closeVoteDialog);
   els.addVoteBtn.addEventListener("click", addVoteFromDialog);
   els.voteDayInput.addEventListener("input", updateVoteVoterOptions);
+  els.voteTargetSelect.addEventListener("change", () => {
+    selectedRunoffTargetId = els.voteTargetSelect.value;
+    updateVoteVoterOptions();
+  });
   els.toggleVoteHistoryEditBtn.addEventListener("click", () => {
     voteHistoryEditVisible = !voteHistoryEditVisible;
     updateVoteHistoryEditVisibility();
@@ -1882,6 +1888,7 @@ function openVoteDialog() {
   const players = getActivePlayers();
   if (!players.length) return toast("参加者がいません");
   voteHistoryEditVisible = false;
+  selectedRunoffTargetId = "";
   els.voteDayInput.value = getDefaultVoteDialogDay();
   els.voteTargetSelect.innerHTML = getVoteTargetOptionsHtml(players);
   renderVoteHistoryList();
@@ -1971,13 +1978,26 @@ function updateVoteVoterOptions() {
   const context = getVoteInputContext(day, currentVotes);
   const availablePlayers = context.voterPlayers;
   const availableTargets = context.targetPlayers;
+  if (context.type === "runoff") {
+    const fallbackTarget = availableTargets.find((player) => player.id === selectedRunoffTargetId)?.id
+      || availableTargets.find((player) => player.id === previousTargetValue)?.id
+      || availableTargets[0]?.id
+      || "";
+    selectedRunoffTargetId = fallbackTarget;
+  } else {
+    selectedRunoffTargetId = "";
+  }
   els.voteVoterSelect.innerHTML = getVotePlayerOptionsHtml(availablePlayers);
   els.voteTargetSelect.innerHTML = getVoteTargetOptionsHtml(availableTargets, previousTargetValue, context.type !== "runoff");
+  if (selectedRunoffTargetId) {
+    els.voteTargetSelect.value = selectedRunoffTargetId;
+  }
   if (availablePlayers.some((player) => player.id === previousValue)) {
     els.voteVoterSelect.value = previousValue;
   }
   els.addVoteBtn.disabled = availablePlayers.length === 0;
   updateVoteModeNotice(context);
+  renderRunoffQuickPanel(context);
   updateVoteSummaryPanel();
 }
 
@@ -1993,6 +2013,61 @@ function updateVoteModeNotice(context) {
   els.voteModeNotice.hidden = false;
   els.voteModeNotice.className = "vote-mode-notice";
   els.voteModeNotice.innerHTML = "<strong>通常投票</strong><span>全員の投票が終わると最多票を判定します。</span>";
+}
+
+function renderRunoffQuickPanel(context) {
+  if (!els.runoffQuickPanel) return;
+  if (context.type !== "runoff") {
+    els.runoffQuickPanel.hidden = true;
+    els.runoffQuickPanel.innerHTML = "";
+    return;
+  }
+  const targetButtons = context.targetPlayers
+    .map(
+      (player) => `
+        <button class="runoff-target-button ${player.id === selectedRunoffTargetId ? "is-selected" : ""}" type="button" data-runoff-target="${escapeHtml(player.id)}">
+          ${escapeHtml(player.name)}
+        </button>
+      `,
+    )
+    .join("");
+  const voterButtons = context.voterPlayers.length
+    ? context.voterPlayers
+        .map(
+          (player) => `
+            <button class="runoff-voter-button" type="button" data-runoff-voter="${escapeHtml(player.id)}" ${selectedRunoffTargetId ? "" : "disabled"}>
+              ${escapeHtml(player.name)}
+            </button>
+          `,
+        )
+        .join("")
+    : '<span class="vote-summary-empty">投票者なし</span>';
+  els.runoffQuickPanel.hidden = false;
+  els.runoffQuickPanel.innerHTML = `
+    <div class="runoff-quick-section">
+      <strong>投票先を固定</strong>
+      <div class="runoff-target-list">${targetButtons || '<span class="vote-summary-empty">候補なし</span>'}</div>
+    </div>
+    <div class="runoff-quick-section">
+      <strong>${selectedRunoffTargetId ? "投票者をタップ" : "投票先を選んでください"}</strong>
+      <div class="runoff-voter-list">${voterButtons}</div>
+    </div>
+  `;
+  els.runoffQuickPanel.querySelectorAll("[data-runoff-target]").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectedRunoffTargetId = button.dataset.runoffTarget || "";
+      els.voteTargetSelect.value = selectedRunoffTargetId;
+      renderRunoffQuickPanel(getVoteInputContext(Number(els.voteDayInput.value) || 1, readVoteRows(els.voteHistoryList)));
+    });
+  });
+  els.runoffQuickPanel.querySelectorAll("[data-runoff-voter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (!selectedRunoffTargetId) return toast("投票先を選んでください");
+      els.voteVoterSelect.value = button.dataset.runoffVoter || "";
+      els.voteTargetSelect.value = selectedRunoffTargetId;
+      addVoteFromDialog();
+    });
+  });
 }
 
 function updateVoteSummaryPanel() {
