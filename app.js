@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.103";
+const APP_VERSION = "1.104";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -45,6 +45,11 @@ const SEER_COLUMN_OVERRIDE_LABELS = {
   ...ROLE_LABELS,
 };
 const ROLE_ACTION_ROLES = new Set(["medium", "guard", "hunter"]);
+const VOTE_TYPES = new Set(["normal", "runoff"]);
+const VOTE_TYPE_LABELS = {
+  normal: "通常投票",
+  runoff: "決選投票",
+};
 const ROLE_ACTION_RESULT_LABELS = {
   medium: {
     unknown: "不明",
@@ -267,6 +272,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "voteVoterSelect",
     "voteTargetSelect",
     "addVoteBtn",
+    "voteModeNotice",
     "voteSummaryPanel",
     "toggleVoteHistoryEditBtn",
     "voteHistoryList",
@@ -1891,10 +1897,13 @@ function closeVoteDialog() {
 function addVoteFromDialog() {
   state.voteHistories = readVoteRows(els.voteHistoryList);
   const day = Number(els.voteDayInput.value) || 1;
+  const context = getVoteInputContext(day, state.voteHistories);
   const vote = normalizeVoteHistory({
     id: crypto.randomUUID(),
     day,
     order: getNextVoteOrder(day, state.voteHistories),
+    type: context.type,
+    runoffRound: context.runoffRound,
     voterId: els.voteVoterSelect.value,
     targetId: els.voteTargetSelect.value,
     note: "",
@@ -1924,6 +1933,8 @@ function readVoteRows(root) {
         id: row.dataset.voteId.startsWith("new-") ? crypto.randomUUID() : row.dataset.voteId,
         day: row.querySelector('[data-field="day"]').value,
         order: row.querySelector('[data-field="order"]').value,
+        type: row.querySelector('[data-field="type"]')?.value || "normal",
+        runoffRound: row.querySelector('[data-field="runoffRound"]')?.value || 0,
         voterId: row.querySelector('[data-field="voterId"]').value,
         targetId: row.querySelector('[data-field="targetId"]').value,
         note: "",
@@ -1957,15 +1968,31 @@ function updateVoteVoterOptions() {
   const day = Number(els.voteDayInput.value) || 1;
   const previousValue = els.voteVoterSelect.value;
   const previousTargetValue = els.voteTargetSelect.value;
-  const availablePlayers = getVoteAvailableVoters(players, day, currentVotes);
-  const availableTargets = getVoteAvailableTargets(players, day);
+  const context = getVoteInputContext(day, currentVotes);
+  const availablePlayers = context.voterPlayers;
+  const availableTargets = context.targetPlayers;
   els.voteVoterSelect.innerHTML = getVotePlayerOptionsHtml(availablePlayers);
-  els.voteTargetSelect.innerHTML = getVoteTargetOptionsHtml(availableTargets, previousTargetValue);
+  els.voteTargetSelect.innerHTML = getVoteTargetOptionsHtml(availableTargets, previousTargetValue, context.type !== "runoff");
   if (availablePlayers.some((player) => player.id === previousValue)) {
     els.voteVoterSelect.value = previousValue;
   }
   els.addVoteBtn.disabled = availablePlayers.length === 0;
+  updateVoteModeNotice(context);
   updateVoteSummaryPanel();
+}
+
+function updateVoteModeNotice(context) {
+  if (!els.voteModeNotice) return;
+  if (context.type === "runoff") {
+    const names = context.targetPlayers.map((player) => player.name).join(" / ");
+    els.voteModeNotice.hidden = false;
+    els.voteModeNotice.className = "vote-mode-notice runoff";
+    els.voteModeNotice.innerHTML = `<strong>決選投票</strong><span>投票先は ${escapeHtml(names || "候補なし")} のみです。</span>`;
+    return;
+  }
+  els.voteModeNotice.hidden = false;
+  els.voteModeNotice.className = "vote-mode-notice";
+  els.voteModeNotice.innerHTML = "<strong>通常投票</strong><span>全員の投票が終わると最多票を判定します。</span>";
 }
 
 function updateVoteSummaryPanel() {
@@ -1986,49 +2013,76 @@ function getVoteSummaryDays(votes, selectedDay) {
 }
 
 function getVoteDaySummaryHtml(votes, players, day, isSelected) {
-  const summary = formatVoteSummaryForDay(votes, players, day);
-  const voteOrder = getVoteOrderEntriesForDay(votes, players, day);
-  const voteOrderHtml = voteOrder.length
-    ? voteOrder
-        .map(
-          (entry) => `
-            <div class="vote-order-item">
-              <span class="vote-order-number">${escapeHtml(formatVoteOrderMarker(entry.order))}</span>
-              <span>${escapeHtml(entry.voterName)} → ${escapeHtml(entry.targetName)}</span>
-            </div>
-          `,
-        )
-        .join("")
-    : '<span class="vote-summary-empty">投票順なし</span>';
+  const phaseKeys = getVoteSummaryPhaseKeys(votes, day);
+  const currentContext = isSelected ? getVoteInputContext(day, votes, players) : null;
+  if (currentContext && !phaseKeys.some((phase) => phase.type === currentContext.type && phase.runoffRound === currentContext.runoffRound)) {
+    phaseKeys.push({ type: currentContext.type, runoffRound: currentContext.runoffRound });
+  }
+  const phaseHtml = phaseKeys
+    .map((phase) => {
+      const summary = formatVoteSummaryForDay(votes, players, day, phase.type, phase.runoffRound);
+      const voteOrder = getVoteOrderEntriesForDay(votes, players, day, phase.type, phase.runoffRound);
+      const voteOrderHtml = voteOrder.length
+        ? voteOrder
+            .map(
+              (entry) => `
+                <div class="vote-order-item">
+                  <span class="vote-order-number">${escapeHtml(formatVoteOrderMarker(entry.order))}</span>
+                  <span>${escapeHtml(entry.voterName)} → ${escapeHtml(entry.targetName)}</span>
+                </div>
+              `,
+            )
+            .join("")
+        : '<span class="vote-summary-empty">投票順なし</span>';
+      return `
+        <div class="vote-phase-summary">
+          <div class="vote-phase-title">${escapeHtml(getVotePhaseLabel(phase.type, phase.runoffRound))}</div>
+          <div class="vote-summary-section">
+            <strong>得票</strong>
+            <span>${summary ? escapeHtml(summary.replace(/^得票: /, "")) : "投票なし"}</span>
+          </div>
+          <div class="vote-summary-section">
+            <strong>投票順</strong>
+            <div class="vote-order-list">${voteOrderHtml}</div>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
   return `
     <section class="vote-day-summary ${isSelected ? "is-current" : ""}">
       <div class="vote-day-summary-title">
         <strong>${day}日目</strong>
         ${isSelected ? '<span>入力中</span>' : ""}
       </div>
-      <div class="vote-summary-section">
-        <strong>得票</strong>
-        <span>${summary ? escapeHtml(summary.replace(/^得票: /, "")) : "投票なし"}</span>
-      </div>
-      <div class="vote-summary-section">
-        <strong>投票順</strong>
-        <div class="vote-order-list">${voteOrderHtml}</div>
-      </div>
+      ${phaseHtml || '<span class="vote-summary-empty">投票なし</span>'}
     </section>
   `;
 }
 
 function getVoteAvailableVoters(players, day, votes) {
+  return getVoteInputContext(day, votes, players).voterPlayers;
+}
+
+function getBaseVoteEligiblePlayers(players, day) {
+  return players.filter((player) => canPlayerVoteOnDay(player, day));
+}
+
+function getVoteAvailableVotersForPhase(players, day, votes, type, runoffRound, excludedVoterIds = new Set()) {
   const votedIds = new Set(
     votes
-      .filter((vote) => Number(vote.day) === Number(day))
+      .filter((vote) => {
+        if (Number(vote.day) !== Number(day)) return false;
+        if (normalizeVoteType(vote.type) !== type) return false;
+        return type !== "runoff" || normalizeRunoffRound(vote.runoffRound) === runoffRound;
+      })
       .map((vote) => vote.voterId),
   );
-  return players.filter((player) => !votedIds.has(player.id) && canPlayerVoteOnDay(player, day));
+  return getBaseVoteEligiblePlayers(players, day).filter((player) => !votedIds.has(player.id) && !excludedVoterIds.has(player.id));
 }
 
 function hasRemainingVotersForDay(day, votes = state.voteHistories) {
-  return getVoteAvailableVoters(getActivePlayers(), day, votes).length > 0;
+  return getVoteInputContext(day, votes).voterPlayers.length > 0;
 }
 
 function canPlayerVoteOnDay(player, day) {
@@ -2037,8 +2091,62 @@ function canPlayerVoteOnDay(player, day) {
   return statusDay > (Number(day) || 1);
 }
 
-function getVoteAvailableTargets(players, day) {
-  return players.filter((player) => canPlayerVoteOnDay(player, day));
+function getVoteAvailableTargets(players, day, votes = state.voteHistories) {
+  return getVoteInputContext(day, votes, players).targetPlayers;
+}
+
+function getVoteInputContext(day, votes = state.voteHistories, players = getActivePlayers()) {
+  const normalizedDay = Number(day) || 1;
+  const normalVotes = getVotesForPhase(votes, normalizedDay, "normal", 0);
+  const normalVoters = getVoteAvailableVotersForPhase(players, normalizedDay, votes, "normal", 0);
+  const baseTargets = getBaseVoteEligiblePlayers(players, normalizedDay);
+  if (normalVoters.length) {
+    return {
+      type: "normal",
+      runoffRound: 0,
+      voterPlayers: normalVoters,
+      targetPlayers: baseTargets,
+      tiedTargetIds: [],
+    };
+  }
+  let tiedTargetIds = getTopVoteTargetIds(normalVotes);
+  if (tiedTargetIds.length < 2) {
+    return {
+      type: "normal",
+      runoffRound: 0,
+      voterPlayers: [],
+      targetPlayers: baseTargets,
+      tiedTargetIds: [],
+    };
+  }
+  let runoffRound = 1;
+  while (true) {
+    const excludedVoters = new Set(tiedTargetIds);
+    const runoffVoters = getVoteAvailableVotersForPhase(players, normalizedDay, votes, "runoff", runoffRound, excludedVoters);
+    const runoffTargets = players.filter((player) => tiedTargetIds.includes(player.id) && canPlayerVoteOnDay(player, normalizedDay));
+    if (runoffVoters.length) {
+      return {
+        type: "runoff",
+        runoffRound,
+        voterPlayers: runoffVoters,
+        targetPlayers: runoffTargets,
+        tiedTargetIds,
+      };
+    }
+    const runoffVotes = getVotesForPhase(votes, normalizedDay, "runoff", runoffRound);
+    const nextTiedTargetIds = getTopVoteTargetIds(runoffVotes);
+    if (nextTiedTargetIds.length < 2) {
+      return {
+        type: "runoff",
+        runoffRound,
+        voterPlayers: [],
+        targetPlayers: runoffTargets,
+        tiedTargetIds,
+      };
+    }
+    tiedTargetIds = nextTiedTargetIds;
+    runoffRound += 1;
+  }
 }
 
 function getVoteEditorRowHtml(vote, players) {
@@ -2046,6 +2154,8 @@ function getVoteEditorRowHtml(vote, players) {
     <div class="vote-edit-row" data-vote-id="${escapeHtml(vote.id)}">
       <input data-field="day" type="number" min="1" value="${Number(vote.day) || 1}" aria-label="日付" />
       <input data-field="order" type="number" min="1" value="${getVoteOrder(vote)}" aria-label="投票順" />
+      <select data-field="type" aria-label="投票区分">${getVoteTypeOptionsHtml(vote.type)}</select>
+      <input data-field="runoffRound" type="hidden" value="${normalizeRunoffRound(vote.runoffRound)}" />
       <select data-field="voterId" aria-label="投票者">${getVotePlayerOptionsHtml(players, vote.voterId)}</select>
       <select data-field="targetId" aria-label="投票先">${getVoteTargetOptionsHtml(players, vote.targetId)}</select>
       <button class="danger-button" type="button" data-delete-vote>削除</button>
@@ -2084,12 +2194,19 @@ function getVotePlayerOptionsHtml(players, selectedId = "") {
     .join("");
 }
 
-function getVoteTargetOptionsHtml(players, selectedId = "") {
+function getVoteTargetOptionsHtml(players, selectedId = "", allowAbstain = true) {
   return [
-    ["abstain", "棄権"],
+    ...(allowAbstain ? [["abstain", "棄権"]] : []),
     ...players.map((player) => [player.id, player.name]),
   ]
     .map(([value, label]) => `<option value="${escapeHtml(value)}" ${value === selectedId ? "selected" : ""}>${escapeHtml(label)}</option>`)
+    .join("");
+}
+
+function getVoteTypeOptionsHtml(selectedType = "normal") {
+  const type = normalizeVoteType(selectedType);
+  return Object.entries(VOTE_TYPE_LABELS)
+    .map(([value, label]) => `<option value="${value}" ${value === type ? "selected" : ""}>${label}</option>`)
     .join("");
 }
 
@@ -2127,7 +2244,7 @@ function getNextVoteInputDay(currentDay, votes = state.voteHistories) {
 function applyAutoExileFromCompletedVotes(day, votes = state.voteHistories) {
   const normalizedDay = Number(day) || 1;
   if (hasRemainingVotersForDay(normalizedDay, votes)) return "";
-  const targetId = getUniqueTopVoteTargetIdForDay(votes, normalizedDay);
+  const targetId = getCompletedVoteExileTargetId(normalizedDay, votes);
   if (!targetId) return "";
   const target = findPlayer(targetId);
   if (!target || isInactiveStatus(target.status)) return "";
@@ -2141,16 +2258,60 @@ function applyAutoExileFromCompletedVotes(day, votes = state.voteHistories) {
   return `${target.name}を${normalizedDay}日目追放にしました`;
 }
 
-function getUniqueTopVoteTargetIdForDay(votes, day) {
+function getCompletedVoteExileTargetId(day, votes = state.voteHistories) {
+  const normalVotes = getVotesForPhase(votes, day, "normal", 0);
+  const normalTop = getTopVoteTargetIds(normalVotes);
+  if (normalTop.length === 1) return normalTop[0];
+  if (normalTop.length < 2) return "";
+  let tiedTargetIds = normalTop;
+  let runoffRound = 1;
+  while (true) {
+    const excludedVoters = new Set(tiedTargetIds);
+    const remainingVoters = getVoteAvailableVotersForPhase(
+      getActivePlayers(),
+      day,
+      votes,
+      "runoff",
+      runoffRound,
+      excludedVoters,
+    );
+    if (remainingVoters.length) return "";
+    const runoffVotes = getVotesForPhase(votes, day, "runoff", runoffRound);
+    const runoffTop = getTopVoteTargetIds(runoffVotes);
+    if (runoffTop.length === 1) return runoffTop[0];
+    if (runoffTop.length < 2) return "";
+    tiedTargetIds = runoffTop;
+    runoffRound += 1;
+  }
+}
+
+function getVotesForPhase(votes, day, type, runoffRound = 0) {
+  return votes.filter((vote) => {
+    if ((Number(vote.day) || 1) !== day) return false;
+    if (normalizeVoteType(vote.type) !== type) return false;
+    return type !== "runoff" || normalizeRunoffRound(vote.runoffRound) === runoffRound;
+  });
+}
+
+function getTopVoteTargetIds(votes) {
   const groups = new Map();
   votes
-    .filter((vote) => (Number(vote.day) || 1) === day && vote.targetId && vote.targetId !== "abstain")
+    .filter((vote) => vote.targetId && vote.targetId !== "abstain")
     .forEach((vote) => {
       groups.set(vote.targetId, (groups.get(vote.targetId) || 0) + 1);
     });
-  if (!groups.size) return "";
+  if (!groups.size) return [];
   const sorted = [...groups.entries()].sort((a, b) => b[1] - a[1]);
-  return sorted.length === 1 || sorted[0][1] > sorted[1][1] ? sorted[0][0] : "";
+  const topCount = sorted[0][1];
+  return sorted.filter(([, count]) => count === topCount).map(([targetId]) => targetId);
+}
+
+function normalizeVoteType(type) {
+  return VOTE_TYPES.has(type) ? type : "normal";
+}
+
+function normalizeRunoffRound(round) {
+  return Number.isFinite(Number(round)) ? Math.max(1, Number(round)) : 1;
 }
 function setPlayerStatus(status) {
   const player = findPlayer(statusPlayerId);
@@ -4708,6 +4869,8 @@ function saveHistoryEdits() {
         id: row.dataset.voteId.startsWith("new-") ? crypto.randomUUID() : row.dataset.voteId,
         day: row.querySelector('[data-field="day"]').value,
         order: row.querySelector('[data-field="order"]').value,
+        type: row.querySelector('[data-field="type"]')?.value || "normal",
+        runoffRound: row.querySelector('[data-field="runoffRound"]')?.value || 0,
         voterId: row.querySelector('[data-field="voterId"]').value,
         targetId: row.querySelector('[data-field="targetId"]').value,
         note: "",
@@ -4974,12 +5137,26 @@ function formatVoteEvent(vote, players) {
   const target = vote.targetId === "abstain" ? null : players.find((player) => player.id === vote.targetId);
   if (!voter || (!target && vote.targetId !== "abstain")) return "";
   const targetName = vote.targetId === "abstain" ? "棄権" : target.name;
-  return `投票${getVoteOrder(vote)}番目: ${voter.name} -> ${targetName}`;
+  const prefix = normalizeVoteType(vote.type) === "runoff" ? "決選投票" : "投票";
+  return `${prefix}${getVoteOrder(vote)}番目: ${voter.name} -> ${targetName}`;
 }
 
-function formatVoteSummaryForDay(votes, players, day) {
+function formatVoteSummaryForDay(votes, players, day, type = "", runoffRound = 0) {
+  if (!type) {
+    const phaseSummaries = getVoteSummaryPhaseKeys(votes, day)
+      .map((phase) => {
+        const summary = formatVoteSummaryForDay(votes, players, day, phase.type, phase.runoffRound);
+        return summary ? `${getVotePhaseLabel(phase.type, phase.runoffRound)} ${summary.replace(/^得票: /, "")}` : "";
+      })
+      .filter(Boolean);
+    return phaseSummaries.length ? `得票: ${phaseSummaries.join(" / ")}` : "";
+  }
   const entries = votes
-    .filter((vote) => (Number(vote.day) || 1) === day)
+    .filter((vote) => {
+      if ((Number(vote.day) || 1) !== day) return false;
+      if (normalizeVoteType(vote.type) !== type) return false;
+      return type !== "runoff" || normalizeRunoffRound(vote.runoffRound) === runoffRound;
+    })
     .map((vote) => {
       const voter = players.find((player) => player.id === vote.voterId);
       const target = vote.targetId === "abstain" ? null : players.find((player) => player.id === vote.targetId);
@@ -5013,10 +5190,15 @@ function formatVoteSummaryForDay(votes, players, day) {
   return `得票: ${summaries.join(" / ")}`;
 }
 
-function getVoteOrderEntriesForDay(votes, players, day) {
+function getVoteOrderEntriesForDay(votes, players, day, type = "", runoffRound = 0) {
   return votes
     .map((vote, sourceIndex) => ({ vote, sourceIndex }))
-    .filter(({ vote }) => (Number(vote.day) || 1) === day)
+    .filter(({ vote }) => {
+      if ((Number(vote.day) || 1) !== day) return false;
+      if (!type) return true;
+      if (normalizeVoteType(vote.type) !== type) return false;
+      return type !== "runoff" || normalizeRunoffRound(vote.runoffRound) === runoffRound;
+    })
     .map(({ vote, sourceIndex }) => {
       const voter = players.find((player) => player.id === vote.voterId);
       const target = vote.targetId === "abstain" ? null : players.find((player) => player.id === vote.targetId);
@@ -5030,6 +5212,26 @@ function getVoteOrderEntriesForDay(votes, players, day) {
     })
     .filter(Boolean)
     .sort((a, b) => a.order - b.order || a.sourceIndex - b.sourceIndex);
+}
+
+function getVoteSummaryPhaseKeys(votes, day) {
+  const byKey = new Map();
+  votes
+    .filter((vote) => (Number(vote.day) || 1) === day)
+    .forEach((vote) => {
+      const type = normalizeVoteType(vote.type);
+      const runoffRound = type === "runoff" ? normalizeRunoffRound(vote.runoffRound) : 0;
+      byKey.set(`${type}:${runoffRound}`, { type, runoffRound });
+    });
+  return [...byKey.values()].sort((a, b) => {
+    if (a.type !== b.type) return a.type === "normal" ? -1 : 1;
+    return a.runoffRound - b.runoffRound;
+  });
+}
+
+function getVotePhaseLabel(type, runoffRound = 0) {
+  if (type !== "runoff") return VOTE_TYPE_LABELS.normal;
+  return runoffRound > 1 ? `${VOTE_TYPE_LABELS.runoff}${runoffRound}` : VOTE_TYPE_LABELS.runoff;
 }
 
 function formatVoteOrderMarker(order) {
@@ -5107,10 +5309,12 @@ function getMeaningfulProgressSignature() {
       result,
       note,
     })),
-    voteHistories: sortById(state.voteHistories).map(({ id, day, order, voterId, targetId }) => ({
+    voteHistories: sortById(state.voteHistories).map(({ id, day, order, type, runoffRound, voterId, targetId }) => ({
       id,
       day,
       order,
+      type,
+      runoffRound,
       voterId,
       targetId,
       note: "",
@@ -6121,10 +6325,13 @@ function normalizeClaimEvent(event) {
 
 function normalizeVoteHistory(vote) {
   if (!vote?.voterId || !vote.targetId) return null;
+  const type = normalizeVoteType(vote.type);
   return {
     id: vote.id || crypto.randomUUID(),
     day: Number.isFinite(Number(vote.day)) ? Math.max(1, Number(vote.day)) : 1,
     order: Number.isFinite(Number(vote.order ?? vote.round)) ? Math.max(1, Number(vote.order ?? vote.round)) : 1,
+    type,
+    runoffRound: type === "runoff" ? normalizeRunoffRound(vote.runoffRound) : 0,
     voterId: String(vote.voterId),
     targetId: vote.targetId === "abstain" ? "abstain" : String(vote.targetId),
     note: "",
