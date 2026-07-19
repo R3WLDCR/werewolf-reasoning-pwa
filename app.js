@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.119";
+const APP_VERSION = "1.118";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -229,7 +229,6 @@ document.addEventListener("DOMContentLoaded", () => {
     "participantEmptyState",
     "ropeCountBadge",
     "openVoteDialogBtn",
-    "openAttackRevealBtn",
     "playerRows",
     "emptyState",
     "exportSummary",
@@ -269,10 +268,6 @@ document.addEventListener("DOMContentLoaded", () => {
     "markExiledBtn",
     "markAttackedBtn",
     "markAliveBtn",
-    "attackRevealDialog",
-    "closeAttackRevealBtn",
-    "attackRevealDay",
-    "attackRevealName",
     "voteDialog",
     "closeVoteBtn",
     "voteDayInput",
@@ -482,11 +477,6 @@ function bindEvents() {
   els.markExiledBtn.addEventListener("click", () => setPlayerStatus("exiled"));
   els.markAttackedBtn.addEventListener("click", () => setPlayerStatus("attacked"));
   els.markAliveBtn.addEventListener("click", () => setPlayerStatus("alive"));
-  els.openAttackRevealBtn.addEventListener("click", openAttackRevealDialog);
-  els.closeAttackRevealBtn.addEventListener("click", closeAttackRevealDialog);
-  els.attackRevealDialog.addEventListener("click", (event) => {
-    if (event.target === els.attackRevealDialog) closeAttackRevealDialog();
-  });
   els.openVoteDialogBtn.addEventListener("click", openVoteDialog);
   els.closeVoteBtn.addEventListener("click", closeVoteDialog);
   els.addVoteBtn.addEventListener("click", addVoteFromDialog);
@@ -1895,24 +1885,6 @@ function closeStatusDialog() {
   els.statusDialog.close();
 }
 
-function getLatestAttackedPlayer() {
-  return getActivePlayers()
-    .filter((player) => player.status === "attacked")
-    .sort((a, b) => (Number(b.statusDay) || 1) - (Number(a.statusDay) || 1) || state.players.indexOf(b) - state.players.indexOf(a))[0] || null;
-}
-
-function openAttackRevealDialog() {
-  const player = getLatestAttackedPlayer();
-  if (!player) return toast("襲撃された参加者がまだいません");
-  els.attackRevealDay.textContent = `${Number(player.statusDay) || 1}日目 襲撃`;
-  els.attackRevealName.textContent = player.name;
-  els.attackRevealDialog.showModal();
-}
-
-function closeAttackRevealDialog() {
-  els.attackRevealDialog.close();
-}
-
 function openVoteDialog() {
   if (isGameFinished()) return toast("終了済み盤面は編集できません");
   const players = getActivePlayers();
@@ -2854,7 +2826,6 @@ function renderGameLifecycle() {
   els.finishGameBtn.hidden = !reasoningView || !inProgress;
   els.nextGameBtn.hidden = !reasoningView || !finished;
   els.openVoteDialogBtn.hidden = !reasoningView || finished;
-  els.openAttackRevealBtn.hidden = !reasoningView || !getLatestAttackedPlayer();
   els.dateInputWrap.classList.toggle("locked", inProgress || finished);
   [
     els.tournamentSelect,
