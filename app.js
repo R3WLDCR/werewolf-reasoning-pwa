@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.111";
+const APP_VERSION = "1.112";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -2192,7 +2192,7 @@ function addSelectedRunoffVotes(context) {
   });
   selectedRunoffVoterIds = new Set();
   const autoExileMessage = applyAutoExileFromCompletedVotes(day, state.voteHistories);
-  els.voteDayInput.value = getNextVoteInputDay(day, state.voteHistories);
+  els.voteDayInput.value = day;
   renderAndStore();
   renderVoteHistoryList();
   updateVoteVoterOptions();
@@ -2247,7 +2247,7 @@ function getVoteDaySummaryHtml(votes, players, day, isSelected) {
             <span>${summary ? escapeHtml(summary.replace(/^得票: /, "")) : "投票なし"}</span>
           </div>
           <div class="vote-summary-section">
-            <strong>投票順</strong>
+            <strong>${phase.type === "runoff" ? "投票結果" : "投票順"}</strong>
             <div class="vote-order-list">${voteOrderHtml}</div>
           </div>
         </div>
