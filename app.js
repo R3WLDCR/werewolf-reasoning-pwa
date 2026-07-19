@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.107";
+const APP_VERSION = "1.108";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -1978,15 +1978,25 @@ function readVoteRows(root) {
 
 function renderVoteHistoryList() {
   const players = getActivePlayers();
-  const sortedVotes = state.voteHistories
-    .slice()
-    .sort((a, b) => a.day - b.day || getVoteOrder(a) - getVoteOrder(b));
+  const sortedVotes = sortVotesForEditDisplay(state.voteHistories);
   els.voteHistoryList.innerHTML = sortedVotes.length
     ? sortedVotes.map((vote) => getVoteEditorRowHtml(vote, players)).join("")
     : '<div class="empty-inline">投票履歴なし</div>';
   bindVoteEditorEvents(els.voteHistoryList);
   updateVoteHistoryEditVisibility();
   updateVoteSummaryPanel();
+}
+
+function sortVotesForEditDisplay(votes) {
+  return votes
+    .slice()
+    .sort(
+      (a, b) =>
+        (Number(b.day) || 1) - (Number(a.day) || 1) ||
+        normalizeVoteType(a.type).localeCompare(normalizeVoteType(b.type)) ||
+        normalizeRunoffRound(a.runoffRound) - normalizeRunoffRound(b.runoffRound) ||
+        getVoteOrder(a) - getVoteOrder(b),
+    );
 }
 
 function updateVoteHistoryEditVisibility() {
@@ -4566,7 +4576,7 @@ function renderHistoryEditor(history) {
     ? history.claimEvents.map((event) => getHistoryClaimEventEditorRowHtml(event, activePlayers)).join("")
     : '<div class="empty-inline">CO履歴なし</div>';
   els.historyVoteEditor.innerHTML = history.voteHistories?.length
-    ? history.voteHistories.map((vote) => getVoteEditorRowHtml(vote, activePlayers)).join("")
+    ? sortVotesForEditDisplay(history.voteHistories).map((vote) => getVoteEditorRowHtml(vote, activePlayers)).join("")
     : '<div class="empty-inline">投票履歴なし</div>';
   els.historyRoleActionEditor.innerHTML = history.roleActions?.length
     ? history.roleActions
