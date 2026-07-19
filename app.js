@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.109";
+const APP_VERSION = "1.110";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -2346,10 +2346,11 @@ function getVoteInputContext(day, votes = state.voteHistories, players = getActi
 }
 
 function getVoteEditorRowHtml(vote, players) {
+  const isRunoff = normalizeVoteType(vote.type) === "runoff";
   return `
-    <div class="vote-edit-row" data-vote-id="${escapeHtml(vote.id)}">
+    <div class="vote-edit-row ${isRunoff ? "is-runoff" : ""}" data-vote-id="${escapeHtml(vote.id)}">
       <input data-field="day" type="number" min="1" value="${Number(vote.day) || 1}" aria-label="日付" />
-      <input data-field="order" type="number" min="1" value="${getVoteOrder(vote)}" aria-label="投票順" />
+      <input data-field="order" type="${isRunoff ? "hidden" : "number"}" min="1" value="${getVoteOrder(vote)}" aria-label="投票順" />
       <select data-field="type" aria-label="投票区分">${getVoteTypeOptionsHtml(vote.type)}</select>
       <input data-field="runoffRound" type="hidden" value="${normalizeRunoffRound(vote.runoffRound)}" />
       <select data-field="voterId" aria-label="投票者">${getVotePlayerOptionsHtml(players, vote.voterId)}</select>

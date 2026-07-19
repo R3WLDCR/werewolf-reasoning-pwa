@@ -1924,6 +1924,10 @@ select:disabled {
   align-items: center;
 }
 
+.vote-edit-row.is-runoff {
+  grid-template-columns: 60px 92px minmax(0, 1fr) minmax(0, 1fr) auto;
+}
+
 .history-player-edit {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
