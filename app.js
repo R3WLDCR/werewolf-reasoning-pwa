@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.110";
+const APP_VERSION = "1.111";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -2111,6 +2111,13 @@ function renderRunoffQuickPanel(context) {
         )
         .join("")
     : '<span class="vote-summary-empty">投票者なし</span>';
+  const otherTarget = context.targetPlayers.length === 2
+    ? context.targetPlayers.find((player) => player.id !== selectedRunoffTargetId)
+    : null;
+  const helperText = selectedRunoffTargetId && otherTarget
+    ? `未選択の投票者は ${otherTarget.name} へ入ります。`
+    : "";
+  const canConfirm = selectedRunoffTargetId && context.voterPlayers.length && (context.targetPlayers.length === 2 || selectedRunoffVoterIds.size);
   els.runoffQuickPanel.hidden = false;
   els.runoffQuickPanel.innerHTML = `
     <div class="runoff-quick-section">
@@ -2119,8 +2126,9 @@ function renderRunoffQuickPanel(context) {
     </div>
     <div class="runoff-quick-section">
       <strong>${selectedRunoffTargetId ? "投票者を選択" : "投票先を選んでください"}</strong>
+      ${helperText ? `<span class="runoff-helper">${escapeHtml(helperText)}</span>` : ""}
       <div class="runoff-voter-list">${voterButtons}</div>
-      <button class="primary-button runoff-confirm-button" type="button" data-runoff-confirm ${selectedRunoffTargetId && selectedRunoffVoterIds.size ? "" : "disabled"}>
+      <button class="primary-button runoff-confirm-button" type="button" data-runoff-confirm ${canConfirm ? "" : "disabled"}>
         決定
       </button>
     </div>
@@ -2149,8 +2157,8 @@ function renderRunoffQuickPanel(context) {
 }
 
 function addSelectedRunoffVotes(context) {
-  if (context.type !== "runoff" || !selectedRunoffTargetId || !selectedRunoffVoterIds.size) {
-    return toast("投票先と投票者を選んでください");
+  if (context.type !== "runoff" || !selectedRunoffTargetId) {
+    return toast("投票先を選んでください");
   }
   state.voteHistories = readVoteRows(els.voteHistoryList);
   const day = Number(els.voteDayInput.value) || 1;
@@ -2165,6 +2173,7 @@ function addSelectedRunoffVotes(context) {
   const otherTarget = voteContext.targetPlayers.length === 2
     ? voteContext.targetPlayers.find((player) => player.id !== selectedRunoffTargetId)
     : null;
+  if (!otherTarget && !selectedIds.size) return toast("投票者を選んでください");
   voteContext.voterPlayers.forEach((voter) => {
     const targetId = selectedIds.has(voter.id) ? selectedRunoffTargetId : otherTarget?.id;
     if (!targetId) return;

@@ -1745,6 +1745,11 @@ select:disabled {
   font-size: 0.8rem;
 }
 
+.runoff-helper {
+  color: #facc15;
+  font-size: 0.78rem;
+}
+
 .runoff-target-list,
 .runoff-voter-list {
   display: flex;
