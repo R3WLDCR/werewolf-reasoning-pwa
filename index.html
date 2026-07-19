@@ -123,6 +123,7 @@
               <div id="wolfCountBadge" class="wolf-count-badge" aria-label="設定済み人狼数">人狼 2人</div>
               <div id="ropeCountBadge" class="rope-count-badge" aria-label="残り縄数">残り0縄</div>
               <button id="openVoteDialogBtn" class="secondary-button" type="button">投票</button>
+              <button id="openAttackRevealBtn" class="secondary-button" type="button" hidden>襲撃表示</button>
             </div>
           </section>
 
@@ -350,6 +351,23 @@
           <button id="markExiledBtn" class="status-choice exiled" type="button">追放</button>
           <button id="markAttackedBtn" class="status-choice attacked" type="button">襲撃</button>
           <button id="markAliveBtn" class="status-choice alive" type="button">生存に戻す</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="attackRevealDialog" class="attack-reveal-dialog">
+      <form method="dialog">
+        <div class="sheet-heading">
+          <div>
+            <p class="kicker">Night Result</p>
+            <h2>昨夜の襲撃</h2>
+          </div>
+          <button id="closeAttackRevealBtn" class="round-button" type="button" aria-label="閉じる">×</button>
+        </div>
+        <div class="attack-reveal-card">
+          <span id="attackRevealDay" class="attack-reveal-day">1日目 襲撃</span>
+          <strong id="attackRevealName" class="attack-reveal-name">参加者名</strong>
+          <span class="attack-reveal-note">この参加者が襲撃されました</span>
         </div>
       </form>
     </dialog>

@@ -1360,6 +1360,7 @@ select:disabled {
 
 .membership-dialog,
 .status-dialog,
+.attack-reveal-dialog,
 .board-manager-dialog,
 .edit-dialog,
 .action-dialog,
@@ -1379,6 +1380,7 @@ select:disabled {
 
 .membership-dialog::backdrop,
 .status-dialog::backdrop,
+.attack-reveal-dialog::backdrop,
 .board-manager-dialog::backdrop,
 .edit-dialog::backdrop,
 .action-dialog::backdrop,
@@ -1392,6 +1394,7 @@ select:disabled {
 
 .membership-dialog form,
 .status-dialog form,
+.attack-reveal-dialog form,
 .board-manager-dialog form,
 .edit-dialog form,
 .action-dialog form,
@@ -1407,6 +1410,54 @@ select:disabled {
   padding: 10px 14px calc(18px + env(safe-area-inset-bottom));
   border-radius: 8px 8px 0 0;
   background: var(--panel);
+}
+
+.attack-reveal-dialog {
+  width: min(720px, calc(100% - 24px));
+  margin: auto;
+  border-radius: 8px;
+}
+
+.attack-reveal-dialog form {
+  min-height: min(520px, 78dvh);
+  align-content: center;
+  border-radius: 8px;
+  background: #090304;
+}
+
+.attack-reveal-card {
+  display: grid;
+  place-items: center;
+  gap: 16px;
+  min-height: 300px;
+  padding: 28px 18px 34px;
+  border: 1px solid rgba(255, 141, 152, 0.35);
+  border-radius: 8px;
+  background: linear-gradient(180deg, #1c070b, #0b0506);
+  text-align: center;
+}
+
+.attack-reveal-day {
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 141, 152, 0.32);
+  border-radius: 999px;
+  color: var(--wolf);
+  font-size: 0.92rem;
+  font-weight: 900;
+}
+
+.attack-reveal-name {
+  color: #fff3f4;
+  font-size: clamp(2.4rem, 8vw, 5.4rem);
+  font-weight: 1000;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.attack-reveal-note {
+  color: var(--muted);
+  font-size: 1rem;
+  font-weight: 900;
 }
 
 .impression-dialog form {
