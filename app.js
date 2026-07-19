@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.116";
+const APP_VERSION = "1.117";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -1995,10 +1995,14 @@ function sortVotesForEditDisplay(votes) {
     .sort(
       (a, b) =>
         (Number(b.day) || 1) - (Number(a.day) || 1) ||
-        normalizeVoteType(a.type).localeCompare(normalizeVoteType(b.type)) ||
-        normalizeRunoffRound(a.runoffRound) - normalizeRunoffRound(b.runoffRound) ||
-        getVoteOrder(a) - getVoteOrder(b),
+        getVoteEditTypePriority(b) - getVoteEditTypePriority(a) ||
+        normalizeRunoffRound(b.runoffRound) - normalizeRunoffRound(a.runoffRound) ||
+        getVoteOrder(b) - getVoteOrder(a),
     );
+}
+
+function getVoteEditTypePriority(vote) {
+  return normalizeVoteType(vote.type) === "runoff" ? 1 : 0;
 }
 
 function sortResultsForEditDisplay(results) {
