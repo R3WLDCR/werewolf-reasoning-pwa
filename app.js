@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.108";
+const APP_VERSION = "1.109";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -172,6 +172,7 @@ let rivalPerspectiveViewerId = "";
 let rivalPerspectiveTargetId = "";
 let voteHistoryEditVisible = false;
 let selectedRunoffTargetId = "";
+let selectedRunoffVoterIds = new Set();
 let toastTimer = null;
 let syncTimer = null;
 let supabaseClient = null;
@@ -1890,6 +1891,7 @@ function openVoteDialog() {
   if (!players.length) return toast("参加者がいません");
   voteHistoryEditVisible = false;
   selectedRunoffTargetId = "";
+  selectedRunoffVoterIds = new Set();
   els.voteDayInput.value = getDefaultVoteDialogDay();
   els.voteTargetSelect.innerHTML = getVoteTargetOptionsHtml(players);
   renderVoteHistoryList();
@@ -2019,9 +2021,13 @@ function updateVoteVoterOptions() {
       || availableTargets.find((player) => player.id === previousTargetValue)?.id
       || availableTargets[0]?.id
       || "";
-    selectedRunoffTargetId = fallbackTarget;
+    if (selectedRunoffTargetId !== fallbackTarget) {
+      selectedRunoffTargetId = fallbackTarget;
+      selectedRunoffVoterIds = new Set();
+    }
   } else {
     selectedRunoffTargetId = "";
+    selectedRunoffVoterIds = new Set();
   }
   els.voteVoterSelect.innerHTML = getVotePlayerOptionsHtml(availablePlayers);
   els.voteTargetSelect.innerHTML = getVoteTargetOptionsHtml(
@@ -2063,7 +2069,7 @@ function updateVoteModeNotice(context) {
   if (!els.voteModeNotice) return;
   if (context.type === "runoff") {
     const names = context.targetPlayers.map((player) => player.name).join(" / ");
-    const helper = context.targetPlayers.length === 2 ? "2択なので、1人選ぶと残り票は反対側へ入ります。" : `投票先は ${names || "候補なし"} のみです。`;
+    const helper = context.targetPlayers.length === 2 ? "片方の投票者を選んで決定すると、残りは反対側へ入ります。" : `投票先は ${names || "候補なし"} のみです。`;
     els.voteModeNotice.hidden = false;
     els.voteModeNotice.className = "vote-mode-notice runoff";
     els.voteModeNotice.innerHTML = `<strong>決選投票</strong><span>${escapeHtml(helper)}</span>`;
@@ -2079,8 +2085,11 @@ function renderRunoffQuickPanel(context) {
   if (context.type !== "runoff") {
     els.runoffQuickPanel.hidden = true;
     els.runoffQuickPanel.innerHTML = "";
+    selectedRunoffVoterIds = new Set();
     return;
   }
+  const availableVoterIds = new Set(context.voterPlayers.map((player) => player.id));
+  selectedRunoffVoterIds = new Set([...selectedRunoffVoterIds].filter((id) => availableVoterIds.has(id)));
   const targetButtons = context.targetPlayers
     .map(
       (player) => `
@@ -2094,7 +2103,8 @@ function renderRunoffQuickPanel(context) {
     ? context.voterPlayers
         .map(
           (player) => `
-            <button class="runoff-voter-button" type="button" data-runoff-voter="${escapeHtml(player.id)}" ${selectedRunoffTargetId ? "" : "disabled"}>
+            <button class="runoff-voter-button ${selectedRunoffVoterIds.has(player.id) ? "is-selected" : ""}" type="button" data-runoff-voter="${escapeHtml(player.id)}" ${selectedRunoffTargetId ? "" : "disabled"}>
+              ${selectedRunoffVoterIds.has(player.id) ? "✓ " : ""}
               ${escapeHtml(player.name)}
             </button>
           `,
@@ -2108,13 +2118,17 @@ function renderRunoffQuickPanel(context) {
       <div class="runoff-target-list">${targetButtons || '<span class="vote-summary-empty">候補なし</span>'}</div>
     </div>
     <div class="runoff-quick-section">
-      <strong>${selectedRunoffTargetId ? "投票者をタップ" : "投票先を選んでください"}</strong>
+      <strong>${selectedRunoffTargetId ? "投票者を選択" : "投票先を選んでください"}</strong>
       <div class="runoff-voter-list">${voterButtons}</div>
+      <button class="primary-button runoff-confirm-button" type="button" data-runoff-confirm ${selectedRunoffTargetId && selectedRunoffVoterIds.size ? "" : "disabled"}>
+        決定
+      </button>
     </div>
   `;
   els.runoffQuickPanel.querySelectorAll("[data-runoff-target]").forEach((button) => {
     button.addEventListener("click", () => {
       selectedRunoffTargetId = button.dataset.runoffTarget || "";
+      selectedRunoffVoterIds = new Set();
       els.voteTargetSelect.value = selectedRunoffTargetId;
       renderRunoffQuickPanel(getVoteInputContext(Number(els.voteDayInput.value) || 1, readVoteRows(els.voteHistoryList)));
     });
@@ -2122,11 +2136,59 @@ function renderRunoffQuickPanel(context) {
   els.runoffQuickPanel.querySelectorAll("[data-runoff-voter]").forEach((button) => {
     button.addEventListener("click", () => {
       if (!selectedRunoffTargetId) return toast("投票先を選んでください");
-      els.voteVoterSelect.value = button.dataset.runoffVoter || "";
-      els.voteTargetSelect.value = selectedRunoffTargetId;
-      addVoteFromDialog();
+      const voterId = button.dataset.runoffVoter || "";
+      if (selectedRunoffVoterIds.has(voterId)) {
+        selectedRunoffVoterIds.delete(voterId);
+      } else {
+        selectedRunoffVoterIds.add(voterId);
+      }
+      renderRunoffQuickPanel(context);
     });
   });
+  els.runoffQuickPanel.querySelector("[data-runoff-confirm]")?.addEventListener("click", () => addSelectedRunoffVotes(context));
+}
+
+function addSelectedRunoffVotes(context) {
+  if (context.type !== "runoff" || !selectedRunoffTargetId || !selectedRunoffVoterIds.size) {
+    return toast("投票先と投票者を選んでください");
+  }
+  state.voteHistories = readVoteRows(els.voteHistoryList);
+  const day = Number(els.voteDayInput.value) || 1;
+  const voteContext = getVoteInputContext(day, state.voteHistories);
+  const targetIds = new Set(voteContext.targetPlayers.map((player) => player.id));
+  if (voteContext.type !== "runoff" || !targetIds.has(selectedRunoffTargetId)) {
+    selectedRunoffVoterIds = new Set();
+    updateVoteVoterOptions();
+    return toast("決選投票の状態が変わりました");
+  }
+  const selectedIds = new Set([...selectedRunoffVoterIds].filter((id) => voteContext.voterPlayers.some((player) => player.id === id)));
+  const otherTarget = voteContext.targetPlayers.length === 2
+    ? voteContext.targetPlayers.find((player) => player.id !== selectedRunoffTargetId)
+    : null;
+  voteContext.voterPlayers.forEach((voter) => {
+    const targetId = selectedIds.has(voter.id) ? selectedRunoffTargetId : otherTarget?.id;
+    if (!targetId) return;
+    state.voteHistories.push(
+      normalizeVoteHistory({
+        id: crypto.randomUUID(),
+        day,
+        order: getNextVoteOrder(day, state.voteHistories),
+        type: "runoff",
+        runoffRound: voteContext.runoffRound,
+        voterId: voter.id,
+        targetId,
+        note: "",
+      }),
+    );
+  });
+  selectedRunoffVoterIds = new Set();
+  const autoExileMessage = applyAutoExileFromCompletedVotes(day, state.voteHistories);
+  els.voteDayInput.value = getNextVoteInputDay(day, state.voteHistories);
+  renderAndStore();
+  renderVoteHistoryList();
+  updateVoteVoterOptions();
+  updateVoteSummaryPanel();
+  toast(autoExileMessage || "決選投票を保存しました");
 }
 
 function updateVoteSummaryPanel() {

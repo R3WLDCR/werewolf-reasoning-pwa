@@ -1774,8 +1774,18 @@ select:disabled {
   background: #123f2e;
 }
 
+.runoff-voter-button.is-selected {
+  border-color: rgba(96, 165, 250, 0.72);
+  background: #183755;
+}
+
 .runoff-voter-button:disabled {
   opacity: 0.48;
+}
+
+.runoff-confirm-button {
+  align-self: stretch;
+  min-height: 40px;
 }
 
 .vote-summary-panel {
