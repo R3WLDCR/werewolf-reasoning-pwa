@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.112";
+const APP_VERSION = "1.113";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -1998,6 +1998,39 @@ function sortVotesForEditDisplay(votes) {
         normalizeVoteType(a.type).localeCompare(normalizeVoteType(b.type)) ||
         normalizeRunoffRound(a.runoffRound) - normalizeRunoffRound(b.runoffRound) ||
         getVoteOrder(a) - getVoteOrder(b),
+    );
+}
+
+function sortResultsForEditDisplay(results) {
+  return results
+    .slice()
+    .sort(
+      (a, b) =>
+        getDivinationOrder(b) - getDivinationOrder(a) ||
+        String(b.id || "").localeCompare(String(a.id || "")),
+    );
+}
+
+function sortClaimEventsForEditDisplay(events) {
+  return events
+    .slice()
+    .sort(
+      (a, b) =>
+        (Number(b.day) || 1) - (Number(a.day) || 1) ||
+        String(b.createdAt || "").localeCompare(String(a.createdAt || "")) ||
+        String(b.id || "").localeCompare(String(a.id || "")),
+    );
+}
+
+function sortRoleActionsForEditDisplay(actions) {
+  return actions
+    .slice()
+    .sort(
+      (a, b) =>
+        (Number(b.day) || 1) - (Number(a.day) || 1) ||
+        String(a.role || "").localeCompare(String(b.role || "")) ||
+        String(a.actorId || "").localeCompare(String(b.actorId || "")) ||
+        String(a.targetId || "").localeCompare(String(b.targetId || "")),
     );
 }
 
@@ -4615,7 +4648,7 @@ function renderHistoryEditor(history) {
     )
     .join("");
   els.historyResultEditor.innerHTML = history.results.length
-    ? history.results
+    ? sortResultsForEditDisplay(history.results)
         .map((result) => {
           const seer = history.players.find((player) => player.id === result.seerId);
           const target = history.players.find((player) => player.id === result.targetId);
@@ -4645,13 +4678,13 @@ function renderHistoryEditor(history) {
         .join("")
     : '<div class="empty-inline">対抗視点欄の手入力なし</div>';
   els.historyClaimEventEditor.innerHTML = history.claimEvents?.length
-    ? history.claimEvents.map((event) => getHistoryClaimEventEditorRowHtml(event, activePlayers)).join("")
+    ? sortClaimEventsForEditDisplay(history.claimEvents).map((event) => getHistoryClaimEventEditorRowHtml(event, activePlayers)).join("")
     : '<div class="empty-inline">CO履歴なし</div>';
   els.historyVoteEditor.innerHTML = history.voteHistories?.length
     ? sortVotesForEditDisplay(history.voteHistories).map((vote) => getVoteEditorRowHtml(vote, activePlayers)).join("")
     : '<div class="empty-inline">投票履歴なし</div>';
   els.historyRoleActionEditor.innerHTML = history.roleActions?.length
-    ? history.roleActions
+    ? sortRoleActionsForEditDisplay(history.roleActions)
         .map((action) => getHistoryRoleActionEditorRowHtml(action, activePlayers))
         .join("")
     : '<div class="empty-inline">役職行動結果なし</div>';
