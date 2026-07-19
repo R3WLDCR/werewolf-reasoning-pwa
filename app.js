@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.106";
+const APP_VERSION = "1.107";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -1919,6 +1919,7 @@ function addVoteFromDialog() {
   if (!vote) return toast("投票者と投票先を選んでください");
   if (vote.voterId === vote.targetId) return toast("自分には投票できません");
   state.voteHistories.push(vote);
+  const addedMirrorVotes = addRunoffMirrorVotes(vote, context, state.voteHistories);
   const autoExileMessage = applyAutoExileFromCompletedVotes(day, state.voteHistories);
   const nextDay = getNextVoteInputDay(day, state.voteHistories);
   els.voteDayInput.value = nextDay;
@@ -1926,7 +1927,30 @@ function addVoteFromDialog() {
   renderVoteHistoryList();
   updateVoteVoterOptions();
   updateVoteSummaryPanel();
+  if (addedMirrorVotes) toast("残り票を反対側へ自動入力しました");
   if (autoExileMessage) toast(autoExileMessage);
+}
+
+function addRunoffMirrorVotes(vote, context, votes) {
+  if (context.type !== "runoff" || context.targetPlayers.length !== 2) return 0;
+  const otherTarget = context.targetPlayers.find((player) => player.id !== vote.targetId);
+  if (!otherTarget) return 0;
+  const remainingVoters = context.voterPlayers.filter((player) => player.id !== vote.voterId);
+  remainingVoters.forEach((voter) => {
+    votes.push(
+      normalizeVoteHistory({
+        id: crypto.randomUUID(),
+        day: vote.day,
+        order: getNextVoteOrder(vote.day, votes),
+        type: "runoff",
+        runoffRound: vote.runoffRound,
+        voterId: voter.id,
+        targetId: otherTarget.id,
+        note: "",
+      }),
+    );
+  });
+  return remainingVoters.length;
 }
 
 function persistVoteDialogChanges() {
@@ -2029,9 +2053,10 @@ function updateVoteModeNotice(context) {
   if (!els.voteModeNotice) return;
   if (context.type === "runoff") {
     const names = context.targetPlayers.map((player) => player.name).join(" / ");
+    const helper = context.targetPlayers.length === 2 ? "2択なので、1人選ぶと残り票は反対側へ入ります。" : `投票先は ${names || "候補なし"} のみです。`;
     els.voteModeNotice.hidden = false;
     els.voteModeNotice.className = "vote-mode-notice runoff";
-    els.voteModeNotice.innerHTML = `<strong>決選投票</strong><span>投票先は ${escapeHtml(names || "候補なし")} のみです。</span>`;
+    els.voteModeNotice.innerHTML = `<strong>決選投票</strong><span>${escapeHtml(helper)}</span>`;
     return;
   }
   els.voteModeNotice.hidden = false;
@@ -2125,8 +2150,8 @@ function getVoteDaySummaryHtml(votes, players, day, isSelected) {
         ? voteOrder
             .map(
               (entry) => `
-                <div class="vote-order-item">
-                  <span class="vote-order-number">${escapeHtml(formatVoteOrderMarker(entry.order))}</span>
+                <div class="vote-order-item ${phase.type === "runoff" ? "no-order" : ""}">
+                  ${phase.type === "runoff" ? "" : `<span class="vote-order-number">${escapeHtml(formatVoteOrderMarker(entry.order))}</span>`}
                   <span>${escapeHtml(entry.voterName)} → ${escapeHtml(entry.targetName)}</span>
                 </div>
               `,
@@ -5236,7 +5261,8 @@ function formatVoteEvent(vote, players) {
   const target = vote.targetId === "abstain" ? null : players.find((player) => player.id === vote.targetId);
   if (!voter || (!target && vote.targetId !== "abstain")) return "";
   const targetName = vote.targetId === "abstain" ? "棄権" : target.name;
-  const prefix = normalizeVoteType(vote.type) === "runoff" ? "決選投票" : "投票";
+  if (normalizeVoteType(vote.type) === "runoff") return `決選投票: ${voter.name} -> ${targetName}`;
+  const prefix = "投票";
   return `${prefix}${getVoteOrder(vote)}番目: ${voter.name} -> ${targetName}`;
 }
 

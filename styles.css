@@ -1895,6 +1895,10 @@ select:disabled {
   align-items: start;
 }
 
+.vote-order-item.no-order {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .vote-order-number {
   color: #f8fafc;
   font-weight: 700;
