@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.113";
+const APP_VERSION = "1.114";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -2256,7 +2256,7 @@ function getVoteDaySummaryHtml(votes, players, day, isSelected) {
   if (currentContext && !phaseKeys.some((phase) => phase.type === currentContext.type && phase.runoffRound === currentContext.runoffRound)) {
     phaseKeys.push({ type: currentContext.type, runoffRound: currentContext.runoffRound });
   }
-  const phaseHtml = phaseKeys
+  const phaseHtml = sortVotePhaseKeysForSummary(phaseKeys)
     .map((phase) => {
       const summary = formatVoteSummaryForDay(votes, players, day, phase.type, phase.runoffRound);
       const voteOrder = getVoteOrderEntriesForDay(votes, players, day, phase.type, phase.runoffRound);
@@ -5463,9 +5463,14 @@ function getVoteSummaryPhaseKeys(votes, day) {
       const runoffRound = type === "runoff" ? normalizeRunoffRound(vote.runoffRound) : 0;
       byKey.set(`${type}:${runoffRound}`, { type, runoffRound });
     });
-  return [...byKey.values()].sort((a, b) => {
-    if (a.type !== b.type) return a.type === "normal" ? -1 : 1;
-    return a.runoffRound - b.runoffRound;
+  return sortVotePhaseKeysForSummary([...byKey.values()]);
+}
+
+function sortVotePhaseKeysForSummary(phaseKeys) {
+  return phaseKeys.slice().sort((a, b) => {
+    if (a.type !== b.type) return a.type === "runoff" ? -1 : 1;
+    if (a.type === "runoff") return b.runoffRound - a.runoffRound;
+    return 0;
   });
 }
 
