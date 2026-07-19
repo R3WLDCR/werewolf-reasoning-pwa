@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.117";
+const APP_VERSION = "1.118";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3967,6 +3967,13 @@ function reconcileConfirmedRoleEvidence() {
       entries[0];
     const validEntries = preferred ? entries.filter((entry) => entry.value === preferred.value) : [];
     if (!preferred) {
+      if (isStaleSingleClaimRolePreviousGuess(player)) {
+        player.confirmedRolePreviousGuess = {
+          roleGuessCandidates: ["unknown"],
+          primaryRoleGuess: "",
+          manualRoleGuess: false,
+        };
+      }
       if (player.confirmedRolePreviousGuess) restoreRoleGuessBeforeConfirmation(player);
       player.confirmedRoleEvidence = [];
       player.mediumConfirmedRoleGuess = "";
@@ -4003,6 +4010,14 @@ function isLegacySingleSeerPreviousGuess(player, preferred) {
 }
 
 function getPreviousGuessBeforeConfirmedEvidence(player, preferred) {
+  if (preferred.role === "claim" && player.autoSingleClaimRoleGuess?.role === preferred.value) {
+    const previous = player.autoSingleClaimRoleGuess;
+    return {
+      roleGuessCandidates: [...previous.roleGuessCandidates],
+      primaryRoleGuess: previous.primaryRoleGuess,
+      manualRoleGuess: previous.manualRoleGuess === true,
+    };
+  }
   const currentValue = getRoleGuessDisplay(player).value;
   const isLegacySingleSeerAutoGuess =
     preferred.role === "seer" &&
@@ -4021,6 +4036,19 @@ function getPreviousGuessBeforeConfirmedEvidence(player, preferred) {
     primaryRoleGuess: player.primaryRoleGuess,
     manualRoleGuess: player.manualRoleGuess,
   };
+}
+
+function isStaleSingleClaimRolePreviousGuess(player) {
+  const previous = player.confirmedRolePreviousGuess;
+  if (!previous || previous.manualRoleGuess) return false;
+  const previousRole = normalizePrimaryRoleGuess(previous.primaryRoleGuess, previous.roleGuessCandidates);
+  if (!SELF_RIVAL_GUESS_ROLES.has(previousRole)) return false;
+  return player.confirmedRoleEvidence?.some(
+    (evidence) =>
+      evidence.role === "claim" &&
+      evidence.value === previousRole &&
+      evidence.sourceId === `claim:${previousRole}:${player.id}`,
+  );
 }
 
 function restoreRoleGuessBeforeConfirmation(player) {
