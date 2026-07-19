@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.115";
+const APP_VERSION = "1.116";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3593,7 +3593,7 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
       const rivalSeerLabel = getHumanJudgedRivalSeerLabel(player, seer, result.value, resultLabel);
       const displayedRole = player.autoConfirmedWhite && result.value === "human" ? "" : roleClaim || manualMediumGuess;
       const label = rivalSeerLabel || (displayedRole ? `${displayedRole} / ${resultLabel}` : resultLabel);
-      return `<span class="seer-result-label ${className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(label)}</span>`;
+      return `<span class="seer-result-label ${rivalSeerLabel ? "role-madman" : className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(label)}</span>`;
     })
     .filter(Boolean)
     .join("");
@@ -3611,11 +3611,12 @@ function getSeerColumnOverrideHtml(override, seer, player = findPlayer(override.
     const resultLabel = result
       ? getDivinationResultDisplayLabel(result, player, override.value)
       : RESULT_LABELS[override.value];
-    const label = getHumanJudgedRivalSeerLabel(player, seer, override.value, resultLabel) ||
+    const rivalSeerLabel = getHumanJudgedRivalSeerLabel(player, seer, override.value, resultLabel);
+    const label = rivalSeerLabel ||
       (!result && shouldDisplayConfirmedWhiteForSeer(player, override.seerId, override.value)
         ? `${resultLabel} / ${ROLE_LABELS.confirmedWhite}`
         : resultLabel);
-    const className = override.value === "werewolf" ? "judgement-werewolf" : "judgement-human";
+    const className = rivalSeerLabel ? "role-madman" : override.value === "werewolf" ? "judgement-werewolf" : "judgement-human";
     return `<span class="seer-result-label ${className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(label)}</span>`;
   }
   const className = override.value === "werewolf" ? "role-werewolf" : `role-${override.value}`;
