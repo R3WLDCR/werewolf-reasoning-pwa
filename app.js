@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.129";
+const APP_VERSION = "1.130";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -265,6 +265,8 @@ document.addEventListener("DOMContentLoaded", () => {
     "mediumResultSection",
     "mediumResultHint",
     "mediumResultSelect",
+    "mediumPerspectiveResultSection",
+    "mediumPerspectiveResultList",
     "roleActionSection",
     "roleActionTitle",
     "roleActionList",
@@ -1875,6 +1877,7 @@ function openEditDialog(playerId, seerId = "") {
   els.memoInput.value = player.memo || "";
   renderResultControls(player);
   renderMediumResultControl(player);
+  renderMediumPerspectiveResultControl(player);
   renderRoleActionControls(player);
   els.editDialog.showModal();
 }
@@ -2628,6 +2631,7 @@ function saveEditingPlayer() {
   }
   saveRoleActionResults(player);
   saveIndependentMediumResult(player);
+  saveMediumPerspectiveResults(player);
   saveDivinationResult({ silent: true });
   saveAdoptedMediumSelection();
   if (previousRole !== player.role) addClaimEvent(player.id, previousRole, player.role);
@@ -3410,7 +3414,7 @@ function ensureLegacySeerResultOption(value) {
 
 function renderMediumResultControl(target) {
   const medium = getLivingSingleMedium();
-  const canRecordResult = Boolean(medium && target.status === "exiled");
+  const canRecordResult = Boolean(state.reasoningPerspective !== "medium" && medium && target.status === "exiled");
   els.mediumResultSection.hidden = !canRecordResult;
   if (!canRecordResult) {
     els.mediumResultSelect.value = "";
@@ -3425,6 +3429,36 @@ function getMediumResultActions(actorId, targetId) {
   return state.roleActions
     .filter((action) => action.actorId === actorId && action.role === "medium" && action.targetId === targetId)
     .sort((a, b) => Number(a.day) - Number(b.day));
+}
+
+function renderMediumPerspectiveResultControl(target) {
+  const mediumClaimants = getRoleClaimants("medium");
+  const canShow = state.reasoningPerspective === "medium" && mediumClaimants.length > 0;
+  els.mediumPerspectiveResultSection.hidden = !canShow;
+  if (!canShow) {
+    els.mediumPerspectiveResultList.innerHTML = "";
+    return;
+  }
+  if (target.status !== "exiled") {
+    els.mediumPerspectiveResultList.innerHTML = `<div class="empty-inline">追放された参加者だけ霊媒結果を入力できます</div>`;
+    return;
+  }
+  els.mediumPerspectiveResultList.innerHTML = mediumClaimants
+    .map((medium) => {
+      const existing = getMediumResultActions(medium.id, target.id)[0];
+      const value = ["human", "werewolf"].includes(existing?.result) ? existing.result : "";
+      return `
+        <label class="medium-perspective-result-row">
+          <span>${escapeHtml(medium.name)}</span>
+          <select data-medium-result-actor-id="${escapeHtml(medium.id)}" aria-label="${escapeHtml(medium.name)}の霊媒結果">
+            <option value="" ${value === "" ? "selected" : ""}>未記録</option>
+            <option value="human" ${value === "human" ? "selected" : ""}>市民</option>
+            <option value="werewolf" ${value === "werewolf" ? "selected" : ""}>人狼</option>
+          </select>
+        </label>
+      `;
+    })
+    .join("");
 }
 
 function renderAdoptedMediumControl() {
@@ -3519,6 +3553,32 @@ function saveIndependentMediumResult(target) {
     targetId: target.id,
     result: value,
     note: existing[0]?.note || "",
+  });
+}
+
+function saveMediumPerspectiveResults(target) {
+  if (els.mediumPerspectiveResultSection.hidden || target.status !== "exiled") return;
+  const selects = Array.from(els.mediumPerspectiveResultList.querySelectorAll("[data-medium-result-actor-id]"));
+  selects.forEach((select) => {
+    const medium = findPlayer(select.dataset.mediumResultActorId);
+    if (!medium || medium.role !== "medium") return;
+    const existing = getMediumResultActions(medium.id, target.id);
+    const value = select.value;
+    const previousValue = ["human", "werewolf"].includes(existing[0]?.result) ? existing[0].result : "";
+    if (previousValue !== value) invalidateInferenceForResultChange(target, medium);
+    state.roleActions = state.roleActions.filter(
+      (action) => action.actorId !== medium.id || action.role !== "medium" || action.targetId !== target.id,
+    );
+    if (!["human", "werewolf"].includes(value)) return;
+    state.roleActions.push({
+      id: existing[0]?.id || crypto.randomUUID(),
+      actorId: medium.id,
+      role: "medium",
+      day: Math.max(1, Number(target.statusDay) || 1),
+      targetId: target.id,
+      result: value,
+      note: existing[0]?.note || "",
+    });
   });
 }
 
