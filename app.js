@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.128";
+const APP_VERSION = "1.129";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3668,43 +3668,7 @@ function getRoleActionResultOptionsHtml(role, selectedResult = "unknown") {
 }
 
 function getPerspectiveGridHtml(player) {
-  if (state.reasoningPerspective !== "medium") return getSeerGridHtml(player);
-  return [getMediumGridHtml(player), getSeerOnlyGridHtml(player)].filter(Boolean).join("");
-}
-
-function getMediumGridHtml(player) {
-  const mediums = getRoleClaimants("medium");
-  if (!mediums.length) return "";
-  const cells = mediums.map((medium) => getMediumPerspectiveCellHtml(player, medium)).join("");
-  return `
-    <span class="seer-grid medium-grid" style="--seer-columns: ${mediums.length}">
-      ${cells}
-    </span>
-  `;
-}
-
-function getMediumPerspectiveCellHtml(player, medium) {
-  if (player.id === medium.id) {
-    return `<span class="seer-result-label role-medium">${escapeHtml(ROLE_LABELS.medium)}</span>`;
-  }
-  if (player.role === "medium") {
-    if (isRivalPerspectiveTargetConfirmedMadman(player)) {
-      return getRivalPerspectiveCellHtml("medium", medium, player, "madman");
-    }
-    const override = getRivalPerspectiveOverride("medium", medium.id, player.id);
-    return getRivalPerspectiveCellHtml(
-      "medium",
-      medium,
-      player,
-      override?.value || getAutomaticRivalPerspectiveValue(medium, player, getRoleClaimants("medium")),
-    );
-  }
-  const action = getMediumResultActions(medium.id, player.id).find((item) => ["human", "werewolf"].includes(item.result));
-  if (action) {
-    const className = action.result === "werewolf" ? "judgement-werewolf" : "judgement-human";
-    return `<span class="seer-result-label ${className}">${escapeHtml(getAdoptedMediumResultLabel(action))}</span>`;
-  }
-  return `<span class="seer-result-label empty" aria-hidden="true"></span>`;
+  return getSeerGridHtml(player);
 }
 
 function getSeerGridHtml(player) {
