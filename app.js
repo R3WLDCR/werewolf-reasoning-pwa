@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.131";
+const APP_VERSION = "1.132";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3732,7 +3732,8 @@ function getPerspectiveGridHtml(player) {
 }
 
 function getSeerGridHtml(player) {
-  const rivalRoleCells = getRivalRoleCellsHtml(player);
+  const useSeerColumnsForMediumLines = player.role === "medium" && hasMultiSeerMediumPerspective();
+  const rivalRoleCells = useSeerColumnsForMediumLines ? "" : getRivalRoleCellsHtml(player);
   if (rivalRoleCells) {
     const columnCount = getRoleClaimants(player.role).length;
     return `
