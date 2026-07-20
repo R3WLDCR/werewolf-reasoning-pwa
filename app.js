@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.125";
+const APP_VERSION = "1.126";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -115,6 +115,7 @@ const BOARD_STATE_FIELDS = [
   "players",
   "results",
   "seerColumnOverrides",
+  "seerMediumLinks",
   "rivalPerspectiveOverrides",
   "rivalPerspectiveVersion",
   "roleActions",
@@ -140,6 +141,7 @@ const state = {
   players: [],
   results: [],
   seerColumnOverrides: [],
+  seerMediumLinks: [],
   rivalPerspectiveOverrides: [],
   rivalPerspectiveVersion: 2,
   roleActions: [],
@@ -254,6 +256,8 @@ document.addEventListener("DOMContentLoaded", () => {
     "roleSelect",
     "resultSeerHint",
     "resultValueSelect",
+    "adoptedMediumSection",
+    "adoptedMediumSelect",
     "mediumResultSection",
     "mediumResultHint",
     "mediumResultSelect",
@@ -728,6 +732,7 @@ function autoStartGameFromBoardInput() {
 function hasBoardProgress() {
   if (state.results.length) return true;
   if (state.seerColumnOverrides.length) return true;
+  if (state.seerMediumLinks.length) return true;
   if (state.rivalPerspectiveOverrides.length) return true;
   if (state.roleActions.length) return true;
   if (state.claimEvents.length) return true;
@@ -977,6 +982,7 @@ function createGameHistory(winner, trueRoles = new Map()) {
     players,
     results: structuredClone(state.results),
     seerColumnOverrides: structuredClone(state.seerColumnOverrides),
+    seerMediumLinks: structuredClone(state.seerMediumLinks),
     rivalPerspectiveOverrides: structuredClone(state.rivalPerspectiveOverrides),
     rivalPerspectiveVersion: 2,
     roleActions: structuredClone(state.roleActions),
@@ -1113,6 +1119,7 @@ function createBoard(name, tournamentId) {
     players,
     results: [],
     seerColumnOverrides: [],
+    seerMediumLinks: [],
     rivalPerspectiveOverrides: [],
     rivalPerspectiveVersion: 2,
     roleActions: [],
@@ -1192,6 +1199,7 @@ function resetBoardState() {
   }));
   state.results = [];
   state.seerColumnOverrides = [];
+  state.seerMediumLinks = [];
   state.rivalPerspectiveOverrides = [];
   state.roleActions = [];
   state.claimEvents = [];
@@ -2613,6 +2621,7 @@ function saveEditingPlayer() {
   saveRoleActionResults(player);
   saveIndependentMediumResult(player);
   saveDivinationResult({ silent: true });
+  saveAdoptedMediumSelection();
   if (previousRole !== player.role) addClaimEvent(player.id, previousRole, player.role);
   if (progressSignatureBefore !== getMeaningfulProgressSignature()) continuationNotice = confirmPendingExileContinuation();
   autoStartGameFromBoardInput();
@@ -2663,6 +2672,17 @@ function saveDivinationResult({ silent = false } = {}) {
   if (isPriorityPlayer(seer)) applyConfirmedSeerResultRoleGuess(target, seer, value);
   autoStartGameFromBoardInput();
   if (!silent) renderAndStore();
+  return true;
+}
+
+function saveAdoptedMediumSelection() {
+  const seer = findPlayer(editingSeerId);
+  if (!seer) return false;
+  if (els.adoptedMediumSection.hidden) return false;
+  const mediumId = els.adoptedMediumSelect.value;
+  const previousValue = getAdoptedMediumId(seer.id);
+  if (previousValue === mediumId) return false;
+  setAdoptedMediumForSeer(seer.id, mediumId);
   return true;
 }
 
@@ -3340,6 +3360,7 @@ function renderResultControls(target) {
   const existing = state.results.find((result) => result.seerId === editingSeerId && result.targetId === target.id);
   ensureLegacySeerResultOption(override?.value);
   els.resultValueSelect.value = override?.value || existing?.value || "";
+  renderAdoptedMediumControl();
 }
 
 function ensureLegacySeerResultOption(value) {
@@ -3369,6 +3390,79 @@ function getMediumResultActions(actorId, targetId) {
   return state.roleActions
     .filter((action) => action.actorId === actorId && action.role === "medium" && action.targetId === targetId)
     .sort((a, b) => Number(a.day) - Number(b.day));
+}
+
+function renderAdoptedMediumControl() {
+  const seer = findPlayer(editingSeerId);
+  const mediumClaimants = getRoleClaimants("medium");
+  const canAdopt = Boolean(seer && seer.role === "seer" && hasMultiSeerMediumPerspective());
+  els.adoptedMediumSection.hidden = !canAdopt;
+  if (!canAdopt) {
+    els.adoptedMediumSelect.innerHTML = "";
+    return;
+  }
+  const currentValue = getAdoptedMediumId(seer.id);
+  els.adoptedMediumSelect.innerHTML = [
+    `<option value="">採用霊媒なし</option>`,
+    ...mediumClaimants.map((medium) => `<option value="${escapeHtml(medium.id)}">${escapeHtml(medium.name)}</option>`),
+  ].join("");
+  els.adoptedMediumSelect.value = mediumClaimants.some((medium) => medium.id === currentValue) ? currentValue : "";
+}
+
+function getAdoptedMediumId(seerId, links = state.seerMediumLinks) {
+  return links.find((link) => link.seerId === seerId)?.mediumId || "";
+}
+
+function setAdoptedMediumForSeer(seerId, mediumId) {
+  state.seerMediumLinks = state.seerMediumLinks.filter((link) => link.seerId !== seerId);
+  if (mediumId) state.seerMediumLinks.push({ seerId, mediumId });
+}
+
+function hasMultiSeerMediumPerspective() {
+  return getRoleClaimants("seer").length >= 2 && getRoleClaimants("medium").length >= 2;
+}
+
+function reconcileSeerMediumLinks() {
+  const seerIds = new Set(getRoleClaimants("seer").map((seer) => seer.id));
+  const mediumIds = new Set(getRoleClaimants("medium").map((medium) => medium.id));
+  if (seerIds.size < 2 || mediumIds.size < 2) {
+    state.seerMediumLinks = [];
+    return;
+  }
+  state.seerMediumLinks = dedupeSeerMediumLinks(
+    state.seerMediumLinks.filter((link) => seerIds.has(link.seerId) && mediumIds.has(link.mediumId)),
+  );
+}
+
+function getAdoptedMediumResultForSeerTarget(seerId, targetId) {
+  if (!hasMultiSeerMediumPerspective()) return null;
+  const mediumId = getAdoptedMediumId(seerId);
+  if (!mediumId) return null;
+  return getMediumResultActions(mediumId, targetId).find((action) => ["human", "werewolf"].includes(action.result)) || null;
+}
+
+function getAdoptedMediumResultLabel(action) {
+  if (!action || !Object.hasOwn(RESULT_LABELS, action.result)) return "";
+  return `霊媒 ${RESULT_LABELS[action.result]}`;
+}
+
+function isAdoptedMediumResultContradictingSeer(seerId, targetId, seerValue) {
+  if (!Object.hasOwn(RESULT_LABELS, seerValue)) return false;
+  const action = getAdoptedMediumResultForSeerTarget(seerId, targetId);
+  if (!action) return false;
+  return action.result !== seerValue;
+}
+
+function getMediumPerspectiveForSeer(player, seer) {
+  if (!player || player.role !== "medium" || !seer || !hasMultiSeerMediumPerspective()) return null;
+  const adoptedMediumId = getAdoptedMediumId(seer.id);
+  if (!adoptedMediumId) {
+    return { label: "霊媒師/狼狂", className: "role-medium-wolfSide" };
+  }
+  if (adoptedMediumId === player.id) {
+    return { label: ROLE_LABELS.medium, className: "role-medium" };
+  }
+  return { label: ROLE_LABELS.wolfSide, className: "judgement-rival" };
 }
 
 function saveIndependentMediumResult(target) {
@@ -3588,10 +3682,19 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
       if (isRivalSeer && !result) {
         return getRivalPerspectiveCellHtml("seer", seer, player, getAutomaticRivalPerspectiveValue(seer, player, seers));
       }
+      const mediumPerspective = getMediumPerspectiveForSeer(player, seer);
+      if (!result && mediumPerspective) {
+        return `<span class="seer-result-label ${mediumPerspective.className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(mediumPerspective.label)}</span>`;
+      }
       const mediumConfirmedDisplay = getMediumConfirmedDisplay(player);
       const guardClaim = getNonWolfGuardClaimForSeer(player, seer, result?.value || "");
       if (!result && guardClaim) {
         return `<span class="seer-result-label role-guard" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(guardClaim)}</span>`;
+      }
+      const adoptedMediumResult = getAdoptedMediumResultForSeerTarget(seer.id, player.id);
+      if (!result && adoptedMediumResult) {
+        const className = adoptedMediumResult.result === "werewolf" ? "judgement-werewolf" : "judgement-human";
+        return `<span class="seer-result-label ${className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(getAdoptedMediumResultLabel(adoptedMediumResult))}</span>`;
       }
       if (!result && mediumConfirmedDisplay) {
         return `<span class="seer-result-label ${mediumConfirmedDisplay.className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(mediumConfirmedDisplay.label)}</span>`;
@@ -3630,7 +3733,8 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
       const resultLabel = getDivinationResultDisplayLabel(result, player);
       const rivalSeerLabel = getHumanJudgedRivalSeerLabel(player, seer, result.value, resultLabel);
       const displayedRole = player.autoConfirmedWhite && result.value === "human" ? "" : roleClaim || manualMediumGuess;
-      const label = guardClaim || rivalSeerLabel || (displayedRole ? `${displayedRole} / ${resultLabel}` : resultLabel);
+      const baseLabel = guardClaim || rivalSeerLabel || (displayedRole ? `${displayedRole} / ${resultLabel}` : resultLabel);
+      const label = isAdoptedMediumResultContradictingSeer(seer.id, player.id, result.value) ? `${baseLabel} / 矛盾` : baseLabel;
       return `<span class="seer-result-label ${guardClaim ? "role-guard" : rivalSeerLabel ? "role-madman" : className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(label)}</span>`;
     })
     .filter(Boolean)
@@ -3651,10 +3755,11 @@ function getSeerColumnOverrideHtml(override, seer, player = findPlayer(override.
       : RESULT_LABELS[override.value];
     const guardClaim = getNonWolfGuardClaimForSeer(player, seer, override.value);
     const rivalSeerLabel = getHumanJudgedRivalSeerLabel(player, seer, override.value, resultLabel);
-    const label = guardClaim || rivalSeerLabel ||
+    const baseLabel = guardClaim || rivalSeerLabel ||
       (!result && shouldDisplayConfirmedWhiteForSeer(player, override.seerId, override.value)
         ? `${resultLabel} / ${ROLE_LABELS.confirmedWhite}`
         : resultLabel);
+    const label = isAdoptedMediumResultContradictingSeer(seer.id, player?.id, override.value) ? `${baseLabel} / 矛盾` : baseLabel;
     const className = guardClaim ? "role-guard" : rivalSeerLabel ? "role-madman" : override.value === "werewolf" ? "judgement-werewolf" : "judgement-human";
     return `<span class="seer-result-label ${className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(label)}</span>`;
   }
@@ -3786,6 +3891,9 @@ function getOutsiderExposureIdsForSeer(seer) {
       ids.add(player.id);
       return;
     }
+    if (getAdoptedMediumResultForSeerTarget(seer.id, player.id)?.result === "werewolf") {
+      ids.add(player.id);
+    }
     const override = getSeerColumnOverride(seer.id, player.id);
     if (override && (override.value === "human" || override.value === "confirmedWhite" || VILLAGER_SIDE_ROLES.has(override.value))) {
       return;
@@ -3805,6 +3913,7 @@ function getOutsiderExposureIdsForSeer(seer) {
 }
 
 function applyConfirmedWhiteUpdates() {
+  reconcileSeerMediumLinks();
   reconcileWolfTeammates();
   getActivePlayers().filter((player) => player.attackedWolfSideConfirmedMadman).forEach(setConfirmedMadman);
   reconcileStaleNonSelfSingleSeerHumanGuesses();
@@ -5693,6 +5802,9 @@ function getMeaningfulProgressSignature() {
     seerColumnOverrides: state.seerColumnOverrides
       .map(({ seerId, targetId, value }) => ({ seerId, targetId, value }))
       .sort((a, b) => `${a.seerId}:${a.targetId}`.localeCompare(`${b.seerId}:${b.targetId}`)),
+    seerMediumLinks: state.seerMediumLinks
+      .map(({ seerId, mediumId }) => ({ seerId, mediumId }))
+      .sort((a, b) => a.seerId.localeCompare(b.seerId)),
     roleActions: sortById(state.roleActions).map(({ id, actorId, role, day, targetId, result, note }) => ({
       id,
       actorId,
@@ -5857,6 +5969,9 @@ function applySavedState(saved) {
   state.results = Array.isArray(saved.results) ? saved.results.map(normalizeResult).filter(Boolean) : [];
   state.seerColumnOverrides = Array.isArray(saved.seerColumnOverrides)
     ? dedupeSeerColumnOverrides(saved.seerColumnOverrides.map(normalizeSeerColumnOverride).filter(Boolean))
+    : [];
+  state.seerMediumLinks = Array.isArray(saved.seerMediumLinks)
+    ? dedupeSeerMediumLinks(saved.seerMediumLinks.map(normalizeSeerMediumLink).filter(Boolean))
     : [];
   state.rivalPerspectiveOverrides = Array.isArray(saved.rivalPerspectiveOverrides)
     ? migrateRivalPerspectiveOverrides(
@@ -6158,6 +6273,7 @@ function resetStateToDefaults() {
     players: [],
     results: [],
     seerColumnOverrides: [],
+    seerMediumLinks: [],
     rivalPerspectiveOverrides: [],
     rivalPerspectiveVersion: 2,
     roleActions: [],
@@ -6642,6 +6758,20 @@ function normalizeSeerColumnOverride(override) {
   };
 }
 
+function normalizeSeerMediumLink(link) {
+  if (!link?.seerId || !link.mediumId) return null;
+  return {
+    seerId: String(link.seerId),
+    mediumId: String(link.mediumId),
+  };
+}
+
+function dedupeSeerMediumLinks(links) {
+  const bySeer = new Map();
+  links.forEach((link) => bySeer.set(link.seerId, link));
+  return [...bySeer.values()];
+}
+
 function normalizeRivalPerspectiveOverride(override) {
   if (
     !override?.viewerId ||
@@ -6751,6 +6881,9 @@ function normalizeGameHistory(history) {
     seerColumnOverrides: Array.isArray(history.seerColumnOverrides)
       ? dedupeSeerColumnOverrides(history.seerColumnOverrides.map(normalizeSeerColumnOverride).filter(Boolean))
       : [],
+    seerMediumLinks: Array.isArray(history.seerMediumLinks)
+      ? dedupeSeerMediumLinks(history.seerMediumLinks.map(normalizeSeerMediumLink).filter(Boolean))
+      : [],
     rivalPerspectiveOverrides: Array.isArray(history.rivalPerspectiveOverrides)
       ? migrateRivalPerspectiveOverrides(
           history.rivalPerspectiveOverrides.map(normalizeRivalPerspectiveOverride).filter(Boolean),
@@ -6781,6 +6914,9 @@ function normalizeBoard(board) {
   payload.results = Array.isArray(payload.results) ? payload.results.map(normalizeResult).filter(Boolean) : [];
   payload.seerColumnOverrides = Array.isArray(payload.seerColumnOverrides)
     ? dedupeSeerColumnOverrides(payload.seerColumnOverrides.map(normalizeSeerColumnOverride).filter(Boolean))
+    : [];
+  payload.seerMediumLinks = Array.isArray(payload.seerMediumLinks)
+    ? dedupeSeerMediumLinks(payload.seerMediumLinks.map(normalizeSeerMediumLink).filter(Boolean))
     : [];
   payload.rivalPerspectiveOverrides = Array.isArray(payload.rivalPerspectiveOverrides)
     ? migrateRivalPerspectiveOverrides(

@@ -862,6 +862,12 @@ select:disabled {
   color: #d7b8ff;
 }
 
+.role-medium-wolfSide {
+  background: linear-gradient(90deg, #35214a 0%, #35214a 58%, #43272c 100%);
+  color: #efd7ff;
+  border: 1px solid rgba(255, 141, 152, 0.45);
+}
+
 .role-guard {
   background: #4a2b12;
   color: #ffbd73;
@@ -2142,6 +2148,10 @@ select:disabled {
   display: grid;
   grid-template-columns: 1fr;
   gap: 8px;
+}
+
+.adopted-medium-field {
+  margin-top: 8px;
 }
 
 .finish-true-role-fields {
