@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.126";
+const APP_VERSION = "1.127";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -112,6 +112,7 @@ const BOARD_STATE_FIELDS = [
   "wolfCount",
   "wolfModeActive",
   "wolfModeCoverRole",
+  "reasoningPerspective",
   "players",
   "results",
   "seerColumnOverrides",
@@ -138,6 +139,7 @@ const state = {
   wolfCount: 2,
   wolfModeActive: false,
   wolfModeCoverRole: "",
+  reasoningPerspective: "seer",
   players: [],
   results: [],
   seerColumnOverrides: [],
@@ -231,6 +233,8 @@ document.addEventListener("DOMContentLoaded", () => {
     "participantEmptyState",
     "ropeCountBadge",
     "openVoteDialogBtn",
+    "seerPerspectiveBtn",
+    "mediumPerspectiveBtn",
     "playerRows",
     "emptyState",
     "exportSummary",
@@ -482,6 +486,8 @@ function bindEvents() {
   els.markAttackedBtn.addEventListener("click", () => setPlayerStatus("attacked"));
   els.markAliveBtn.addEventListener("click", () => setPlayerStatus("alive"));
   els.openVoteDialogBtn.addEventListener("click", openVoteDialog);
+  els.seerPerspectiveBtn.addEventListener("click", () => setReasoningPerspective("seer"));
+  els.mediumPerspectiveBtn.addEventListener("click", () => setReasoningPerspective("medium"));
   els.closeVoteBtn.addEventListener("click", closeVoteDialog);
   els.addVoteBtn.addEventListener("click", addVoteFromDialog);
   els.voteDayInput.addEventListener("input", updateVoteVoterOptions);
@@ -1116,6 +1122,7 @@ function createBoard(name, tournamentId) {
     wolfCount: 2,
     wolfModeActive: false,
     wolfModeCoverRole: "",
+    reasoningPerspective: "seer",
     players,
     results: [],
     seerColumnOverrides: [],
@@ -1163,6 +1170,7 @@ function resetBoardState() {
   state.pendingExileContinuationPlayerId = "";
   state.wolfModeActive = false;
   state.wolfModeCoverRole = "";
+  state.reasoningPerspective = "seer";
   state.players = state.players.map((player) => ({
     ...player,
     role: "",
@@ -2767,6 +2775,7 @@ function invalidateInferenceForRoleChange(player, previousRole, nextRole) {
 function render() {
   renderActiveView();
   renderPerspectiveMode();
+  renderReasoningPerspectiveToggle();
   renderMatchMeta();
   renderGameLifecycle();
   renderSyncStatus();
@@ -2779,6 +2788,20 @@ function render() {
     renderRows();
   }
   if (state.activeView === "export") renderHistories();
+}
+
+function setReasoningPerspective(perspective) {
+  const next = normalizeReasoningPerspective(perspective);
+  if (state.reasoningPerspective === next) return;
+  state.reasoningPerspective = next;
+  renderAndStore();
+}
+
+function renderReasoningPerspectiveToggle() {
+  const perspective = normalizeReasoningPerspective(state.reasoningPerspective);
+  state.reasoningPerspective = perspective;
+  els.seerPerspectiveBtn.classList.toggle("active", perspective === "seer");
+  els.mediumPerspectiveBtn.classList.toggle("active", perspective === "medium");
 }
 
 function renderPerspectiveMode() {
@@ -3013,7 +3036,7 @@ function renderRows() {
     row.addEventListener("dragend", handlePlayerDragEnd);
 
     const memo = player.memo || "メモなし";
-    const seerGrid = getSeerGridHtml(player);
+    const perspectiveGrid = getPerspectiveGridHtml(player);
     const impression = getPlayerImpression(player);
     const roleGuess = getDisplayedRoleGuess(player);
     row.innerHTML = `
@@ -3029,7 +3052,7 @@ function renderRows() {
             </span>
           </span>
         </span>
-        ${seerGrid}
+        ${perspectiveGrid}
       </button>
       <button class="impression-button impression-${impression.value}" type="button" ${isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}の要素を変更">${escapeHtml(impression.label)}</button>
       <button class="memo-button" type="button" ${isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}のメモを変更">${escapeHtml(memo)}</button>
@@ -3630,6 +3653,45 @@ function getRoleActionResultOptionsHtml(role, selectedResult = "unknown") {
   return Object.entries(labels)
     .map(([value, label]) => `<option value="${value}" ${value === selectedResult ? "selected" : ""}>${label}</option>`)
     .join("");
+}
+
+function getPerspectiveGridHtml(player) {
+  return state.reasoningPerspective === "medium" ? getMediumGridHtml(player) : getSeerGridHtml(player);
+}
+
+function getMediumGridHtml(player) {
+  const mediums = getRoleClaimants("medium");
+  if (!mediums.length) return "";
+  const cells = mediums.map((medium) => getMediumPerspectiveCellHtml(player, medium)).join("");
+  return `
+    <span class="seer-grid medium-grid" style="--seer-columns: ${mediums.length}">
+      ${cells}
+    </span>
+  `;
+}
+
+function getMediumPerspectiveCellHtml(player, medium) {
+  if (player.id === medium.id) {
+    return `<span class="seer-result-label role-medium">${escapeHtml(ROLE_LABELS.medium)}</span>`;
+  }
+  if (player.role === "medium") {
+    if (isRivalPerspectiveTargetConfirmedMadman(player)) {
+      return getRivalPerspectiveCellHtml("medium", medium, player, "madman");
+    }
+    const override = getRivalPerspectiveOverride("medium", medium.id, player.id);
+    return getRivalPerspectiveCellHtml(
+      "medium",
+      medium,
+      player,
+      override?.value || getAutomaticRivalPerspectiveValue(medium, player, getRoleClaimants("medium")),
+    );
+  }
+  const action = getMediumResultActions(medium.id, player.id).find((item) => ["human", "werewolf"].includes(item.result));
+  if (action) {
+    const className = action.result === "werewolf" ? "judgement-werewolf" : "judgement-human";
+    return `<span class="seer-result-label ${className}">${escapeHtml(getAdoptedMediumResultLabel(action))}</span>`;
+  }
+  return `<span class="seer-result-label empty" aria-hidden="true"></span>`;
 }
 
 function getSeerGridHtml(player) {
@@ -5962,6 +6024,7 @@ function applySavedState(saved) {
     state.players.some((player) => isPriorityPlayer(player) && getRoleGuessDisplay(player).value === "werewolf");
   state.wolfModeActive = saved.wolfModeActive === true || (saved.wolfModeActive === undefined && legacyWolfMode);
   state.wolfModeCoverRole = WOLF_MODE_COVER_ROLES.has(saved.wolfModeCoverRole) ? saved.wolfModeCoverRole : "";
+  state.reasoningPerspective = normalizeReasoningPerspective(saved.reasoningPerspective);
   const selfPlayer = state.players.find(isPriorityPlayer);
   if (state.wolfModeActive && selfPlayer && !selfPlayer.wolfModeCoverRole) {
     selfPlayer.wolfModeCoverRole = state.wolfModeCoverRole || "unknown";
@@ -6270,6 +6333,7 @@ function resetStateToDefaults() {
     wolfCount: 2,
     wolfModeActive: false,
     wolfModeCoverRole: "",
+    reasoningPerspective: "seer",
     players: [],
     results: [],
     seerColumnOverrides: [],
@@ -6517,6 +6581,10 @@ function backfillRoleClaimOrders(players) {
 function normalizeWolfCount(value) {
   const count = Number(value);
   return Number.isFinite(count) ? Math.min(4, Math.max(1, Math.trunc(count))) : 2;
+}
+
+function normalizeReasoningPerspective(value) {
+  return value === "medium" ? "medium" : "seer";
 }
 
 function normalizeEventName(value) {
@@ -6910,6 +6978,7 @@ function normalizeBoard(board) {
   payload.wolfCount = normalizeWolfCount(payload.wolfCount);
   payload.wolfModeActive = payload.wolfModeActive === true;
   payload.wolfModeCoverRole = WOLF_MODE_COVER_ROLES.has(payload.wolfModeCoverRole) ? payload.wolfModeCoverRole : "";
+  payload.reasoningPerspective = normalizeReasoningPerspective(payload.reasoningPerspective);
   payload.players = Array.isArray(payload.players) ? payload.players.map(normalizePlayer) : [];
   payload.results = Array.isArray(payload.results) ? payload.results.map(normalizeResult).filter(Boolean) : [];
   payload.seerColumnOverrides = Array.isArray(payload.seerColumnOverrides)
