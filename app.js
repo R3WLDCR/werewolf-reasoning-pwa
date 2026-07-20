@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.121";
+const APP_VERSION = "1.122";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -5333,12 +5333,14 @@ function buildHistoryTimeline(history) {
     const events = [];
     claimEvents
       .filter((event) => (Number(event.day) || 1) === day)
+      .sort((a, b) => compareTimelineClaimEvents(a, b, history.players))
       .forEach((event) => {
         const line = formatClaimEvent(event, history.players);
         if (line) events.push(line);
       });
     results
       .filter((result) => getDivinationOrder(result) === day)
+      .sort((a, b) => compareTimelineResults(a, b, history.players))
       .forEach((result) => {
         const seer = history.players.find((player) => player.id === result.seerId);
         const target = history.players.find((player) => player.id === result.targetId);
@@ -5362,6 +5364,7 @@ function buildHistoryTimeline(history) {
     if (voteSummary) events.push(voteSummary);
     roleActions
       .filter((action) => (Number(action.day) || 1) === day)
+      .sort((a, b) => compareTimelineRoleActions(a, b, history.players))
       .forEach((action) => {
         const line = formatRoleActionEvent(action, history.players);
         if (line) events.push(line);
@@ -5394,12 +5397,14 @@ function buildCurrentTimeline() {
     const events = [];
     claimEvents
       .filter((event) => (Number(event.day) || 1) === day)
+      .sort((a, b) => compareTimelineClaimEvents(a, b, state.players))
       .forEach((event) => {
         const line = formatClaimEvent(event, state.players);
         if (line) events.push(line);
       });
     results
       .filter((result) => getDivinationOrder(result) === day)
+      .sort((a, b) => compareTimelineResults(a, b, state.players))
       .forEach((result) => {
         const seer = findPlayer(result.seerId);
         const target = findPlayer(result.targetId);
@@ -5423,6 +5428,7 @@ function buildCurrentTimeline() {
     if (voteSummary) events.push(voteSummary);
     roleActions
       .filter((action) => (Number(action.day) || 1) === day)
+      .sort((a, b) => compareTimelineRoleActions(a, b, state.players))
       .forEach((action) => {
         const line = formatRoleActionEvent(action, state.players);
         if (line) events.push(line);
@@ -5457,6 +5463,42 @@ function formatRoleActionEvent(action, players) {
   if (!actor || !target || !ROLE_ACTION_ROLES.has(action.role)) return "";
   const note = action.note ? ` / ${action.note}` : "";
   return `${ROLE_LABELS[action.role]}: ${formatTimelineActorName(actor)} -> ${target.name}　${resultLabel}${note}`;
+}
+
+function compareTimelineClaimEvents(a, b, players) {
+  return (
+    getTimelineRoleOrder(a.role || a.previousRole) - getTimelineRoleOrder(b.role || b.previousRole) ||
+    getTimelinePlayerOrder(players, a.playerId) - getTimelinePlayerOrder(players, b.playerId) ||
+    String(a.createdAt || "").localeCompare(String(b.createdAt || "")) ||
+    String(a.id || "").localeCompare(String(b.id || ""))
+  );
+}
+
+function compareTimelineResults(a, b, players) {
+  return (
+    getTimelinePlayerOrder(players, a.seerId) - getTimelinePlayerOrder(players, b.seerId) ||
+    getDivinationOrder(a) - getDivinationOrder(b) ||
+    getTimelinePlayerOrder(players, a.targetId) - getTimelinePlayerOrder(players, b.targetId) ||
+    String(a.id || "").localeCompare(String(b.id || ""))
+  );
+}
+
+function compareTimelineRoleActions(a, b, players) {
+  return (
+    getTimelineRoleOrder(a.role) - getTimelineRoleOrder(b.role) ||
+    getTimelinePlayerOrder(players, a.actorId) - getTimelinePlayerOrder(players, b.actorId) ||
+    getTimelinePlayerOrder(players, a.targetId) - getTimelinePlayerOrder(players, b.targetId) ||
+    String(a.id || "").localeCompare(String(b.id || ""))
+  );
+}
+
+function getTimelineRoleOrder(role) {
+  return Object.hasOwn(ROLE_ORDER, role) ? ROLE_ORDER[role] : 99;
+}
+
+function getTimelinePlayerOrder(players, playerId) {
+  const index = players.findIndex((player) => player.id === playerId);
+  return index === -1 ? Number.MAX_SAFE_INTEGER : index;
 }
 
 function formatVoteEvent(vote, players) {
