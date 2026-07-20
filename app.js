@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.127";
+const APP_VERSION = "1.128";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3022,7 +3022,7 @@ function renderRopeCount() {
 
 function renderRows() {
   els.playerRows.innerHTML = "";
-  const players = getActivePlayers();
+  const players = getReasoningDisplayPlayers();
   els.emptyState.hidden = players.length > 0;
   players.forEach((player, index) => {
     const row = document.createElement("div");
@@ -3094,6 +3094,18 @@ function renderRows() {
     row.querySelector(".memo-button").addEventListener("click", () => openEditDialog(player.id));
     els.playerRows.appendChild(row);
   });
+}
+
+function getReasoningDisplayPlayers() {
+  const players = getActivePlayers();
+  if (state.reasoningPerspective !== "medium") return players;
+  return players
+    .map((player, index) => ({ player, index }))
+    .sort((a, b) => {
+      const roleDiff = (b.player.role === "medium") - (a.player.role === "medium");
+      return roleDiff || a.index - b.index;
+    })
+    .map(({ player }) => player);
 }
 
 function getPlayerImpression(player) {
@@ -3656,7 +3668,8 @@ function getRoleActionResultOptionsHtml(role, selectedResult = "unknown") {
 }
 
 function getPerspectiveGridHtml(player) {
-  return state.reasoningPerspective === "medium" ? getMediumGridHtml(player) : getSeerGridHtml(player);
+  if (state.reasoningPerspective !== "medium") return getSeerGridHtml(player);
+  return [getMediumGridHtml(player), getSeerOnlyGridHtml(player)].filter(Boolean).join("");
 }
 
 function getMediumGridHtml(player) {
@@ -3704,6 +3717,10 @@ function getSeerGridHtml(player) {
       </span>
     `;
   }
+  return getSeerOnlyGridHtml(player);
+}
+
+function getSeerOnlyGridHtml(player) {
   const seers = getSeers();
   const perspectiveCells = getSeerPerspectiveCellsHtml(player, seers);
   if (!perspectiveCells) return "";
