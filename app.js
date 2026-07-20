@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.124";
+const APP_VERSION = "1.125";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -5599,7 +5599,7 @@ function getVoteOrderEntriesForDay(votes, players, day, type = "", runoffRound =
       };
     })
     .filter(Boolean)
-    .sort((a, b) => a.order - b.order || a.sourceIndex - b.sourceIndex);
+    .sort((a, b) => b.order - a.order || b.sourceIndex - a.sourceIndex);
 }
 
 function getVoteSummaryPhaseKeys(votes, day) {
