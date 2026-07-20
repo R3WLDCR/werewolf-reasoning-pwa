@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.122";
+const APP_VERSION = "1.123";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -5285,11 +5285,7 @@ function buildHistoryText(history) {
     "",
     "真の役職",
   ];
-  getHistoryActivePlayers(history)
-    .filter((player) => player.trueRole !== "villager")
-    .forEach((player) => {
-      lines.push(`- ${player.name}: ${ROLE_GUESS_LABELS[player.trueRole] || "未設定"}`);
-    });
+  lines.push(...formatTrueRoleGroups(getHistoryActivePlayers(history)));
   const teammates = getHistoryActivePlayers(history).filter((player) => player.wolfTeammate);
   if (teammates.length) lines.push("", `仲間: ${teammates.map((player) => player.name).join("、")}`);
   if (history.wolfModeActive) {
@@ -5463,6 +5459,28 @@ function formatRoleActionEvent(action, players) {
   if (!actor || !target || !ROLE_ACTION_ROLES.has(action.role)) return "";
   const note = action.note ? ` / ${action.note}` : "";
   return `${ROLE_LABELS[action.role]}: ${formatTimelineActorName(actor)} -> ${target.name}　${resultLabel}${note}`;
+}
+
+function formatTrueRoleGroups(players) {
+  const groups = new Map();
+  players
+    .filter((player) => player.trueRole && player.trueRole !== "villager")
+    .forEach((player) => {
+      const role = player.trueRole;
+      const names = groups.get(role) || [];
+      names.push(player.name);
+      groups.set(role, names);
+    });
+  const lines = getTrueRoleGroupOrder(groups)
+    .filter((role) => groups.has(role))
+    .map((role) => `- ${ROLE_GUESS_LABELS[role] || role}: ${groups.get(role).join("、")}`);
+  return lines.length ? lines : ["- 市民以外なし"];
+}
+
+function getTrueRoleGroupOrder(groups) {
+  const preferred = ["seer", "medium", "guard", "hunter", "madman", "werewolf", "fox", "teruteru", "other", "wolfSide", "confirmedWhite"];
+  const extras = [...groups.keys()].filter((role) => !preferred.includes(role)).sort();
+  return [...preferred, ...extras];
 }
 
 function compareTimelineClaimEvents(a, b, players) {
