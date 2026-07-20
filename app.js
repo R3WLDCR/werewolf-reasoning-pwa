@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.119";
+const APP_VERSION = "1.120";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3101,7 +3101,33 @@ function isRivalPerspectiveTargetConfirmedMadman(target) {
 
 function getAutomaticRivalPerspectiveValue(viewer, target, claimants) {
   if (isRivalPerspectiveTargetConfirmedMadman(target)) return "madman";
+  if (shouldTreatWolfSideAsMadmanForSeer(viewer, target)) return "madman";
   return "wolfSide";
+}
+
+function shouldTreatWolfSideAsMadmanForSeer(seer, target) {
+  if (!seer || seer.role !== "seer" || !target || target.id === seer.id) return false;
+  const knownWerewolfIds = getKnownWerewolfIdsForSeer(seer);
+  if (knownWerewolfIds.has(target.id)) return false;
+  return knownWerewolfIds.size >= (Number(state.wolfCount) || 0);
+}
+
+function getKnownWerewolfIdsForSeer(seer) {
+  const ids = new Set();
+  if (!seer) return ids;
+  state.results
+    .filter((result) => result.seerId === seer.id && result.value === "werewolf")
+    .forEach((result) => ids.add(result.targetId));
+  state.seerColumnOverrides
+    .filter((override) => override.seerId === seer.id && override.value === "werewolf")
+    .forEach((override) => ids.add(override.targetId));
+  getActivePlayers().forEach((player) => {
+    const mediumConfirmedWerewolf =
+      player.mediumConfirmedRoleGuess === "werewolf" &&
+      player.confirmedRoleEvidence?.some((evidence) => evidence.role === "medium" && evidence.value === "werewolf");
+    if (mediumConfirmedWerewolf || player.role === "werewolf") ids.add(player.id);
+  });
+  return ids;
 }
 
 function getRoleClaimants(role, players = getActivePlayers()) {
@@ -3571,9 +3597,9 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
         return `<span class="seer-result-label ${className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(getSeerGridRoleLabel(player))}</span>`;
       }
       if (isWolfSideDisplayTarget(player)) {
-        const attackedPlayer = player.status === "attacked";
-        const className = attackedPlayer ? "role-madman" : "judgement-rival";
-        const label = attackedPlayer ? ROLE_LABELS.madman : ROLE_LABELS.wolfSide;
+        const value = getAutomaticRivalPerspectiveValue(seer, player, seers);
+        const className = value === "madman" ? "role-madman" : "judgement-rival";
+        const label = ROLE_LABELS[value];
         return `<span class="seer-result-label ${className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(label)}</span>`;
       }
       if (shouldDisplayMediumConfirmedWerewolf(player)) {
