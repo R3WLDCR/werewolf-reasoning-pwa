@@ -882,6 +882,12 @@ select:disabled {
   color: #c7f7d6;
 }
 
+.role-seer-wolfSide {
+  background: linear-gradient(90deg, #294a38 0%, #294a38 58%, #43272c 100%);
+  color: #d7f9dd;
+  border: 1px solid rgba(255, 141, 152, 0.42);
+}
+
 .role-medium {
   background: #35214a;
   color: #d7b8ff;

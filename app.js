@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.130";
+const APP_VERSION = "1.131";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3803,8 +3803,8 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
         return `<span class="seer-result-label ${mediumConfirmedDisplay.className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(mediumConfirmedDisplay.label)}</span>`;
       }
       if (player.id === seer.id) {
-        const className = getWolfSideAwareRoleClass(player);
-        return `<span class="seer-result-label ${className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(getSeerGridRoleLabel(player))}</span>`;
+        const ownDisplay = getSeerOwnPerspectiveDisplay(player, seer);
+        return `<span class="seer-result-label ${ownDisplay.className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(ownDisplay.label)}</span>`;
       }
       if (isWolfSideDisplayTarget(player)) {
         const value = getAutomaticRivalPerspectiveValue(seer, player, seers);
@@ -3915,6 +3915,19 @@ function getSeerGridRoleLabel(player) {
   if (player.role === "werewolf") return "";
   if (RIVAL_DISPLAY_ROLES.has(player.role) && getRoleClaimants(player.role).length >= 2) return "";
   return getWolfSideAwareRoleLabel(player);
+}
+
+function getSeerOwnPerspectiveDisplay(player, seer) {
+  if (
+    state.reasoningPerspective === "medium" &&
+    player?.role === "seer" &&
+    player.id === seer?.id &&
+    hasMultiSeerMediumPerspective() &&
+    !getAdoptedMediumId(seer.id)
+  ) {
+    return { label: `${ROLE_LABELS.seer}/${ROLE_LABELS.wolfSide}`, className: "role-seer-wolfSide" };
+  }
+  return { label: getSeerGridRoleLabel(player), className: getWolfSideAwareRoleClass(player) };
 }
 
 function getManualUnclaimedMediumGuess(player) {
