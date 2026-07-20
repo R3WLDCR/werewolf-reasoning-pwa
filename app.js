@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.132";
+const APP_VERSION = "1.133";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -2717,9 +2717,14 @@ function applyAttackRoleUpdates(attackedPlayer) {
 
 function applyAttackedRoleGuess(player) {
   if (player.attackedWolfSideConfirmedMadman) return;
-  const currentGuess = getRoleGuessDisplay(player).value;
+  const currentGuess = normalizePrimaryRoleGuess(player.primaryRoleGuess, player.roleGuessCandidates) || "unknown";
   if (VILLAGER_SIDE_ROLES.has(currentGuess) || ["confirmedWhite", "madman"].includes(currentGuess)) return;
-  const nextGuess = ["werewolf", "wolfSide"].includes(currentGuess) ? "madman" : "villager";
+  const nextGuess = ["werewolf", "wolfSide"].includes(currentGuess)
+    ? "madman"
+    : currentGuess === "unknown"
+      ? "villager"
+      : "";
+  if (!nextGuess) return;
   player.roleGuessCandidates = [nextGuess];
   player.primaryRoleGuess = nextGuess;
   player.manualRoleGuess = true;
