@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.133";
+const APP_VERSION = "1.134";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3531,10 +3531,16 @@ function getMediumPerspectiveForSeer(player, seer) {
   if (!player || player.role !== "medium" || !seer || !hasMultiSeerMediumPerspective()) return null;
   const adoptedMediumId = getAdoptedMediumId(seer.id);
   if (!adoptedMediumId) {
+    if (player.status === "attacked") {
+      return { label: `${ROLE_LABELS.medium}/${ROLE_LABELS.madman}`, className: "role-medium-madman" };
+    }
     return { label: "霊媒師/狼狂", className: "role-medium-wolfSide" };
   }
   if (adoptedMediumId === player.id) {
     return { label: ROLE_LABELS.medium, className: "role-medium" };
+  }
+  if (player.status === "attacked") {
+    return { label: ROLE_LABELS.madman, className: "role-madman" };
   }
   return { label: ROLE_LABELS.wolfSide, className: "judgement-rival" };
 }

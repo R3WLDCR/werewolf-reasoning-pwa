@@ -899,6 +899,12 @@ select:disabled {
   border: 1px solid rgba(255, 141, 152, 0.45);
 }
 
+.role-medium-madman {
+  background: linear-gradient(90deg, #35214a 0%, #35214a 58%, #4a243d 100%);
+  color: #f2d6ff;
+  border: 1px solid rgba(245, 157, 218, 0.48);
+}
+
 .role-guard {
   background: #4a2b12;
   color: #ffbd73;
