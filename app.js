@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.134";
+const APP_VERSION = "1.135";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -4120,7 +4120,9 @@ function reconcileStaleNonSelfSingleSeerHumanGuesses() {
 
 function reconcileConfirmedWhiteRoleGuessLocks(seers) {
   getActivePlayers().forEach((player) => {
-    const shouldLockConfirmedWhite = player.role === "confirmedWhite" || shouldBecomeConfirmedWhite(player, seers);
+    const shouldKeepAttackedConfirmedWhite = player.autoConfirmedWhite && player.status === "attacked";
+    const shouldLockConfirmedWhite =
+      player.role === "confirmedWhite" || shouldKeepAttackedConfirmedWhite || shouldBecomeConfirmedWhite(player, seers);
     if (shouldLockConfirmedWhite) {
       setAutoConfirmedWhiteRoleGuess(player);
       player.autoConfirmedWhite = true;
