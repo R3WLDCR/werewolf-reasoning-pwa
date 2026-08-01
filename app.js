@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.135";
+const APP_VERSION = "1.136";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -6451,14 +6451,14 @@ async function synchronizeNow({ initial = false, manual = false } = {}) {
   const cloudIsNew = isAfter(cloudRecord.updated_at, syncMeta.lastCloudUpdatedAt);
   if (initial && !syncMeta.lastCloudUpdatedAt) {
     if (hadLocalDataAtStartup) {
-      showCloudConflict(cloudRecord, "initial");
+      await resolveNewestSyncState(cloudRecord, { fallbackType: "initial" });
     } else {
       await applyCloudRecord(cloudRecord);
     }
     return;
   }
   if (cloudIsNew && cloudRecord.updated_by_device !== deviceId) {
-    showCloudConflict(cloudRecord, syncMeta.dirty ? "conflict" : "remote");
+    await resolveNewestSyncState(cloudRecord, { fallbackType: syncMeta.dirty ? "conflict" : "remote" });
     return;
   }
   if (syncMeta.dirty) {
@@ -6470,6 +6470,28 @@ async function synchronizeNow({ initial = false, manual = false } = {}) {
   syncMeta.lastSyncedAt = new Date().toISOString();
   saveSyncMeta();
   renderSyncStatus();
+}
+
+async function resolveNewestSyncState(cloudRecord, { fallbackType = "conflict" } = {}) {
+  const cloudTime = getTimestampValue(cloudRecord?.updated_at);
+  const localTime = getTimestampValue(syncMeta.localUpdatedAt);
+  if (cloudTime && localTime) {
+    if (localTime > cloudTime) {
+      await uploadLocalState();
+      return;
+    }
+    await applyCloudRecord(cloudRecord);
+    return;
+  }
+  if (cloudTime && !localTime) {
+    await applyCloudRecord(cloudRecord);
+    return;
+  }
+  if (!cloudTime && localTime) {
+    await uploadLocalState();
+    return;
+  }
+  showCloudConflict(cloudRecord, fallbackType);
 }
 
 async function fetchCloudRecord() {
@@ -6553,9 +6575,17 @@ function showCloudConflict(record, type) {
 }
 
 function isAfter(value, baseline) {
-  if (!value) return false;
-  if (!baseline) return true;
-  return new Date(value).getTime() > new Date(baseline).getTime();
+  const valueTime = getTimestampValue(value);
+  const baselineTime = getTimestampValue(baseline);
+  if (!valueTime) return false;
+  if (!baselineTime) return true;
+  return valueTime > baselineTime;
+}
+
+function getTimestampValue(value) {
+  if (!value) return 0;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : 0;
 }
 
 function setSyncBusy(label) {
