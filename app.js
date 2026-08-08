@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.136";
+const APP_VERSION = "1.137";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -5874,7 +5874,7 @@ function formatVoteOrderMarker(order) {
 function formatTimelineActorName(player) {
   if (!player?.trueRole || player.trueRole === "villager") return player?.name || "";
   const trueRoleLabel = ROLE_GUESS_LABELS[player.trueRole] || ROLE_LABELS[player.trueRole];
-  return trueRoleLabel ? `${player.name}（真: ${trueRoleLabel}）` : player.name;
+  return trueRoleLabel ? `${player.name}（${trueRoleLabel}）` : player.name;
 }
 
 function formatImpressionForExport(player) {
