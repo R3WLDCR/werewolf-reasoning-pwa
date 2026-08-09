@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.144";
+const APP_VERSION = "1.145";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -1407,7 +1407,7 @@ function openRoleGuessDialog(playerId) {
   if (isGameFinished()) return toast("終了済み盤面は編集できません");
   const player = findPlayer(playerId);
   if (!player) return;
-  if (player.autoConfirmedWhite && !isWolfMode()) {
+  if (player.autoConfirmedWhite && !isWolfMode() && !canOverrideAutoConfirmedWhite(player)) {
     return toast("確定白成立中は役職推理を変更できません");
   }
   roleGuessPlayerId = playerId;
@@ -1687,7 +1687,7 @@ function getDisplayedRoleGuess(player) {
     const value = getWolfModeCoverRole(player);
     return { value, label: ROLE_GUESS_LABELS[value] };
   }
-  if (player.autoConfirmedWhite) {
+  if (player.autoConfirmedWhite && !(player.manualRoleGuess && canOverrideAutoConfirmedWhite(player))) {
     return { value: "confirmedWhite", label: ROLE_GUESS_LABELS.confirmedWhite };
   }
   if (player.manualRoleGuess) return getRoleGuessDisplay(player);
@@ -3923,7 +3923,12 @@ function isMediumConfirmedWerewolf(player) {
 }
 
 function shouldDisplayConfirmedWhiteForSeer(player, seerId, value) {
-  return Boolean(player?.autoConfirmedWhite && value === "human" && findPlayer(seerId)?.role === "seer");
+  return Boolean(
+    player?.autoConfirmedWhite &&
+      !(player.manualRoleGuess && canOverrideAutoConfirmedWhite(player)) &&
+      value === "human" &&
+      findPlayer(seerId)?.role === "seer",
+  );
 }
 
 function getRoleClaimLabel(player) {
@@ -4139,11 +4144,17 @@ function reconcileConfirmedWhiteRoleGuessLocks(seers) {
     const shouldLockConfirmedWhite =
       player.role === "confirmedWhite" || shouldKeepAttackedConfirmedWhite || shouldBecomeConfirmedWhite(player, seers);
     if (shouldLockConfirmedWhite) {
+      if (player.manualRoleGuess && canOverrideAutoConfirmedWhite(player)) return;
       setAutoConfirmedWhiteRoleGuess(player);
       player.autoConfirmedWhite = true;
       return;
     }
     if (!player.autoConfirmedWhite && !player.autoConfirmedWhitePreviousGuess) return;
+    if (player.autoConfirmedWhite && player.manualRoleGuess) {
+      player.autoConfirmedWhite = false;
+      player.autoConfirmedWhitePreviousGuess = null;
+      return;
+    }
     restoreRoleGuessBeforeAutoConfirmedWhite(player);
     player.autoConfirmedWhite = false;
     const selfSeer = getSelfPerspectivePlayer();
@@ -4699,6 +4710,20 @@ function shouldBecomeConfirmedWhite(player, seers = getCurrentSeerClaimants()) {
   if (seers.some((seer) => seer.id === player.id)) return false;
   if (hasSelfPerspectiveWerewolfResult(player.id)) return false;
   return canSeersEstablishConfirmedWhite(seers) && seers.every((seer) => isHumanViewForConfirmedWhite(player, seer));
+}
+
+function canOverrideAutoConfirmedWhite(player) {
+  const selfSeer = getSelfPerspectivePlayer();
+  if (!player?.autoConfirmedWhite || !selfSeer || !isSelfPerspectiveSeer()) return false;
+  return state.results.some((result) => {
+    const seer = findPlayer(result.seerId);
+    return (
+      result.targetId === player.id &&
+      result.seerId !== selfSeer.id &&
+      result.value === "human" &&
+      seer?.role === "seer"
+    );
+  });
 }
 
 function canSeersEstablishConfirmedWhite(seers = getCurrentSeerClaimants()) {
