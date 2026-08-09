@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.138";
+const APP_VERSION = "1.139";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -80,7 +80,7 @@ const STANDARD_IMPRESSION_REASONS = [
   { id: "standard-werewolf-heavy-talk", label: "発言が重い", side: "werewolf", custom: false },
   { id: "standard-werewolf-defensive", label: "反応が防御的", side: "werewolf", custom: false },
   { id: "standard-werewolf-unnatural-vote", label: "投票が不自然", side: "werewolf", custom: false },
-  { id: "standard-werewolf-unnatural-view", label: "視点が不自然", side: "werewolf", custom: false },
+  { id: "standard-werewolf-unnatural-view", label: "不自然", side: "werewolf", custom: false },
   { id: "standard-werewolf-following", label: "便乗が多い", side: "werewolf", custom: false },
 ];
 const ROLE_GUESS_LABELS = {
