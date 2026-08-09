@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.141";
+const APP_VERSION = "1.142";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -708,6 +708,7 @@ function addPlayer() {
     mediumHumanBrokenPrevious: null,
     mediumConflictBroken: false,
     confirmedResultConflictBroken: false,
+    selfPerspectiveResultConflictBroken: false,
     attackConflictBroken: false,
     attackedWolfSideConfirmedMadman: false,
     attackedAutoVillager: false,
@@ -1203,6 +1204,7 @@ function resetBoardState() {
     mediumHumanBrokenPrevious: null,
     mediumConflictBroken: false,
     confirmedResultConflictBroken: false,
+    selfPerspectiveResultConflictBroken: false,
     attackConflictBroken: false,
     attackedWolfSideConfirmedMadman: false,
     attackedAutoVillager: false,
@@ -4053,6 +4055,7 @@ function applyConfirmedWhiteUpdates() {
   reconcileMediumHumanConversions();
   reconcileAttackConfirmedSeerConflicts();
   reconcileConfirmedResultSeerConflicts();
+  reconcileSelfPerspectiveSeerResultConflicts();
   const currentSeerClaimants = getCurrentSeerClaimants();
   applyMediumConfirmedRoleGuesses();
   applySelfPerspectiveRivalRoleGuesses();
@@ -4459,6 +4462,35 @@ function reconcileConfirmedResultSeerConflicts() {
   });
 }
 
+function reconcileSelfPerspectiveSeerResultConflicts() {
+  const selfSeer = getSelfPerspectivePlayer();
+  const conflictingSeerIds = new Set();
+
+  if (isSelfPerspectiveSeer()) {
+    const selfResultsByTargetId = new Map(
+      state.results
+        .filter((result) => result.seerId === selfSeer.id && ["human", "werewolf"].includes(result.value))
+        .map((result) => [result.targetId, result.value]),
+    );
+    state.results.forEach((result) => {
+      if (result.seerId === selfSeer.id) return;
+      const selfResult = selfResultsByTargetId.get(result.targetId);
+      if (selfResult && result.value !== selfResult) conflictingSeerIds.add(result.seerId);
+    });
+  }
+
+  getActivePlayers().forEach((player) => {
+    if (player.selfPerspectiveResultConflictBroken && !conflictingSeerIds.has(player.id)) {
+      player.selfPerspectiveResultConflictBroken = false;
+      restoreBrokenSeerIfResolved(player);
+    }
+  });
+  conflictingSeerIds.forEach((seerId) => {
+    const seer = findPlayer(seerId);
+    if (seer) markSeerBroken(seer, "selfResult");
+  });
+}
+
 function forceMediumHumanBrokenSeer(seer) {
   if (!seer || seer.attackedWolfSideConfirmedMadman) return;
   if (!seer.mediumHumanBrokenPrevious) {
@@ -4530,6 +4562,7 @@ function markSeerBroken(seer, reason) {
   if (!seer.manualRoleOverride) seer.role = "wolfSide";
   if (reason === "medium") seer.mediumConflictBroken = true;
   if (reason === "confirmedResult") seer.confirmedResultConflictBroken = true;
+  if (reason === "selfResult") seer.selfPerspectiveResultConflictBroken = true;
   if (reason === "attack") seer.attackConflictBroken = true;
   if (!wasBroken && !seer.manualRoleGuess) setRoleGuess(seer, "wolfSide", { confirmed: true });
 }
@@ -4546,6 +4579,7 @@ function isBrokenSeer(player) {
   return Boolean(
     player?.mediumConflictBroken ||
       player?.confirmedResultConflictBroken ||
+      player?.selfPerspectiveResultConflictBroken ||
       player?.attackConflictBroken,
   );
 }
@@ -4654,6 +4688,7 @@ function setRoleGuess(player, role, { confirmed = false } = {}) {
 function shouldBecomeConfirmedWhite(player, seers = getCurrentSeerClaimants()) {
   if (player.status !== "alive") return false;
   if (seers.some((seer) => seer.id === player.id)) return false;
+  if (hasSelfPerspectiveWerewolfResult(player.id)) return false;
   return canSeersEstablishConfirmedWhite(seers) && seers.every((seer) => isHumanViewForConfirmedWhite(player, seer));
 }
 
@@ -6834,6 +6869,7 @@ function normalizePlayer(player) {
     mediumHumanBrokenPrevious: normalizeMediumHumanFieldState(player.mediumHumanBrokenPrevious),
     mediumConflictBroken: false,
     confirmedResultConflictBroken: player.confirmedResultConflictBroken === true || player.mediumConflictBroken === true,
+    selfPerspectiveResultConflictBroken: player.selfPerspectiveResultConflictBroken === true,
     attackConflictBroken: player.attackConflictBroken === true,
     attackedWolfSideConfirmedMadman,
     attackedAutoVillager:
