@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.145";
+const APP_VERSION = "1.146";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -1853,9 +1853,7 @@ function getRoleGuessClass(value) {
 }
 
 function isAutoConfirmedWhiteCandidate(player, seers = getCurrentSeerClaimants()) {
-  if (player.status !== "alive") return false;
-  if (!seers.length || seers.some((seer) => seer.id === player.id)) return false;
-  return canSeersEstablishConfirmedWhite(seers) && seers.every((seer) => isHumanViewForConfirmedWhite(player, seer));
+  return shouldBecomeConfirmedWhite(player, seers);
 }
 
 function getPreferredConfirmedEvidenceValue(player) {
@@ -4706,15 +4704,29 @@ function setRoleGuess(player, role, { confirmed = false } = {}) {
 }
 
 function shouldBecomeConfirmedWhite(player, seers = getCurrentSeerClaimants()) {
+  const effectiveSeers = getConfirmedWhiteSeers(seers);
   if (player.status !== "alive") return false;
-  if (seers.some((seer) => seer.id === player.id)) return false;
+  if (effectiveSeers.some((seer) => seer.id === player.id)) return false;
   if (hasSelfPerspectiveWerewolfResult(player.id)) return false;
-  return canSeersEstablishConfirmedWhite(seers) && seers.every((seer) => isHumanViewForConfirmedWhite(player, seer));
+  return (
+    canSeersEstablishConfirmedWhite(effectiveSeers) &&
+    effectiveSeers.every((seer) => isHumanViewForConfirmedWhite(player, seer))
+  );
+}
+
+function getConfirmedWhiteSeers(seers = getCurrentSeerClaimants()) {
+  const effectiveSeers = [...seers];
+  const selfSeer = getSelfPerspectivePlayer();
+  if (isSelfPerspectiveSeer() && selfSeer && !effectiveSeers.some((seer) => seer.id === selfSeer.id)) {
+    effectiveSeers.push(selfSeer);
+  }
+  return effectiveSeers;
 }
 
 function canOverrideAutoConfirmedWhite(player) {
   const selfSeer = getSelfPerspectivePlayer();
   if (!player?.autoConfirmedWhite || !selfSeer || !isSelfPerspectiveSeer()) return false;
+  if (isHumanViewForConfirmedWhite(player, selfSeer)) return false;
   return state.results.some((result) => {
     const seer = findPlayer(result.seerId);
     return (
