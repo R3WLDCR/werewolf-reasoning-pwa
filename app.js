@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.143";
+const APP_VERSION = "1.144";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -294,6 +294,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "membershipDialog",
     "membershipForm",
     "membershipPlayerName",
+    "membershipNameInput",
     "membershipOptions",
     "closeMembershipBtn",
     "finishGameDialog",
@@ -1234,6 +1235,7 @@ function openMembershipDialog(playerId) {
   if (!player) return;
   membershipPlayerId = playerId;
   els.membershipPlayerName.textContent = player.name;
+  els.membershipNameInput.value = player.name;
   els.membershipOptions.innerHTML = state.tournaments
     .map(
       (tournament) => `
@@ -1255,6 +1257,13 @@ function closeMembershipDialog() {
 function saveMemberships() {
   const player = findPlayer(membershipPlayerId);
   if (!player) return;
+  const name = els.membershipNameInput.value.trim();
+  if (!name) return toast("名前を入力してください");
+  const duplicate = state.players.find(
+    (candidate) => candidate.id !== player.id && candidate.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase(),
+  );
+  if (duplicate) return toast("同じ名前の参加者がすでにいます");
+  player.name = name;
   const selectedIds = Array.from(els.membershipOptions.querySelectorAll('input[type="checkbox"]:checked')).map(
     (input) => input.value,
   );
