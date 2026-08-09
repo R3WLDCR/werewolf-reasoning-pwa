@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.137";
+const APP_VERSION = "1.138";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -2283,13 +2283,14 @@ function getVoteDaySummaryHtml(votes, players, day, isSelected) {
     .map((phase) => {
       const summary = formatVoteSummaryForDay(votes, players, day, phase.type, phase.runoffRound);
       const voteOrder = getVoteOrderEntriesForDay(votes, players, day, phase.type, phase.runoffRound);
+      const decisiveVoteId = getDecisiveVoteIdForPhase(votes, day, phase.type, phase.runoffRound);
       const voteOrderHtml = voteOrder.length
         ? voteOrder
             .map(
               (entry) => `
-                <div class="vote-order-item ${phase.type === "runoff" ? "no-order" : ""}">
+                <div class="vote-order-item ${phase.type === "runoff" ? "no-order" : ""} ${entry.id === decisiveVoteId ? "is-decisive" : ""}">
                   ${phase.type === "runoff" ? "" : `<span class="vote-order-number">${escapeHtml(formatVoteOrderMarker(entry.order))}</span>`}
-                  <span>${escapeHtml(entry.voterName)} → ${escapeHtml(entry.targetName)}</span>
+                  <span class="vote-order-text">${escapeHtml(entry.voterName)} → ${escapeHtml(entry.targetName)}${entry.id === decisiveVoteId ? '<span class="vote-decisive-badge">決定票</span>' : ""}</span>
                 </div>
               `,
             )
@@ -5831,6 +5832,7 @@ function getVoteOrderEntriesForDay(votes, players, day, type = "", runoffRound =
       const target = vote.targetId === "abstain" ? null : players.find((player) => player.id === vote.targetId);
       if (!voter || (!target && vote.targetId !== "abstain")) return null;
       return {
+        id: vote.id,
         order: getVoteOrder(vote),
         sourceIndex,
         voterName: voter.name,
@@ -5839,6 +5841,22 @@ function getVoteOrderEntriesForDay(votes, players, day, type = "", runoffRound =
     })
     .filter(Boolean)
     .sort((a, b) => b.order - a.order || b.sourceIndex - a.sourceIndex);
+}
+
+function getDecisiveVoteIdForPhase(votes, day, type, runoffRound = 0) {
+  const exiledPlayer = state.players.find(
+    (player) => player.status === "exiled" && (Number(player.statusDay) || 1) === (Number(day) || 1),
+  );
+  if (!exiledPlayer || getCompletedVoteExileTargetId(day, votes) !== exiledPlayer.id) return "";
+
+  const phaseVotes = getVotesForPhase(votes, day, type, runoffRound);
+  const topTargetIds = getTopVoteTargetIds(phaseVotes);
+  if (topTargetIds.length !== 1 || topTargetIds[0] !== exiledPlayer.id) return "";
+
+  return phaseVotes
+    .map((vote, sourceIndex) => ({ vote, sourceIndex }))
+    .sort((a, b) => getVoteOrder(b.vote) - getVoteOrder(a.vote) || b.sourceIndex - a.sourceIndex)[0]
+    ?.vote.id || "";
 }
 
 function getVoteSummaryPhaseKeys(votes, day) {

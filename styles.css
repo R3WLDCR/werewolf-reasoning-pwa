@@ -1957,6 +1957,31 @@ select:disabled {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.vote-order-item.is-decisive {
+  margin: -2px -4px;
+  padding: 4px;
+  border-radius: 5px;
+  background: rgba(250, 204, 21, 0.13);
+  color: #fef3c7;
+}
+
+.vote-order-text {
+  min-width: 0;
+}
+
+.vote-decisive-badge {
+  display: inline-block;
+  margin-left: 7px;
+  padding: 1px 6px;
+  border: 1px solid rgba(250, 204, 21, 0.72);
+  border-radius: 999px;
+  background: rgba(250, 204, 21, 0.2);
+  color: #fde68a;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
 .vote-order-number {
   color: #f8fafc;
   font-weight: 700;
