@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.147";
+const APP_VERSION = "1.148";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3431,7 +3431,7 @@ function ensureLegacySeerResultOption(value) {
 
 function renderMediumResultControl(target) {
   const medium = getLivingSingleMedium();
-  const canRecordResult = Boolean(state.reasoningPerspective !== "medium" && medium && target.status === "exiled");
+  const canRecordResult = Boolean(medium && target.status === "exiled");
   els.mediumResultSection.hidden = !canRecordResult;
   if (!canRecordResult) {
     els.mediumResultSelect.value = "";
@@ -3450,7 +3450,7 @@ function getMediumResultActions(actorId, targetId) {
 
 function renderMediumPerspectiveResultControl(target) {
   const mediumClaimants = getRoleClaimants("medium");
-  const canShow = state.reasoningPerspective === "medium" && mediumClaimants.length > 0;
+  const canShow = mediumClaimants.length > 1;
   els.mediumPerspectiveResultSection.hidden = !canShow;
   if (!canShow) {
     els.mediumPerspectiveResultList.innerHTML = "";
