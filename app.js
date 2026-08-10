@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.146";
+const APP_VERSION = "1.147";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -4010,8 +4010,7 @@ function getExposedHumanClaimForSeer(player, seer) {
   if (isBrokenSeer(seer)) return "";
   if (!isFullOutsiderExposureForSeer(seer)) return "";
   if (player.id === seer.id) return "";
-  if (getSeers().some((claimant) => claimant.id === player.id)) return "";
-  if (["werewolf", "wolfSide", "madman"].includes(player.role)) return "";
+  if (player.role) return "";
   if (hasDivinationResultForSeer(player.id, seer.id)) return "";
   return "結果市民";
 }
