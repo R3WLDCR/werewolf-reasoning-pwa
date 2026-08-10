@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.148";
+const APP_VERSION = "1.149";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3430,16 +3430,8 @@ function ensureLegacySeerResultOption(value) {
 }
 
 function renderMediumResultControl(target) {
-  const medium = getLivingSingleMedium();
-  const canRecordResult = Boolean(medium && target.status === "exiled");
-  els.mediumResultSection.hidden = !canRecordResult;
-  if (!canRecordResult) {
-    els.mediumResultSelect.value = "";
-    return;
-  }
-  els.mediumResultHint.textContent = `${medium.name}の霊媒結果`;
-  const existing = getMediumResultActions(medium.id, target.id)[0];
-  els.mediumResultSelect.value = ["human", "werewolf"].includes(existing?.result) ? existing.result : "";
+  els.mediumResultSection.hidden = true;
+  els.mediumResultSelect.value = "";
 }
 
 function getMediumResultActions(actorId, targetId) {
@@ -3450,7 +3442,7 @@ function getMediumResultActions(actorId, targetId) {
 
 function renderMediumPerspectiveResultControl(target) {
   const mediumClaimants = getRoleClaimants("medium");
-  const canShow = mediumClaimants.length > 1;
+  const canShow = mediumClaimants.length > 0;
   els.mediumPerspectiveResultSection.hidden = !canShow;
   if (!canShow) {
     els.mediumPerspectiveResultList.innerHTML = "";
