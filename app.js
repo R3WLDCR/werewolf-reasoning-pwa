@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.155";
+const APP_VERSION = "1.156";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -701,6 +701,7 @@ function addPlayer() {
     blackTargetFixedRank: 0,
     blackTargetRank: 0,
     autoSelfRivalWolfSide: false,
+    autoFullOutsiderVillager: false,
     autoSingleClaimRoleGuess: null,
     autoConfirmedWhite: false,
     autoConfirmedWhitePreviousGuess: null,
@@ -1197,6 +1198,7 @@ function resetBoardState() {
     blackTargetFixedRank: 0,
     blackTargetRank: 0,
     autoSelfRivalWolfSide: false,
+    autoFullOutsiderVillager: false,
     autoSingleClaimRoleGuess: null,
     autoConfirmedWhite: false,
     autoConfirmedWhitePreviousGuess: null,
@@ -1609,6 +1611,7 @@ function saveRoleGuess() {
     player.primaryRoleGuess = selectedPrimary;
     player.manualRoleGuess = true;
     player.autoSelfRivalWolfSide = false;
+    player.autoFullOutsiderVillager = false;
   }
   saveBlackTargetPreference(player);
   reconcileWolfTeammates();
@@ -4100,7 +4103,37 @@ function applyConfirmedWhiteUpdates() {
   applyMediumConfirmedRoleGuesses();
   applySelfPerspectiveRivalRoleGuesses();
   reconcileConfirmedWhiteRoleGuessLocks(currentSeerClaimants);
+  reconcileFullOutsiderRoleGuessVillagers();
   reconcileBlackTargets();
+}
+
+function reconcileFullOutsiderRoleGuessVillagers() {
+  const players = getActivePlayers();
+  const outsiderRoles = new Set(["werewolf", "wolfSide", "madman"]);
+  const requiredOutsiders = (Number(state.wolfCount) || 0) + 1;
+  const outsiderCount = players.filter((player) => outsiderRoles.has(getDisplayedRoleGuess(player).value)).length;
+  const allOutsidersFilled = requiredOutsiders > 1 && outsiderCount >= requiredOutsiders;
+
+  players.forEach((player) => {
+    const savedGuess = getRoleGuessDisplay(player).value;
+    if (player.autoFullOutsiderVillager) {
+      if (player.manualRoleGuess || savedGuess !== "villager") {
+        player.autoFullOutsiderVillager = false;
+        return;
+      }
+      if (!allOutsidersFilled) {
+        player.roleGuessCandidates = ["unknown"];
+        player.primaryRoleGuess = "";
+        player.autoFullOutsiderVillager = false;
+      }
+      return;
+    }
+    if (!allOutsidersFilled || player.manualRoleGuess || getDisplayedRoleGuess(player).value !== "unknown") return;
+    player.roleGuessCandidates = ["villager"];
+    player.primaryRoleGuess = "villager";
+    player.manualRoleGuess = false;
+    player.autoFullOutsiderVillager = true;
+  });
 }
 
 function reconcileSingleClaimRoleGuesses() {
@@ -6932,6 +6965,8 @@ function normalizePlayer(player) {
         : 0,
     blackTargetRank: Math.max(0, Math.min(4, Number(player.blackTargetRank) || 0)),
     autoSelfRivalWolfSide: attackedWolfSideConfirmedMadman ? false : player.autoSelfRivalWolfSide === true,
+    autoFullOutsiderVillager:
+      attackedWolfSideConfirmedMadman ? false : player.autoFullOutsiderVillager === true,
     autoSingleClaimRoleGuess: attackedWolfSideConfirmedMadman
       ? null
       : normalizeSingleClaimRoleGuess(player.autoSingleClaimRoleGuess),
