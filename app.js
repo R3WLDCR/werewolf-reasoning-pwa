@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.150";
+const APP_VERSION = "1.151";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -1504,10 +1504,10 @@ function renderRoleGuessDialog(player) {
 
 function renderMediumResultShortcut(player) {
   const mediumCount = getRoleClaimants("medium").length;
-  const canInput = !isGameFinished() && player.status === "exiled" && mediumCount > 0;
+  const canInput = !isGameFinished() && player.status === "exiled";
   els.openMediumResultFromGuessBtn.hidden = !canInput;
   els.openMediumResultFromGuessBtn.textContent =
-    mediumCount === 1 ? "霊媒結果を入力" : `${mediumCount}人の霊媒結果を入力`;
+    mediumCount === 0 ? "霊媒結果を確認・入力" : mediumCount === 1 ? "霊媒結果を入力" : `${mediumCount}人の霊媒結果を入力`;
 }
 
 function openMediumResultFromRoleGuess() {
@@ -3460,14 +3460,13 @@ function getMediumResultActions(actorId, targetId) {
 
 function renderMediumPerspectiveResultControl(target) {
   const mediumClaimants = getRoleClaimants("medium");
-  const canShow = mediumClaimants.length > 0;
-  els.mediumPerspectiveResultSection.hidden = !canShow;
-  if (!canShow) {
-    els.mediumPerspectiveResultList.innerHTML = "";
-    return;
-  }
+  els.mediumPerspectiveResultSection.hidden = false;
   if (target.status !== "exiled") {
     els.mediumPerspectiveResultList.innerHTML = `<div class="empty-inline">追放された参加者だけ霊媒結果を入力できます</div>`;
+    return;
+  }
+  if (!mediumClaimants.length) {
+    els.mediumPerspectiveResultList.innerHTML = `<div class="empty-inline">霊媒師COが見つかりません。参加者のCO欄を「霊媒師」にしてください</div>`;
     return;
   }
   els.mediumPerspectiveResultList.innerHTML = mediumClaimants
