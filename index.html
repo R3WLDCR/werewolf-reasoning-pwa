@@ -67,6 +67,14 @@
               </div>
             </div>
             <label class="field">
+              <span>シーズン</span>
+              <input id="seasonNumberInput" type="number" min="1" max="999" step="1" inputmode="numeric" placeholder="未設定" />
+            </label>
+            <label class="field">
+              <span>開催回</span>
+              <input id="editionNumberInput" type="number" min="1" max="999" step="1" inputmode="numeric" placeholder="未設定" />
+            </label>
+            <label class="field">
               <span>試合</span>
               <select id="gameNumberInput" aria-label="試合番号">
                 <option value="1">第1試合</option>
@@ -511,6 +519,8 @@
         </div>
         <div class="history-meta-grid">
           <label class="field"><span>大会名</span><input id="historyEventNameInput" type="text" /></label>
+          <label class="field"><span>シーズン</span><input id="historySeasonNumberInput" type="number" min="1" max="999" step="1" inputmode="numeric" placeholder="未設定" /></label>
+          <label class="field"><span>開催回</span><input id="historyEditionNumberInput" type="number" min="1" max="999" step="1" inputmode="numeric" placeholder="未設定" /></label>
           <label class="field"><span>開催日</span><input id="historyEventDateInput" type="date" /></label>
           <label class="field"><span>試合</span><input id="historyGameNumberInput" type="number" min="1" max="12" /></label>
           <label class="field">

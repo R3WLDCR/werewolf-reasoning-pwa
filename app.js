@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.156";
+const APP_VERSION = "1.157";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -109,6 +109,8 @@ const BOARD_STATE_FIELDS = [
   "day",
   "eventName",
   "eventDate",
+  "seasonNumber",
+  "editionNumber",
   "gameNumber",
   "selectedTournamentId",
   "wolfCount",
@@ -133,6 +135,8 @@ const state = {
   day: 1,
   eventName: "",
   eventDate: "",
+  seasonNumber: null,
+  editionNumber: null,
   gameNumber: 1,
   activeView: "participants",
   rosterFilter: "tournament",
@@ -224,6 +228,8 @@ document.addEventListener("DOMContentLoaded", () => {
     "eventDateText",
     "dateActionText",
     "clearDateBtn",
+    "seasonNumberInput",
+    "editionNumberInput",
     "gameNumberInput",
     "matchSummary",
     "wolfCountSelect",
@@ -311,6 +317,8 @@ document.addEventListener("DOMContentLoaded", () => {
     "historyEditTitle",
     "closeHistoryEditBtn",
     "historyEventNameInput",
+    "historySeasonNumberInput",
+    "historyEditionNumberInput",
     "historyEventDateInput",
     "historyGameNumberInput",
     "historyWinnerInput",
@@ -430,6 +438,8 @@ function bindEvents() {
     state.eventDate = "";
     renderAndStore();
   });
+  els.seasonNumberInput.addEventListener("change", () => saveOptionalSequenceInput(els.seasonNumberInput, "seasonNumber", "シーズン"));
+  els.editionNumberInput.addEventListener("change", () => saveOptionalSequenceInput(els.editionNumberInput, "editionNumber", "開催回"));
   els.gameNumberInput.addEventListener("change", () => {
     if (isGameLocked()) return render();
     state.gameNumber = normalizeGameNumber(els.gameNumberInput.value);
@@ -651,6 +661,8 @@ function switchTournament(tournamentId, { skipConfirm = false } = {}) {
   state.selectedTournamentId = tournamentId;
   state.eventName = getSelectedTournament()?.name || "";
   state.eventDate = "";
+  state.seasonNumber = null;
+  state.editionNumber = null;
   state.gameNumber = 1;
   resetBoardState();
   applySelectedTournamentParticipation();
@@ -987,6 +999,8 @@ function createGameHistory(winner, trueRoles = new Map()) {
     id: crypto.randomUUID(),
     eventName: getSelectedTournament()?.name || state.eventName || "未設定",
     eventDate: state.eventDate,
+    seasonNumber: state.seasonNumber,
+    editionNumber: state.editionNumber,
     gameNumber: state.gameNumber,
     wolfCount: state.wolfCount,
     wolfModeActive: state.wolfModeActive,
@@ -1126,6 +1140,8 @@ function createBoard(name, tournamentId) {
     day: 1,
     eventName: tournamentName,
     eventDate: "",
+    seasonNumber: null,
+    editionNumber: null,
     gameNumber: 1,
     selectedTournamentId,
     wolfCount: 2,
@@ -2889,6 +2905,8 @@ function renderMatchMeta() {
   els.dateActionText.textContent = state.eventDate ? "変更" : "選択";
   els.clearDateBtn.hidden = !state.eventDate;
   els.dateInputWrap.classList.toggle("has-date", Boolean(state.eventDate));
+  els.seasonNumberInput.value = state.seasonNumber || "";
+  els.editionNumberInput.value = state.editionNumber || "";
   els.gameNumberInput.value = String(state.gameNumber);
   document.querySelectorAll("[data-roster-filter]").forEach((button) => {
     button.classList.toggle("active", button.dataset.rosterFilter === state.rosterFilter);
@@ -2919,6 +2937,8 @@ function renderGameLifecycle() {
     els.eventDateInput,
     els.openDatePickerBtn,
     els.clearDateBtn,
+    els.seasonNumberInput,
+    els.editionNumberInput,
     els.gameNumberInput,
     els.playerNameInput,
     els.addPlayerForm.querySelector('button[type="submit"]'),
@@ -2944,15 +2964,15 @@ function renderHistories() {
     checkbox.className = "history-select-checkbox";
     checkbox.type = "checkbox";
     checkbox.checked = selectedHistoryIds.has(history.id);
-    checkbox.setAttribute("aria-label", `${history.eventName || "未設定"} 第${normalizeGameNumber(history.gameNumber)}試合を選択`);
+    checkbox.setAttribute("aria-label", `${getHistoryDisplayName(history)} 第${normalizeGameNumber(history.gameNumber)}試合を選択`);
     checkbox.addEventListener("change", () => toggleHistorySelection(history.id, checkbox.checked));
     const button = document.createElement("button");
     button.className = `history-item ${history.id === selectedHistoryId ? "active" : ""}`;
     button.type = "button";
     button.innerHTML = `
       <span class="history-item-main">
-        <strong>${escapeHtml(history.eventName || "未設定")} / 第${normalizeGameNumber(history.gameNumber)}試合</strong>
-        <span>${escapeHtml(history.eventDate || "日付未選択")}</span>
+        <strong>${escapeHtml(getHistoryDisplayName(history))}</strong>
+        <span>${escapeHtml(history.eventDate || "日付未選択")} / 第${normalizeGameNumber(history.gameNumber)}試合</span>
       </span>
       <span class="winner-label">${escapeHtml(normalizeCitizenText(history.winner) || "勝利陣営未設定")}</span>
     `;
@@ -4980,7 +5000,7 @@ async function copySelectedHistory() {
 
 function deleteSelectedHistory() {
   const history = getSelectedHistory();
-  if (!history || !confirm(`${history.eventName} 第${history.gameNumber}試合の履歴を削除しますか？`)) return;
+  if (!history || !confirm(`${getHistoryDisplayName(history)} 第${history.gameNumber}試合の履歴を削除しますか？`)) return;
   state.gameHistories = state.gameHistories.filter((item) => item.id !== history.id);
   selectedHistoryId = "";
   selectedHistoryIds.delete(history.id);
@@ -5071,8 +5091,10 @@ function openHistoryEditDialog() {
   const history = getSelectedHistory();
   if (!history) return;
   editingHistoryId = history.id;
-  els.historyEditTitle.textContent = `${history.eventName || "未設定"} 第${history.gameNumber}試合`;
+  els.historyEditTitle.textContent = `${getHistoryDisplayName(history)} 第${history.gameNumber}試合`;
   els.historyEventNameInput.value = history.eventName || "";
+  els.historySeasonNumberInput.value = history.seasonNumber || "";
+  els.historyEditionNumberInput.value = history.editionNumber || "";
   els.historyEventDateInput.value = history.eventDate || "";
   els.historyGameNumberInput.value = String(history.gameNumber || 1);
   els.historyWinnerInput.value = normalizeCitizenText(history.winner);
@@ -5491,7 +5513,12 @@ function getStatusOptionsHtml(selectedStatus) {
 function saveHistoryEdits() {
   const history = state.gameHistories.find((item) => item.id === editingHistoryId);
   if (!history) return;
+  const season = parseOptionalSequenceNumber(els.historySeasonNumberInput.value);
+  const edition = parseOptionalSequenceNumber(els.historyEditionNumberInput.value);
+  if (!season.valid || !edition.valid) return toast("シーズン・開催回は1〜999の数字で入力してください");
   history.eventName = els.historyEventNameInput.value.trim() || "未設定";
+  history.seasonNumber = season.value;
+  history.editionNumber = edition.value;
   history.eventDate = normalizeDateValue(els.historyEventDateInput.value);
   history.gameNumber = normalizeGameNumber(els.historyGameNumberInput.value);
   history.winner = normalizeCitizenText(els.historyWinnerInput.value.trim()) || "勝利陣営未設定";
@@ -5668,7 +5695,7 @@ function buildExportText() {
 
 function buildHistoryText(history) {
   const lines = [
-    `${history.eventName || "未設定"} / ${history.eventDate || "日付未選択"} / 第${history.gameNumber}試合`,
+    `${getHistoryDisplayName(history)} / ${history.eventDate || "日付未選択"} / 第${history.gameNumber}試合`,
     `勝利: ${normalizeCitizenText(history.winner) || "未設定"}`,
     `人狼: ${history.wolfCount}`,
     "",
@@ -6247,6 +6274,8 @@ function applySavedState(saved) {
   state.day = Number.isFinite(Number(saved.day)) ? Math.max(1, Number(saved.day)) : 1;
   state.eventName = normalizeEventName(saved.eventName);
   state.eventDate = normalizeDateValue(saved.eventDate);
+  state.seasonNumber = normalizeOptionalSequenceNumber(saved.seasonNumber);
+  state.editionNumber = normalizeOptionalSequenceNumber(saved.editionNumber);
   state.gameNumber = normalizeGameNumber(saved.gameNumber);
   state.activeView = normalizeActiveView(saved.activeView);
   state.rosterFilter = normalizeRosterFilter(saved.rosterFilter);
@@ -6450,7 +6479,7 @@ function renderBoardManager() {
         <div class="board-list-item ${board.id === activeBoardId ? "active" : ""}" data-board-id="${escapeHtml(board.id)}">
           <button class="board-select-button" type="button">
             <strong>${escapeHtml(board.name)}</strong>
-            <span>${escapeHtml(tournamentName)} / ${escapeHtml(payload.eventDate || "日付未選択")} / 第${normalizeGameNumber(payload.gameNumber)}試合</span>
+            <span>${escapeHtml(formatEventSeriesName(tournamentName, payload.seasonNumber, payload.editionNumber))} / ${escapeHtml(payload.eventDate || "日付未選択")} / 第${normalizeGameNumber(payload.gameNumber)}試合</span>
             <small>${status} / ${escapeHtml(formatBoardUpdatedAt(board.updatedAt))}</small>
           </button>
           <button class="board-rename-button secondary-button" type="button">名称変更</button>
@@ -6560,6 +6589,8 @@ function resetStateToDefaults() {
     day: 1,
     eventName: "",
     eventDate: "",
+    seasonNumber: null,
+    editionNumber: null,
     gameNumber: 1,
     activeView: "participants",
     rosterFilter: "tournament",
@@ -6785,6 +6816,8 @@ function ensureMatchDefaults() {
     state.selectedTournamentId = state.tournaments[0].id;
   }
   state.eventName = getSelectedTournament()?.name || "";
+  state.seasonNumber = normalizeOptionalSequenceNumber(state.seasonNumber);
+  state.editionNumber = normalizeOptionalSequenceNumber(state.editionNumber);
   state.gameNumber = normalizeGameNumber(state.gameNumber);
   state.activeView = normalizeActiveView(state.activeView);
   state.rosterFilter = normalizeRosterFilter(state.rosterFilter);
@@ -6860,6 +6893,32 @@ function normalizeDateValue(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? String(value) : "";
 }
 
+function parseOptionalSequenceNumber(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return { valid: true, value: null };
+  if (!/^\d{1,3}$/.test(text)) return { valid: false, value: null };
+  const number = Number(text);
+  return number >= 1 && number <= 999
+    ? { valid: true, value: number }
+    : { valid: false, value: null };
+}
+
+function normalizeOptionalSequenceNumber(value) {
+  const parsed = parseOptionalSequenceNumber(value);
+  return parsed.valid ? parsed.value : null;
+}
+
+function saveOptionalSequenceInput(input, field, label) {
+  if (isGameLocked()) return render();
+  const parsed = parseOptionalSequenceNumber(input.value);
+  if (!parsed.valid) {
+    toast(`${label}は1〜999の数字で入力してください`);
+    return render();
+  }
+  state[field] = parsed.value;
+  renderAndStore();
+}
+
 function normalizeGameNumber(value) {
   const number = Number(value);
   return Number.isFinite(number) ? Math.min(12, Math.max(1, Math.trunc(number))) : 1;
@@ -6888,7 +6947,20 @@ function getTodayDateString() {
 
 function getMatchSummary() {
   const eventName = getSelectedTournament()?.name || state.eventName || "未設定";
-  return `${eventName} / ${state.eventDate || "日付未選択"} / 第${state.gameNumber}試合`;
+  return `${formatEventSeriesName(eventName, state.seasonNumber, state.editionNumber)} / ${state.eventDate || "日付未選択"} / 第${state.gameNumber}試合`;
+}
+
+function formatEventSeriesName(eventName, seasonNumber, editionNumber) {
+  const parts = [eventName || "未設定"];
+  const season = normalizeOptionalSequenceNumber(seasonNumber);
+  const edition = normalizeOptionalSequenceNumber(editionNumber);
+  if (season) parts.push(`シーズン${season}`);
+  if (edition) parts.push(`第${edition}回`);
+  return parts.join(" / ");
+}
+
+function getHistoryDisplayName(history) {
+  return formatEventSeriesName(history?.eventName, history?.seasonNumber, history?.editionNumber);
 }
 
 function normalizePlayer(player) {
@@ -7203,6 +7275,8 @@ function normalizeGameHistory(history) {
     id: String(history.id),
     eventName: normalizeEventName(history.eventName) || "未設定",
     eventDate: normalizeDateValue(history.eventDate),
+    seasonNumber: normalizeOptionalSequenceNumber(history.seasonNumber),
+    editionNumber: normalizeOptionalSequenceNumber(history.editionNumber),
     gameNumber: normalizeGameNumber(history.gameNumber),
     wolfCount: normalizeWolfCount(history.wolfCount),
     wolfModeActive: history.wolfModeActive === true || history.players.some((player) => player.wolfTeammate === true),
@@ -7241,6 +7315,8 @@ function normalizeBoard(board) {
   payload.day = Number.isFinite(Number(payload.day)) ? Math.max(1, Number(payload.day)) : 1;
   payload.eventName = normalizeEventName(payload.eventName);
   payload.eventDate = normalizeDateValue(payload.eventDate);
+  payload.seasonNumber = normalizeOptionalSequenceNumber(payload.seasonNumber);
+  payload.editionNumber = normalizeOptionalSequenceNumber(payload.editionNumber);
   payload.gameNumber = normalizeGameNumber(payload.gameNumber);
   payload.selectedTournamentId = String(payload.selectedTournamentId || "");
   payload.wolfCount = normalizeWolfCount(payload.wolfCount);
