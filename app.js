@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.153";
+const APP_VERSION = "1.154";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3195,8 +3195,27 @@ function isRivalPerspectiveTargetConfirmedMadman(target) {
 
 function getAutomaticRivalPerspectiveValue(viewer, target, claimants) {
   if (isRivalPerspectiveTargetConfirmedMadman(target)) return "madman";
+  const threeSeerValue = getThreeSeerMediumHumanRivalValue(viewer, target, claimants);
+  if (threeSeerValue) return threeSeerValue;
   if (shouldTreatWolfSideAsMadmanForSeer(viewer, target)) return "madman";
   return "wolfSide";
+}
+
+function getThreeSeerMediumHumanRivalValue(viewer, target, claimants) {
+  const currentSeerClaimants = claimants.filter((claimant) => claimant.role === "seer");
+  if (viewer?.role !== "seer" || target?.role !== "seer" || currentSeerClaimants.length !== 3) return "";
+  const mediumHumanRival = currentSeerClaimants.find(
+    (claimant) => claimant.id !== viewer.id && isMediumConfirmedHuman(claimant),
+  );
+  if (!mediumHumanRival) return "";
+  return target.id === mediumHumanRival.id ? "madman" : "werewolf";
+}
+
+function isMediumConfirmedHuman(player) {
+  return Boolean(
+    player?.mediumConfirmedRoleGuess === "villager" &&
+      player.confirmedRoleEvidence?.some((evidence) => evidence.role === "medium" && evidence.value === "villager"),
+  );
 }
 
 function shouldTreatWolfSideAsMadmanForSeer(seer, target) {
