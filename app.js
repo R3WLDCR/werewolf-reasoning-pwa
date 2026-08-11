@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.149";
+const APP_VERSION = "1.150";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -349,6 +349,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "roleGuessPlayerName",
     "wolfModeEntryHint",
     "roleGuessCandidateOptions",
+    "openMediumResultFromGuessBtn",
     "blackTargetField",
     "blackTargetSelect",
     "primaryRoleGuessSelect",
@@ -560,6 +561,7 @@ function bindEvents() {
   });
   els.closeRoleGuessBtn.addEventListener("click", closeRoleGuessDialog);
   els.saveRoleGuessBtn.addEventListener("click", saveRoleGuess);
+  els.openMediumResultFromGuessBtn.addEventListener("click", openMediumResultFromRoleGuess);
   els.exitWolfModeBtn.addEventListener("click", exitWolfMode);
   els.roleGuessDialog.addEventListener("click", (event) => {
     if (event.target === els.roleGuessDialog) closeRoleGuessDialog();
@@ -1478,6 +1480,7 @@ function renderRoleGuessDialog(player) {
   const editingWolfModeMember = isWolfMode() && isWolfModeMember(player);
   const selectedValue = editingWolfModeMember ? getWolfModeCoverRole(player) : getRoleGuessDisplay(player).value;
   renderWolfModeEntryHint(player);
+  renderMediumResultShortcut(player);
   renderBlackTargetOptions(player);
   const options = editingWolfModeMember
     ? Object.entries(ROLE_GUESS_LABELS).filter(([value]) => WOLF_MODE_COVER_ROLES.has(value))
@@ -1497,6 +1500,21 @@ function renderRoleGuessDialog(player) {
   });
   renderPrimaryRoleGuessOptions(selectedValue === "unknown" ? "" : selectedValue);
   els.exitWolfModeBtn.hidden = !(isWolfMode() && isPriorityPlayer(player));
+}
+
+function renderMediumResultShortcut(player) {
+  const mediumCount = getRoleClaimants("medium").length;
+  const canInput = !isGameFinished() && player.status === "exiled" && mediumCount > 0;
+  els.openMediumResultFromGuessBtn.hidden = !canInput;
+  els.openMediumResultFromGuessBtn.textContent =
+    mediumCount === 1 ? "霊媒結果を入力" : `${mediumCount}人の霊媒結果を入力`;
+}
+
+function openMediumResultFromRoleGuess() {
+  const playerId = roleGuessPlayerId;
+  if (!playerId) return;
+  closeRoleGuessDialog();
+  openEditDialog(playerId);
 }
 
 function renderBlackTargetOptions(player) {
