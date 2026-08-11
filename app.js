@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.154";
+const APP_VERSION = "1.155";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -4686,17 +4686,17 @@ function isConfirmedRoleActor(player, role) {
 function applySelfPerspectiveRivalRoleGuesses() {
   const selfPlayer = getSelfPerspectivePlayer();
   const selfRole = selfPlayer ? getRoleGuessDisplay(selfPlayer).value : "";
-  const rivalIds = new Set(
-    SELF_RIVAL_GUESS_ROLES.has(selfRole)
-      ? getActivePlayers()
-          .filter((player) => player.id !== selfPlayer.id && player.role === selfRole)
-          .map((player) => player.id)
-      : [],
-  );
+  const roleClaimants = SELF_RIVAL_GUESS_ROLES.has(selfRole) ? getRoleClaimants(selfRole) : [];
+  const rivals = roleClaimants.filter((player) => player.id !== selfPlayer?.id);
+  const rivalIds = new Set(rivals.map((player) => player.id));
+  const mediumHumanRival =
+    selfRole === "seer" && roleClaimants.length === 3
+      ? rivals.find((player) => isMediumConfirmedHuman(player)) || null
+      : null;
   getActivePlayers().forEach((player) => {
     const remainsRival = rivalIds.has(player.id);
     if (player.autoSelfRivalWolfSide && !remainsRival) {
-      if (!player.manualRoleGuess && getRoleGuessDisplay(player).value === "wolfSide") {
+      if (!player.manualRoleGuess && ["wolfSide", "madman", "werewolf"].includes(getRoleGuessDisplay(player).value)) {
         player.roleGuessCandidates = ["unknown"];
         player.primaryRoleGuess = "";
       }
@@ -4704,8 +4704,13 @@ function applySelfPerspectiveRivalRoleGuesses() {
       return;
     }
     if (!remainsRival || player.manualRoleGuess || player.attackedWolfSideConfirmedMadman) return;
-    player.roleGuessCandidates = ["wolfSide"];
-    player.primaryRoleGuess = "wolfSide";
+    const inferredRole = mediumHumanRival
+      ? player.id === mediumHumanRival.id
+        ? "madman"
+        : "werewolf"
+      : "wolfSide";
+    player.roleGuessCandidates = [inferredRole];
+    player.primaryRoleGuess = inferredRole;
     player.autoSelfRivalWolfSide = true;
   });
 }
