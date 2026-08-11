@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.157";
+const APP_VERSION = "1.158";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3861,6 +3861,10 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
       if (isRivalSeer && !result) {
         return getRivalPerspectiveCellHtml("seer", seer, player, getAutomaticRivalPerspectiveValue(seer, player, seers));
       }
+      if (!result && player.id === seer.id) {
+        const ownDisplay = getSeerOwnPerspectiveDisplay(player, seer);
+        return `<span class="seer-result-label ${ownDisplay.className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(ownDisplay.label)}</span>`;
+      }
       const mediumPerspective = getMediumPerspectiveForSeer(player, seer);
       if (!result && mediumPerspective) {
         return `<span class="seer-result-label ${mediumPerspective.className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(mediumPerspective.label)}</span>`;
@@ -3877,10 +3881,6 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
       }
       if (!result && mediumConfirmedDisplay) {
         return `<span class="seer-result-label ${mediumConfirmedDisplay.className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(mediumConfirmedDisplay.label)}</span>`;
-      }
-      if (player.id === seer.id) {
-        const ownDisplay = getSeerOwnPerspectiveDisplay(player, seer);
-        return `<span class="seer-result-label ${ownDisplay.className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(ownDisplay.label)}</span>`;
       }
       if (isWolfSideDisplayTarget(player)) {
         const value = getAutomaticRivalPerspectiveValue(seer, player, seers);
