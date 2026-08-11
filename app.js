@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.152";
+const APP_VERSION = "1.153";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -4314,7 +4314,7 @@ function reconcileConfirmedRoleEvidence() {
     if (preferred.role === "medium" && preferred.value === "werewolf" && !player.manualRoleGuess) {
       player.roleGuessCandidates = [preferred.value];
       player.primaryRoleGuess = preferred.value;
-    } else if (!player.manualRoleGuess && preferred.role !== "claim") {
+    } else if (!player.manualRoleGuess && preferred.role !== "claim" && !usesLimitedMediumHumanConversion) {
       setRoleGuess(player, preferred.value, { confirmed: true });
     }
   });
