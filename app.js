@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.158";
+const APP_VERSION = "1.159";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -6029,10 +6029,26 @@ function getDecisiveVoteIdForPhase(votes, day, type, runoffRound = 0) {
   const topTargetIds = getTopVoteTargetIds(phaseVotes);
   if (topTargetIds.length !== 1 || topTargetIds[0] !== exiledPlayer.id) return "";
 
-  return phaseVotes
+  const orderedVotes = phaseVotes
     .map((vote, sourceIndex) => ({ vote, sourceIndex }))
-    .sort((a, b) => getVoteOrder(b.vote) - getVoteOrder(a.vote) || b.sourceIndex - a.sourceIndex)[0]
-    ?.vote.id || "";
+    .sort((a, b) => getVoteOrder(a.vote) - getVoteOrder(b.vote) || a.sourceIndex - b.sourceIndex);
+  const voteCounts = new Map();
+  for (let index = 0; index < orderedVotes.length; index += 1) {
+    const vote = orderedVotes[index].vote;
+    if (vote.targetId && vote.targetId !== "abstain") {
+      voteCounts.set(vote.targetId, (voteCounts.get(vote.targetId) || 0) + 1);
+    }
+    const winnerVotes = voteCounts.get(exiledPlayer.id) || 0;
+    const otherTopVotes = Math.max(
+      0,
+      ...[...voteCounts.entries()]
+        .filter(([targetId]) => targetId !== exiledPlayer.id)
+        .map(([, count]) => count),
+    );
+    const remainingVotes = orderedVotes.length - index - 1;
+    if (winnerVotes > otherTopVotes + remainingVotes) return vote.id;
+  }
+  return "";
 }
 
 function getVoteSummaryPhaseKeys(votes, day) {
