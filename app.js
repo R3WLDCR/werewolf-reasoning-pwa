@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.159";
+const APP_VERSION = "1.160";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3912,7 +3912,7 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
       const resultLabel = getDivinationResultDisplayLabel(result, player);
       const rivalSeerLabel = getHumanJudgedRivalSeerLabel(player, seer, result.value, resultLabel);
       const displayedRole = player.autoConfirmedWhite && result.value === "human" ? "" : roleClaim || manualMediumGuess;
-      const baseLabel = guardClaim || rivalSeerLabel || (displayedRole ? `${displayedRole} / ${resultLabel}` : resultLabel);
+      const baseLabel = rivalSeerLabel || (guardClaim ? `${guardClaim} / ${resultLabel}` : displayedRole ? `${displayedRole} / ${resultLabel}` : resultLabel);
       const label = isAdoptedMediumResultContradictingSeer(seer.id, player.id, result.value) ? `${baseLabel} / 矛盾` : baseLabel;
       return `<span class="seer-result-label ${guardClaim ? "role-guard" : rivalSeerLabel ? "role-madman" : className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(label)}</span>`;
     })
@@ -3934,8 +3934,9 @@ function getSeerColumnOverrideHtml(override, seer, player = findPlayer(override.
       : RESULT_LABELS[override.value];
     const guardClaim = getNonWolfGuardClaimForSeer(player, seer, override.value);
     const rivalSeerLabel = getHumanJudgedRivalSeerLabel(player, seer, override.value, resultLabel);
-    const baseLabel = guardClaim || rivalSeerLabel ||
-      (!result && shouldDisplayConfirmedWhiteForSeer(player, override.seerId, override.value)
+    const baseLabel = rivalSeerLabel || (guardClaim
+      ? `${guardClaim} / ${resultLabel}`
+      : !result && shouldDisplayConfirmedWhiteForSeer(player, override.seerId, override.value)
         ? `${resultLabel} / ${ROLE_LABELS.confirmedWhite}`
         : resultLabel);
     const label = isAdoptedMediumResultContradictingSeer(seer.id, player?.id, override.value) ? `${baseLabel} / 矛盾` : baseLabel;
