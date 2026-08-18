@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.164";
+const APP_VERSION = "1.165";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -5744,7 +5744,7 @@ function buildHistoryTimeline(history) {
   if (!maxDay) return ["- 出来事なし"];
   const lines = [];
   for (let day = 1; day <= maxDay; day += 1) {
-    const events = [];
+    const events = [formatTimelinePopulation(activePlayers, day)];
     activePlayers
       .filter((player) => player.status === "attacked" && (Number(player.statusDay) || 1) === day)
       .forEach((player) => events.push(`襲撃: ${player.name}`));
@@ -5810,7 +5810,7 @@ function buildCurrentTimeline() {
   if (!maxDay) return ["- 出来事なし"];
   const lines = [];
   for (let day = 1; day <= maxDay; day += 1) {
-    const events = [];
+    const events = [formatTimelinePopulation(activePlayers, day)];
     activePlayers
       .filter((player) => player.status === "attacked" && (Number(player.statusDay) || 1) === day)
       .forEach((player) => events.push(`襲撃: ${player.name}`));
@@ -5857,6 +5857,21 @@ function buildCurrentTimeline() {
     }
   }
   return lines.length ? lines : ["- 出来事なし"];
+}
+
+function formatTimelinePopulation(players, day) {
+  const survivors = players.filter((player) => isPlayerAliveAtTimelineDay(player, day));
+  const hasCompleteTrueRoles = players.length > 0 && players.every((player) => Boolean(player.trueRole));
+  if (!hasCompleteTrueRoles) return `生存: ${survivors.length}人（うち人外 不明）`;
+  const outsiderRoles = new Set(["werewolf", "madman", "wolfSide", "fox", "teruteru"]);
+  const outsiderCount = survivors.filter((player) => outsiderRoles.has(player.trueRole)).length;
+  return `生存: ${survivors.length}人（うち人外 ${outsiderCount}人）`;
+}
+
+function isPlayerAliveAtTimelineDay(player, day) {
+  if (!isInactiveStatus(player.status)) return true;
+  const statusDay = Number(player.statusDay) || 1;
+  return player.status === "exiled" ? statusDay >= day : statusDay > day;
 }
 
 function getTrueRoleActions(actions, players) {
