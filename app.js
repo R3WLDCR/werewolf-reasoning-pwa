@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.162";
+const APP_VERSION = "1.163";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -5774,6 +5774,7 @@ function buildHistoryTimeline(history) {
       });
     voteHistories
       .filter((vote) => (Number(vote.day) || 1) === day)
+      .sort(compareTimelineVotes)
       .forEach((vote) => {
         const line = formatVoteEvent(vote, history.players);
         if (line) events.push(line);
@@ -5838,6 +5839,7 @@ function buildCurrentTimeline() {
       });
     voteHistories
       .filter((vote) => (Number(vote.day) || 1) === day)
+      .sort(compareTimelineVotes)
       .forEach((vote) => {
         const line = formatVoteEvent(vote, state.players);
         if (line) events.push(line);
@@ -5925,6 +5927,14 @@ function compareTimelineRoleActions(a, b, players) {
     getTimelinePlayerOrder(players, a.actorId) - getTimelinePlayerOrder(players, b.actorId) ||
     getTimelinePlayerOrder(players, a.targetId) - getTimelinePlayerOrder(players, b.targetId) ||
     String(a.id || "").localeCompare(String(b.id || ""))
+  );
+}
+
+function compareTimelineVotes(a, b) {
+  return (
+    getVoteOrder(a) - getVoteOrder(b) ||
+    normalizeVoteType(a.type).localeCompare(normalizeVoteType(b.type)) ||
+    normalizeRunoffRound(a.runoffRound) - normalizeRunoffRound(b.runoffRound)
   );
 }
 
