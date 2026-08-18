@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.161";
+const APP_VERSION = "1.162";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -1097,6 +1097,7 @@ function loadBoard(boardId, { storeAfter = true } = {}) {
   localStorage.setItem(ACTIVE_BOARD_KEY, activeBoardId);
   switchingBoard = false;
   ensureMatchDefaults();
+  backfillStatusDays();
   removeInvalidCurrentMediumResults();
   applyConfirmedWhiteUpdates();
   if (storeAfter) renderAndStore();
@@ -3409,7 +3410,7 @@ function getNextStatusDayForStatus(status) {
   const exiledMax = getMaxStatusDay("exiled");
   const attackedMax = getMaxStatusDay("attacked");
   if (status === "exiled") return exiledMax + 1;
-  if (status === "attacked") return exiledMax > attackedMax ? Math.max(1, exiledMax) : attackedMax + 1;
+  if (status === "attacked") return Math.max(1, exiledMax + 1, attackedMax + 1);
   return 1;
 }
 
@@ -6877,7 +6878,7 @@ function backfillStatusDays() {
         currentDay += 1;
         player.statusDay = currentDay;
       } else if (player.status === "attacked") {
-        player.statusDay = Math.max(1, currentDay);
+        player.statusDay = Math.max(1, currentDay + 1);
       }
     });
 }
