@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.160";
+const APP_VERSION = "1.161";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -6021,35 +6021,39 @@ function getVoteOrderEntriesForDay(votes, players, day, type = "", runoffRound =
 }
 
 function getDecisiveVoteIdForPhase(votes, day, type, runoffRound = 0) {
-  const exiledPlayer = state.players.find(
-    (player) => player.status === "exiled" && (Number(player.statusDay) || 1) === (Number(day) || 1),
-  );
-  if (!exiledPlayer || getCompletedVoteExileTargetId(day, votes) !== exiledPlayer.id) return "";
-
   const phaseVotes = getVotesForPhase(votes, day, type, runoffRound);
-  const topTargetIds = getTopVoteTargetIds(phaseVotes);
-  if (topTargetIds.length !== 1 || topTargetIds[0] !== exiledPlayer.id) return "";
-
   const orderedVotes = phaseVotes
     .map((vote, sourceIndex) => ({ vote, sourceIndex }))
     .sort((a, b) => getVoteOrder(a.vote) - getVoteOrder(b.vote) || a.sourceIndex - b.sourceIndex);
+  const eligibleVoterCount = Math.max(orderedVotes.length, getVotePhaseEligibleVoterCount(votes, day, type, runoffRound));
   const voteCounts = new Map();
   for (let index = 0; index < orderedVotes.length; index += 1) {
     const vote = orderedVotes[index].vote;
     if (vote.targetId && vote.targetId !== "abstain") {
       voteCounts.set(vote.targetId, (voteCounts.get(vote.targetId) || 0) + 1);
     }
-    const winnerVotes = voteCounts.get(exiledPlayer.id) || 0;
-    const otherTopVotes = Math.max(
-      0,
-      ...[...voteCounts.entries()]
-        .filter(([targetId]) => targetId !== exiledPlayer.id)
-        .map(([, count]) => count),
-    );
-    const remainingVotes = orderedVotes.length - index - 1;
-    if (winnerVotes > otherTopVotes + remainingVotes) return vote.id;
+    const ranking = [...voteCounts.entries()].sort((a, b) => b[1] - a[1]);
+    if (!ranking.length || (ranking[1]?.[1] || 0) === ranking[0][1]) continue;
+    const remainingVotes = eligibleVoterCount - index - 1;
+    if (ranking[0][1] > (ranking[1]?.[1] || 0) + remainingVotes) return vote.id;
   }
   return "";
+}
+
+function getVotePhaseEligibleVoterCount(votes, day, type, runoffRound = 0) {
+  const phaseVotes = getVotesForPhase(votes, day, type, runoffRound);
+  const voterIds = new Set(phaseVotes.map((vote) => vote.voterId));
+  const excludedVoterIds = new Set();
+  if (type === "runoff") {
+    let tiedTargetIds = getTopVoteTargetIds(getVotesForPhase(votes, day, "normal", 0));
+    for (let round = 1; round < runoffRound; round += 1) {
+      tiedTargetIds = getTopVoteTargetIds(getVotesForPhase(votes, day, "runoff", round));
+    }
+    tiedTargetIds.forEach((playerId) => excludedVoterIds.add(playerId));
+  }
+  getVoteAvailableVotersForPhase(getActivePlayers(), day, votes, type, runoffRound, excludedVoterIds)
+    .forEach((player) => voterIds.add(player.id));
+  return voterIds.size;
 }
 
 function getVoteSummaryPhaseKeys(votes, day) {
