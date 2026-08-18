@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.165";
+const APP_VERSION = "1.166";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -127,6 +127,7 @@ const BOARD_STATE_FIELDS = [
   "claimEvents",
   "voteHistories",
   "gameStatus",
+  "winner",
   "startedAt",
   "pendingExileContinuationPlayerId",
 ];
@@ -156,6 +157,7 @@ const state = {
   claimEvents: [],
   voteHistories: [],
   gameStatus: "preparing",
+  winner: "",
   startedAt: "",
   pendingExileContinuationPlayerId: "",
   gameHistories: [],
@@ -840,6 +842,7 @@ function finishGame() {
       player.trueRole = trueRoles.get(player.id) || "";
     });
     state.gameStatus = "finished";
+    state.winner = winner;
     state.pendingExileContinuationPlayerId = "";
     state.activeView = "reasoning";
     selectedHistoryId = state.gameHistories[0].id;
@@ -1097,6 +1100,12 @@ function loadBoard(boardId, { storeAfter = true } = {}) {
   localStorage.setItem(ACTIVE_BOARD_KEY, activeBoardId);
   switchingBoard = false;
   ensureMatchDefaults();
+  if (state.gameStatus === "finished" && !state.winner) {
+    const matchingHistory = state.gameHistories.find(
+      (history) => history.boardId === board.id && history.gameNumber === state.gameNumber,
+    );
+    state.winner = normalizeCitizenText(matchingHistory?.winner || "");
+  }
   backfillStatusDays();
   removeInvalidCurrentMediumResults();
   applyConfirmedWhiteUpdates();
@@ -1159,6 +1168,7 @@ function createBoard(name, tournamentId) {
     claimEvents: [],
     voteHistories: [],
     gameStatus: "preparing",
+    winner: "",
     startedAt: "",
     pendingExileContinuationPlayerId: "",
   };
@@ -1193,6 +1203,7 @@ function deleteBoard(boardId) {
 
 function resetBoardState() {
   state.day = 1;
+  state.winner = "";
   state.pendingExileContinuationPlayerId = "";
   state.wolfModeActive = false;
   state.wolfModeCoverRole = "";
@@ -5741,7 +5752,6 @@ function buildHistoryTimeline(history) {
     ...voteHistories.map((vote) => Number(vote.day) || 1),
     ...activePlayers.filter((player) => isInactiveStatus(player.status)).map((player) => Number(player.statusDay) || 1),
   );
-  if (!maxDay) return ["- 出来事なし"];
   const lines = [];
   for (let day = 1; day <= maxDay; day += 1) {
     const events = [formatTimelinePopulation(activePlayers, day)];
@@ -5790,7 +5800,9 @@ function buildHistoryTimeline(history) {
       events.forEach((event) => lines.push(`- ${event}`));
     }
   }
-  return lines.length ? lines : ["- 出来事なし"];
+  if (!lines.length) lines.push("- 出来事なし");
+  lines.push("", `勝利: ${normalizeCitizenText(history.winner) || "未設定"}`);
+  return lines;
 }
 
 function buildCurrentTimeline() {
@@ -5807,7 +5819,6 @@ function buildCurrentTimeline() {
     ...voteHistories.map((vote) => Number(vote.day) || 1),
     ...activePlayers.filter((player) => isInactiveStatus(player.status)).map((player) => Number(player.statusDay) || 1),
   );
-  if (!maxDay) return ["- 出来事なし"];
   const lines = [];
   for (let day = 1; day <= maxDay; day += 1) {
     const events = [formatTimelinePopulation(activePlayers, day)];
@@ -5856,7 +5867,9 @@ function buildCurrentTimeline() {
       events.forEach((event) => lines.push(`- ${event}`));
     }
   }
-  return lines.length ? lines : ["- 出来事なし"];
+  if (!lines.length) lines.push("- 出来事なし");
+  if (isGameFinished()) lines.push("", `勝利: ${normalizeCitizenText(state.winner) || "未設定"}`);
+  return lines;
 }
 
 function formatTimelinePopulation(players, day) {
@@ -6374,6 +6387,7 @@ function applySavedState(saved) {
     ? saved.customImpressionReasons.map(normalizeImpressionReason).filter((reason) => reason?.custom)
     : [];
   state.gameStatus = ["in_progress", "finished"].includes(saved.gameStatus) ? saved.gameStatus : "preparing";
+  state.winner = state.gameStatus === "finished" ? normalizeCitizenText(saved.winner || "") : "";
   state.startedAt = state.gameStatus !== "preparing" ? String(saved.startedAt || "") : "";
   state.pendingExileContinuationPlayerId = String(saved.pendingExileContinuationPlayerId || "");
   if (!state.players.some((player) => player.id === state.pendingExileContinuationPlayerId && player.status === "exiled")) {
@@ -6668,6 +6682,7 @@ function resetStateToDefaults() {
     claimEvents: [],
     voteHistories: [],
     gameStatus: "preparing",
+    winner: "",
     startedAt: "",
     pendingExileContinuationPlayerId: "",
     gameHistories: [],
@@ -6877,6 +6892,7 @@ function ensureMatchDefaults() {
   state.seasonNumber = normalizeOptionalSequenceNumber(state.seasonNumber);
   state.editionNumber = normalizeOptionalSequenceNumber(state.editionNumber);
   state.gameNumber = normalizeGameNumber(state.gameNumber);
+  state.winner = state.gameStatus === "finished" ? normalizeCitizenText(state.winner || "") : "";
   state.activeView = normalizeActiveView(state.activeView);
   state.rosterFilter = normalizeRosterFilter(state.rosterFilter);
   backfillRoleClaimOrders(state.players);
@@ -7400,6 +7416,7 @@ function normalizeBoard(board) {
   payload.claimEvents = Array.isArray(payload.claimEvents) ? payload.claimEvents.map(normalizeClaimEvent).filter(Boolean) : [];
   payload.voteHistories = Array.isArray(payload.voteHistories) ? payload.voteHistories.map(normalizeVoteHistory).filter(Boolean) : [];
   payload.gameStatus = ["in_progress", "finished"].includes(payload.gameStatus) ? payload.gameStatus : "preparing";
+  payload.winner = payload.gameStatus === "finished" ? normalizeCitizenText(payload.winner || "") : "";
   payload.startedAt = payload.gameStatus !== "preparing" ? String(payload.startedAt || "") : "";
   payload.pendingExileContinuationPlayerId = String(payload.pendingExileContinuationPlayerId || "");
   if (!payload.players.some((player) => player.id === payload.pendingExileContinuationPlayerId && player.status === "exiled")) {
