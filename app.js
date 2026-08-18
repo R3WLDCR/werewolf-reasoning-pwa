@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.163";
+const APP_VERSION = "1.164";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -5772,11 +5772,12 @@ function buildHistoryTimeline(history) {
         const line = formatClaimEvent(event, history.players);
         if (line) events.push(line);
       });
+    const decisiveVoteIds = getDecisiveVoteIdsForDay(voteHistories, day, activePlayers);
     voteHistories
       .filter((vote) => (Number(vote.day) || 1) === day)
       .sort(compareTimelineVotes)
       .forEach((vote) => {
-        const line = formatVoteEvent(vote, history.players);
+        const line = formatVoteEvent(vote, history.players, decisiveVoteIds.has(vote.id));
         if (line) events.push(line);
       });
     const voteSummary = formatVoteSummaryForDay(voteHistories, history.players, day);
@@ -5837,11 +5838,12 @@ function buildCurrentTimeline() {
         const line = formatClaimEvent(event, state.players);
         if (line) events.push(line);
       });
+    const decisiveVoteIds = getDecisiveVoteIdsForDay(voteHistories, day, activePlayers);
     voteHistories
       .filter((vote) => (Number(vote.day) || 1) === day)
       .sort(compareTimelineVotes)
       .forEach((vote) => {
-        const line = formatVoteEvent(vote, state.players);
+        const line = formatVoteEvent(vote, state.players, decisiveVoteIds.has(vote.id));
         if (line) events.push(line);
       });
     const voteSummary = formatVoteSummaryForDay(voteHistories, state.players, day);
@@ -5947,14 +5949,23 @@ function getTimelinePlayerOrder(players, playerId) {
   return index === -1 ? Number.MAX_SAFE_INTEGER : index;
 }
 
-function formatVoteEvent(vote, players) {
+function formatVoteEvent(vote, players, isDecisive = false) {
   const voter = players.find((player) => player.id === vote.voterId);
   const target = vote.targetId === "abstain" ? null : players.find((player) => player.id === vote.targetId);
   if (!voter || (!target && vote.targetId !== "abstain")) return "";
   const targetName = vote.targetId === "abstain" ? "棄権" : target.name;
-  if (normalizeVoteType(vote.type) === "runoff") return `決選投票: ${voter.name} -> ${targetName}`;
+  const decisiveLabel = isDecisive ? " 【決定票】" : "";
+  if (normalizeVoteType(vote.type) === "runoff") return `決選投票: ${voter.name} -> ${targetName}${decisiveLabel}`;
   const prefix = "投票";
-  return `${prefix}${getVoteOrder(vote)}番目: ${voter.name} -> ${targetName}`;
+  return `${prefix}${getVoteOrder(vote)}番目: ${voter.name} -> ${targetName}${decisiveLabel}`;
+}
+
+function getDecisiveVoteIdsForDay(votes, day, players) {
+  return new Set(
+    getVoteSummaryPhaseKeys(votes, day)
+      .map((phase) => getDecisiveVoteIdForPhase(votes, day, phase.type, phase.runoffRound, players))
+      .filter(Boolean),
+  );
 }
 
 function formatVoteSummaryForDay(votes, players, day, type = "", runoffRound = 0) {
@@ -6031,12 +6042,12 @@ function getVoteOrderEntriesForDay(votes, players, day, type = "", runoffRound =
     .sort((a, b) => b.order - a.order || b.sourceIndex - a.sourceIndex);
 }
 
-function getDecisiveVoteIdForPhase(votes, day, type, runoffRound = 0) {
+function getDecisiveVoteIdForPhase(votes, day, type, runoffRound = 0, players = getActivePlayers()) {
   const phaseVotes = getVotesForPhase(votes, day, type, runoffRound);
   const orderedVotes = phaseVotes
     .map((vote, sourceIndex) => ({ vote, sourceIndex }))
     .sort((a, b) => getVoteOrder(a.vote) - getVoteOrder(b.vote) || a.sourceIndex - b.sourceIndex);
-  const eligibleVoterCount = Math.max(orderedVotes.length, getVotePhaseEligibleVoterCount(votes, day, type, runoffRound));
+  const eligibleVoterCount = Math.max(orderedVotes.length, getVotePhaseEligibleVoterCount(votes, day, type, runoffRound, players));
   const voteCounts = new Map();
   for (let index = 0; index < orderedVotes.length; index += 1) {
     const vote = orderedVotes[index].vote;
@@ -6051,7 +6062,7 @@ function getDecisiveVoteIdForPhase(votes, day, type, runoffRound = 0) {
   return "";
 }
 
-function getVotePhaseEligibleVoterCount(votes, day, type, runoffRound = 0) {
+function getVotePhaseEligibleVoterCount(votes, day, type, runoffRound = 0, players = getActivePlayers()) {
   const phaseVotes = getVotesForPhase(votes, day, type, runoffRound);
   const voterIds = new Set(phaseVotes.map((vote) => vote.voterId));
   const excludedVoterIds = new Set();
@@ -6062,7 +6073,7 @@ function getVotePhaseEligibleVoterCount(votes, day, type, runoffRound = 0) {
     }
     tiedTargetIds.forEach((playerId) => excludedVoterIds.add(playerId));
   }
-  getVoteAvailableVotersForPhase(getActivePlayers(), day, votes, type, runoffRound, excludedVoterIds)
+  getVoteAvailableVotersForPhase(players, day, votes, type, runoffRound, excludedVoterIds)
     .forEach((player) => voterIds.add(player.id));
   return voterIds.size;
 }
