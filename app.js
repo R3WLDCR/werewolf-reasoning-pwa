@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.167";
+const APP_VERSION = "1.168";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3423,7 +3423,7 @@ function getNextStatusDayForStatus(status) {
   const exiledMax = getMaxStatusDay("exiled");
   const attackedMax = getMaxStatusDay("attacked");
   if (status === "exiled") return exiledMax + 1;
-  if (status === "attacked") return Math.max(1, exiledMax + 1, attackedMax + 1);
+  if (status === "attacked") return Math.max(2, exiledMax + 1, attackedMax + 1);
   return 1;
 }
 
@@ -5550,7 +5550,7 @@ function saveHistoryEdits() {
     }
     player.status = row.querySelector('[data-field="status"]').value;
     player.statusDay = isInactiveStatus(player.status)
-      ? Math.max(1, Number(row.querySelector('[data-field="statusDay"]').value) || 1)
+      ? Math.max(player.status === "attacked" ? 2 : 1, Number(row.querySelector('[data-field="statusDay"]').value) || 1)
       : null;
     player.memo = row.querySelector('[data-field="memo"]').value.trim();
     const reasonMap = new Map(
@@ -6932,7 +6932,7 @@ function backfillStatusDays() {
         currentDay += 1;
         player.statusDay = currentDay;
       } else if (player.status === "attacked") {
-        player.statusDay = Math.max(1, currentDay + 1);
+        player.statusDay = Math.max(2, currentDay + 1);
       }
     });
 }
@@ -7078,7 +7078,9 @@ function normalizePlayer(player) {
         ? Object.fromEntries(Object.entries(player.participationByTournament).map(([id, value]) => [String(id), value !== false]))
         : {},
     status: Object.hasOwn(STATUS_LABELS, status) ? status : "alive",
-    statusDay: Number.isFinite(Number(player.statusDay)) ? Math.max(1, Number(player.statusDay)) : null,
+    statusDay: Number.isFinite(Number(player.statusDay))
+      ? Math.max(status === "attacked" ? 2 : 1, Number(player.statusDay))
+      : null,
     memo: String(player.memo || ""),
     impressionReasons: Array.isArray(player.impressionReasons)
       ? player.impressionReasons.map(normalizeImpressionReason).filter(Boolean)
