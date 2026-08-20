@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.170";
+const APP_VERSION = "1.171";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3620,11 +3620,15 @@ function isAdoptedMediumResultContradictingSeer(seerId, targetId, seerValue) {
   return action.result !== seerValue;
 }
 
-function getMediumPerspectiveForSeer(player, seer) {
-  if (!player || player.role !== "medium" || !seer || !hasMultiSeerMediumPerspective()) return null;
+function getMediumPerspectiveForSeer(player, seer, resultValue = "") {
+  if (!player || player.role !== "medium" || !seer) return null;
+  if (resultValue === "human" && !hasMultiSeerMediumPerspective()) {
+    return { label: `${ROLE_LABELS.medium}/${ROLE_LABELS.madman}`, className: "role-medium-madman" };
+  }
+  if (!hasMultiSeerMediumPerspective()) return null;
   const adoptedMediumId = getAdoptedMediumId(seer.id);
   if (!adoptedMediumId) {
-    if (player.status === "attacked") {
+    if (player.status === "attacked" || resultValue === "human") {
       return { label: `${ROLE_LABELS.medium}/${ROLE_LABELS.madman}`, className: "role-medium-madman" };
     }
     return { label: "霊媒師/狼狂", className: "role-medium-wolfSide" };
@@ -3632,7 +3636,7 @@ function getMediumPerspectiveForSeer(player, seer) {
   if (adoptedMediumId === player.id) {
     return { label: ROLE_LABELS.medium, className: "role-medium" };
   }
-  if (player.status === "attacked") {
+  if (player.status === "attacked" || resultValue === "human") {
     return { label: ROLE_LABELS.madman, className: "role-madman" };
   }
   return { label: ROLE_LABELS.wolfSide, className: "judgement-rival" };
@@ -3894,7 +3898,7 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
         const ownDisplay = getSeerOwnPerspectiveDisplay(player, seer);
         return `<span class="seer-result-label ${ownDisplay.className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(ownDisplay.label)}</span>`;
       }
-      const mediumPerspective = getMediumPerspectiveForSeer(player, seer);
+      const mediumPerspective = getMediumPerspectiveForSeer(player, seer, result?.value || "");
       if (!result && mediumPerspective) {
         return `<span class="seer-result-label ${mediumPerspective.className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(mediumPerspective.label)}</span>`;
       }
@@ -3940,10 +3944,18 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
           : "judgement-human";
       const resultLabel = getDivinationResultDisplayLabel(result, player);
       const rivalSeerLabel = getHumanJudgedRivalSeerLabel(player, seer, result.value, resultLabel);
-      const displayedRole = player.autoConfirmedWhite && result.value === "human" ? "" : roleClaim || manualMediumGuess;
+      const displayedRole =
+        player.autoConfirmedWhite && result.value === "human" && !mediumPerspective
+          ? ""
+          : mediumPerspective?.label || roleClaim || manualMediumGuess;
       const baseLabel = rivalSeerLabel || (guardClaim ? `${guardClaim} / ${resultLabel}` : displayedRole ? `${displayedRole} / ${resultLabel}` : resultLabel);
       const label = isAdoptedMediumResultContradictingSeer(seer.id, player.id, result.value) ? `${baseLabel} / 矛盾` : baseLabel;
-      return `<span class="seer-result-label ${guardClaim ? "role-guard" : rivalSeerLabel ? "role-madman" : className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(label)}</span>`;
+      const displayClassName = guardClaim
+        ? "role-guard"
+        : rivalSeerLabel
+          ? "role-madman"
+          : mediumPerspective?.className || className;
+      return `<span class="seer-result-label ${displayClassName}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(label)}</span>`;
     })
     .filter(Boolean)
     .join("");
@@ -3963,7 +3975,7 @@ function getSeerColumnOverrideHtml(override, seer, player = findPlayer(override.
       : RESULT_LABELS[override.value];
     const guardClaim = getNonWolfGuardClaimForSeer(player, seer, override.value);
     const rivalSeerLabel = getHumanJudgedRivalSeerLabel(player, seer, override.value, resultLabel);
-    const mediumPerspective = getMediumPerspectiveForSeer(player, seer);
+    const mediumPerspective = getMediumPerspectiveForSeer(player, seer, override.value);
     const roleClaim = player?.autoConfirmedWhite ? "" : getSeerGridRoleLabel(player);
     const manualMediumGuess = getManualUnclaimedMediumGuess(player);
     const displayedRole = mediumPerspective?.label || roleClaim || manualMediumGuess;
