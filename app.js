@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.168";
+const APP_VERSION = "1.169";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -260,6 +260,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "historyDetailPanel",
     "historyDetailPreview",
     "closeHistoryDetailBtn",
+    "openHistoryBoardBtn",
     "editHistoryBtn",
     "copyHistoryBtn",
     "deleteHistoryBtn",
@@ -476,6 +477,7 @@ function bindEvents() {
   els.nextGameBtn.addEventListener("click", prepareNextGame);
   els.copyExportBtn.addEventListener("click", copyExport);
   els.closeHistoryDetailBtn.addEventListener("click", closeHistoryDetail);
+  els.openHistoryBoardBtn.addEventListener("click", openSelectedHistoryBoard);
   els.editHistoryBtn.addEventListener("click", openHistoryEditDialog);
   els.copyHistoryBtn.addEventListener("click", copySelectedHistory);
   els.deleteHistoryBtn.addEventListener("click", deleteSelectedHistory);
@@ -863,12 +865,21 @@ function finishGame() {
 }
 
 function prepareNextGame() {
-  if (!isGameFinished() || !confirm("終了済み盤面を初期化して次試合の準備へ進みますか？")) return;
+  if (!isGameFinished() || !confirm("終了済み盤面を残して、次試合の準備盤面を作成しますか？")) return;
+  saveCurrentBoardSnapshot();
   state.gameStatus = "preparing";
   state.startedAt = "";
   state.gameNumber = normalizeGameNumber(state.gameNumber + 1);
   resetBoardState();
   state.activeView = "participants";
+  activeBoardId = crypto.randomUUID();
+  state.boards.push({
+    id: activeBoardId,
+    name: getDefaultBoardName(),
+    updatedAt: new Date().toISOString(),
+    payload: getBoardPayload(),
+  });
+  localStorage.setItem(ACTIVE_BOARD_KEY, activeBoardId);
   renderAndStore();
   toast("次試合の準備へ進みました");
 }
@@ -1035,6 +1046,10 @@ function getActiveBoard() {
   return state.boards.find((board) => board.id === activeBoardId);
 }
 
+function getWorkingBoards() {
+  return state.boards.filter((board) => board.payload?.gameStatus !== "finished");
+}
+
 function getDefaultBoardName() {
   const tournamentName = getSelectedTournament()?.name || state.eventName || "新しい盤面";
   return `${tournamentName} 第${state.gameNumber}試合`;
@@ -1190,12 +1205,12 @@ function renameBoard(boardId) {
 }
 
 function deleteBoard(boardId) {
-  if (state.boards.length <= 1) return toast("最後の盤面は削除できません");
+  if (getWorkingBoards().length <= 1) return toast("最後の作業中盤面は削除できません");
   const board = state.boards.find((item) => item.id === boardId);
   if (!board || !confirm(`「${board.name}」を削除しますか？終了済み履歴と共通名簿は残ります。`)) return;
   state.boards = state.boards.filter((item) => item.id !== boardId);
   if (boardId === activeBoardId) {
-    const next = [...state.boards].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))[0];
+    const next = [...getWorkingBoards()].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))[0];
     loadBoard(next.id, { storeAfter: false });
   }
   renderAndStore();
@@ -4996,6 +5011,79 @@ function openHistoryDetail(historyId) {
   render();
 }
 
+function openSelectedHistoryBoard() {
+  const history = getSelectedHistory();
+  if (!history) return;
+  saveCurrentBoardSnapshot();
+  const board = ensureHistoryBoard(history);
+  loadBoard(board.id, { storeAfter: false });
+  state.activeView = "reasoning";
+  renderAndStore();
+  toast("終了時の盤面を開きました");
+}
+
+function ensureHistoryBoard(history) {
+  const existing = state.boards.find(
+    (board) =>
+      board.id === history.boardId &&
+      board.payload?.gameStatus === "finished" &&
+      normalizeGameNumber(board.payload.gameNumber) === normalizeGameNumber(history.gameNumber),
+  );
+  if (existing) return existing;
+
+  const board = {
+    id: crypto.randomUUID(),
+    name: `${getHistoryDisplayName(history)} 第${normalizeGameNumber(history.gameNumber)}試合`,
+    updatedAt: history.finishedAt || new Date().toISOString(),
+    payload: createBoardPayloadFromHistory(history),
+  };
+  state.boards.push(board);
+  history.boardId = board.id;
+  return board;
+}
+
+function createBoardPayloadFromHistory(history) {
+  const players = structuredClone(history.players || []);
+  const results = structuredClone(history.results || []);
+  const roleActions = structuredClone(history.roleActions || []);
+  const claimEvents = structuredClone(history.claimEvents || []);
+  const voteHistories = structuredClone(history.voteHistories || []);
+  const day = Math.max(
+    1,
+    ...results.map(getDivinationOrder),
+    ...roleActions.map((action) => Number(action.day) || 1),
+    ...claimEvents.map((event) => Number(event.day) || 1),
+    ...voteHistories.map((vote) => Number(vote.day) || 1),
+    ...players.filter((player) => isInactiveStatus(player.status)).map((player) => Number(player.statusDay) || 1),
+  );
+  return {
+    day,
+    eventName: history.eventName,
+    eventDate: history.eventDate,
+    seasonNumber: history.seasonNumber,
+    editionNumber: history.editionNumber,
+    gameNumber: history.gameNumber,
+    selectedTournamentId: history.selectedTournamentId,
+    wolfCount: history.wolfCount,
+    wolfModeActive: history.wolfModeActive === true,
+    wolfModeCoverRole: history.wolfModeCoverRole || "",
+    reasoningPerspective: "seer",
+    players,
+    results,
+    seerColumnOverrides: structuredClone(history.seerColumnOverrides || []),
+    seerMediumLinks: structuredClone(history.seerMediumLinks || []),
+    rivalPerspectiveOverrides: structuredClone(history.rivalPerspectiveOverrides || []),
+    rivalPerspectiveVersion: 2,
+    roleActions,
+    claimEvents,
+    voteHistories,
+    gameStatus: "finished",
+    winner: normalizeCitizenText(history.winner || ""),
+    startedAt: history.startedAt || "",
+    pendingExileContinuationPlayerId: "",
+  };
+}
+
 function closeHistoryDetail() {
   selectedHistoryId = "";
   render();
@@ -5017,6 +5105,7 @@ function deleteSelectedHistory() {
   const history = getSelectedHistory();
   if (!history || !confirm(`${getHistoryDisplayName(history)} 第${history.gameNumber}試合の履歴を削除しますか？`)) return;
   state.gameHistories = state.gameHistories.filter((item) => item.id !== history.id);
+  removeFinishedBoardsForDeletedHistories([history]);
   selectedHistoryId = "";
   selectedHistoryIds.delete(history.id);
   renderAndStore();
@@ -5063,7 +5152,7 @@ function openBulkDeleteHistoryDialog(scope) {
         : "すべての履歴を削除";
   els.bulkDeleteHistoryMessage.innerHTML = `
     <strong>${histories.length}試合分の履歴を削除します。</strong>
-    <span>削除した履歴は復元できません。現在の盤面、大会設定、参加者名簿は残ります。</span>
+    <span>対応する終了盤面も削除されます。作業中の盤面、大会設定、参加者名簿は残ります。</span>
   `;
   els.bulkDeleteHistoryDialog.showModal();
 }
@@ -5085,11 +5174,51 @@ function deleteHistoriesInScope() {
       : state.gameHistories.filter((history) =>
           bulkDeleteHistoryScope === "tournament" ? history.selectedTournamentId !== selectedTournamentId : !targetIds.has(history.id),
         );
+  removeFinishedBoardsForDeletedHistories(targetHistories);
   if (selectedHistoryId && targetIds.has(selectedHistoryId)) selectedHistoryId = "";
   selectedHistoryIds.clear();
   closeBulkDeleteHistoryDialog();
   renderAndStore();
   toast(`${targetCount}試合分の履歴を削除しました`);
+}
+
+function removeFinishedBoardsForDeletedHistories(histories) {
+  const remainingBoardIds = new Set(state.gameHistories.map((history) => history.boardId).filter(Boolean));
+  const removableBoardIds = new Set(
+    histories
+      .map((history) => history.boardId)
+      .filter(
+        (boardId) =>
+          boardId &&
+          !remainingBoardIds.has(boardId) &&
+          state.boards.some((board) => board.id === boardId && board.payload?.gameStatus === "finished"),
+      ),
+  );
+  if (!removableBoardIds.size) return;
+
+  const removedActiveBoard = removableBoardIds.has(activeBoardId);
+  state.boards = state.boards.filter((board) => !removableBoardIds.has(board.id));
+  if (!removedActiveBoard) return;
+
+  const nextBoard = [...getWorkingBoards()].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))[0];
+  if (nextBoard) {
+    loadBoard(nextBoard.id, { storeAfter: false });
+    return;
+  }
+
+  state.gameStatus = "preparing";
+  state.startedAt = "";
+  state.gameNumber = normalizeGameNumber(state.gameNumber + 1);
+  resetBoardState();
+  state.activeView = "participants";
+  activeBoardId = crypto.randomUUID();
+  state.boards.push({
+    id: activeBoardId,
+    name: getDefaultBoardName(),
+    updatedAt: new Date().toISOString(),
+    payload: getBoardPayload(),
+  });
+  localStorage.setItem(ACTIVE_BOARD_KEY, activeBoardId);
 }
 
 function getBulkDeleteTargetHistories(scope) {
@@ -6534,13 +6663,14 @@ function renderBoardSwitcher() {
 
 function renderBoardManager() {
   saveCurrentBoardSnapshot();
+  const workingBoards = getWorkingBoards();
   els.newBoardTournamentSelect.innerHTML = state.tournaments
     .map(
       (tournament) =>
         `<option value="${escapeHtml(tournament.id)}" ${tournament.id === state.selectedTournamentId ? "selected" : ""}>${escapeHtml(tournament.name)}</option>`,
     )
     .join("");
-  els.boardList.innerHTML = [...state.boards]
+  els.boardList.innerHTML = [...workingBoards]
     .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
     .map((board) => {
       const payload = board.payload || {};
@@ -6557,11 +6687,11 @@ function renderBoardManager() {
             <small>${status} / ${escapeHtml(formatBoardUpdatedAt(board.updatedAt))}</small>
           </button>
           <button class="board-rename-button secondary-button" type="button">名称変更</button>
-          <button class="board-delete-button danger-button" type="button" ${state.boards.length <= 1 ? "disabled" : ""}>削除</button>
+          <button class="board-delete-button danger-button" type="button" ${workingBoards.length <= 1 ? "disabled" : ""}>削除</button>
         </div>
       `;
     })
-    .join("");
+    .join("") || '<div class="empty-state compact"><strong>作業中の盤面はありません</strong><span>終了盤面はログから開けます。</span></div>';
   els.boardList.querySelectorAll(".board-list-item").forEach((row) => {
     const boardId = row.dataset.boardId;
     row.querySelector(".board-select-button").addEventListener("click", () => {
