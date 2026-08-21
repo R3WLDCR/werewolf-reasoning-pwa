@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.175";
+const APP_VERSION = "1.176";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -226,6 +226,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "tournamentSelect",
     "addTournamentBtn",
     "renameTournamentBtn",
+    "boardCustomNameInput",
     "eventDateInput",
     "dateInputWrap",
     "openDatePickerBtn",
@@ -433,6 +434,7 @@ function bindEvents() {
   els.tournamentSelect.addEventListener("change", () => switchTournament(els.tournamentSelect.value));
   els.addTournamentBtn.addEventListener("click", addTournament);
   els.renameTournamentBtn.addEventListener("click", renameSelectedTournament);
+  els.boardCustomNameInput.addEventListener("change", saveBoardCustomName);
   els.eventDateInput.addEventListener("change", () => {
     if (isGameLocked()) return render();
     state.eventDate = normalizeDateValue(els.eventDateInput.value);
@@ -625,10 +627,20 @@ function closeBoardManager() {
 
 function createBoardFromDialog() {
   const tournamentId = els.newBoardTournamentSelect.value || state.selectedTournamentId;
-  const tournamentName = state.tournaments.find((tournament) => tournament.id === tournamentId)?.name || "新しい盤面";
-  createBoard(els.newBoardNameInput.value.trim() || `${tournamentName} 第1試合`, tournamentId);
+  createBoard(els.newBoardNameInput.value.trim(), tournamentId);
   els.newBoardNameInput.value = "";
   toast("新しい盤面を作成しました");
+}
+
+function saveBoardCustomName() {
+  if (isGameLocked()) return render();
+  const board = getActiveBoard();
+  if (!board) return;
+  const nextName = els.boardCustomNameInput.value.trim().slice(0, 40);
+  if (board.customName === nextName) return;
+  board.customName = nextName;
+  board.updatedAt = new Date().toISOString();
+  renderAndStore();
 }
 
 function addTournament() {
@@ -866,6 +878,7 @@ function finishGame() {
 
 function prepareNextGame() {
   if (!isGameFinished() || !confirm("終了済み盤面を残して、次試合の準備盤面を作成しますか？")) return;
+  const customName = getActiveBoard()?.customName || "";
   saveCurrentBoardSnapshot();
   state.gameStatus = "preparing";
   state.startedAt = "";
@@ -876,6 +889,7 @@ function prepareNextGame() {
   state.boards.push({
     id: activeBoardId,
     name: getDefaultBoardName(),
+    customName,
     updatedAt: new Date().toISOString(),
     payload: getBoardPayload(),
   });
@@ -1051,8 +1065,23 @@ function getWorkingBoards() {
 }
 
 function getDefaultBoardName() {
-  const tournamentName = getSelectedTournament()?.name || state.eventName || "新しい盤面";
-  return `${tournamentName} 第${state.gameNumber}試合`;
+  return getBoardDisplayName(null, state);
+}
+
+function getBoardDisplayName(board = getActiveBoard(), payload = board?.id === activeBoardId ? state : board?.payload) {
+  const source = payload || state;
+  const tournamentName =
+    state.tournaments.find((tournament) => tournament.id === source.selectedTournamentId)?.name ||
+    source.eventName ||
+    "未設定";
+  const baseName = String(board?.customName || "").trim() || tournamentName;
+  const parts = [baseName];
+  const edition = normalizeOptionalSequenceNumber(source.editionNumber);
+  const season = normalizeOptionalSequenceNumber(source.seasonNumber);
+  if (edition) parts.push(`第${edition}回`);
+  if (season) parts.push(`シーズン${season}`);
+  parts.push(`第${normalizeGameNumber(source.gameNumber)}試合`);
+  return parts.join(" / ");
 }
 
 function saveCurrentBoardSnapshot() {
@@ -1065,6 +1094,7 @@ function saveCurrentBoardSnapshot() {
     state.boards.push({
       id: activeBoardId,
       name: getDefaultBoardName(),
+      customName: "",
       updatedAt: new Date().toISOString(),
       payload,
     });
@@ -1143,7 +1173,7 @@ function closeAllDialogs() {
   rivalPerspectiveTargetId = "";
 }
 
-function createBoard(name, tournamentId) {
+function createBoard(customName, tournamentId) {
   saveCurrentBoardSnapshot();
   const selectedTournamentId = state.tournaments.some((tournament) => tournament.id === tournamentId)
     ? tournamentId
@@ -1189,16 +1219,22 @@ function createBoard(name, tournamentId) {
     startedAt: "",
     pendingExileContinuationPlayerId: "",
   };
-  state.boards.push({ id, name: name.trim() || `${tournamentName} 第1試合`, updatedAt: new Date().toISOString(), payload });
+  state.boards.push({
+    id,
+    name: tournamentName,
+    customName: customName.trim().slice(0, 40),
+    updatedAt: new Date().toISOString(),
+    payload,
+  });
   loadBoard(id);
 }
 
 function renameBoard(boardId) {
   const board = state.boards.find((item) => item.id === boardId);
   if (!board) return;
-  const name = prompt("盤面名を変更", board.name);
-  if (!name?.trim()) return;
-  board.name = name.trim();
+  const name = prompt("盤面名（自由記述）を変更\n空欄にすると大会名を使用します", board.customName || "");
+  if (name === null) return;
+  board.customName = name.trim().slice(0, 40);
   board.updatedAt = new Date().toISOString();
   renderAndStore();
   if (els.boardManagerDialog.open) renderBoardManager();
@@ -1207,7 +1243,7 @@ function renameBoard(boardId) {
 function deleteBoard(boardId) {
   if (getWorkingBoards().length <= 1) return toast("最後の作業中盤面は削除できません");
   const board = state.boards.find((item) => item.id === boardId);
-  if (!board || !confirm(`「${board.name}」を削除しますか？終了済み履歴と共通名簿は残ります。`)) return;
+  if (!board || !confirm(`「${getBoardDisplayName(board)}」を削除しますか？終了済み履歴と共通名簿は残ります。`)) return;
   state.boards = state.boards.filter((item) => item.id !== boardId);
   if (boardId === activeBoardId) {
     const next = [...getWorkingBoards()].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))[0];
@@ -2934,6 +2970,7 @@ function renderMatchMeta() {
   els.dateActionText.textContent = state.eventDate ? "変更" : "選択";
   els.clearDateBtn.hidden = !state.eventDate;
   els.dateInputWrap.classList.toggle("has-date", Boolean(state.eventDate));
+  els.boardCustomNameInput.value = getActiveBoard()?.customName || "";
   els.seasonNumberInput.value = state.seasonNumber || "";
   els.editionNumberInput.value = state.editionNumber || "";
   els.gameNumberInput.value = String(state.gameNumber);
@@ -2963,6 +3000,7 @@ function renderGameLifecycle() {
     els.tournamentSelect,
     els.addTournamentBtn,
     els.renameTournamentBtn,
+    els.boardCustomNameInput,
     els.eventDateInput,
     els.openDatePickerBtn,
     els.clearDateBtn,
@@ -5256,6 +5294,7 @@ function removeFinishedBoardsForDeletedHistories(histories) {
   state.boards.push({
     id: activeBoardId,
     name: getDefaultBoardName(),
+    customName: "",
     updatedAt: new Date().toISOString(),
     payload: getBoardPayload(),
   });
@@ -6576,6 +6615,7 @@ function applySavedState(saved) {
       {
         id: activeBoardId,
         name: getDefaultBoardName(),
+        customName: "",
         updatedAt: new Date().toISOString(),
         payload: getBoardPayload(),
       },
@@ -6699,7 +6739,7 @@ async function initializeSync() {
 
 function renderBoardSwitcher() {
   const board = getActiveBoard();
-  els.activeBoardName.textContent = board?.name || getDefaultBoardName();
+  els.activeBoardName.textContent = getBoardDisplayName(board);
 }
 
 function renderBoardManager() {
@@ -6715,19 +6755,15 @@ function renderBoardManager() {
     .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
     .map((board) => {
       const payload = board.payload || {};
-      const tournamentName =
-        state.tournaments.find((tournament) => tournament.id === payload.selectedTournamentId)?.name ||
-        payload.eventName ||
-        "未設定";
       const status = payload.gameStatus === "finished" ? "終了済み" : payload.gameStatus === "in_progress" ? "進行中" : "準備中";
       return `
         <div class="board-list-item ${board.id === activeBoardId ? "active" : ""}" data-board-id="${escapeHtml(board.id)}">
           <button class="board-select-button" type="button">
-            <strong>${escapeHtml(board.name)}</strong>
-            <span>${escapeHtml(formatEventSeriesName(tournamentName, payload.seasonNumber, payload.editionNumber))} / ${escapeHtml(payload.eventDate || "日付未選択")} / 第${normalizeGameNumber(payload.gameNumber)}試合</span>
+            <strong>${escapeHtml(getBoardDisplayName(board))}</strong>
+            <span>${escapeHtml(payload.eventDate || "日付未選択")}</span>
             <small>${status} / ${escapeHtml(formatBoardUpdatedAt(board.updatedAt))}</small>
           </button>
-          <button class="board-rename-button secondary-button" type="button">名称変更</button>
+          <button class="board-rename-button secondary-button" type="button">自由名</button>
           <button class="board-delete-button danger-button" type="button" ${workingBoards.length <= 1 ? "disabled" : ""}>削除</button>
         </div>
       `;
@@ -7074,6 +7110,7 @@ function ensureMatchDefaults() {
     state.boards.push({
       id: activeBoardId,
       name: getDefaultBoardName(),
+      customName: "",
       updatedAt: new Date().toISOString(),
       payload: getBoardPayload(),
     });
@@ -7597,9 +7634,22 @@ function normalizeBoard(board) {
   if (!payload.players.some((player) => player.id === payload.pendingExileContinuationPlayerId && player.status === "exiled")) {
     payload.pendingExileContinuationPlayerId = "";
   }
+  const legacyName = String(board.name || "").trim().slice(0, 40);
+  const legacyAutoName =
+    !legacyName ||
+    legacyName === "盤面" ||
+    legacyName === "新しい盤面" ||
+    Boolean(payload.eventName && legacyName.startsWith(`${payload.eventName} 第`) && legacyName.endsWith("試合"));
+  const customName =
+    typeof board.customName === "string"
+      ? board.customName.trim().slice(0, 40)
+      : legacyAutoName
+        ? ""
+        : legacyName;
   return {
     id: String(board.id),
-    name: String(board.name || "").trim().slice(0, 40) || "盤面",
+    name: legacyName || "盤面",
+    customName,
     updatedAt: String(board.updatedAt || ""),
     payload,
   };

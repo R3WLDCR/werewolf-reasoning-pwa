@@ -53,6 +53,10 @@
                 <button id="renameTournamentBtn" class="secondary-button" type="button">名称変更</button>
               </div>
             </div>
+            <label class="field">
+              <span>盤面名（自由記述）</span>
+              <input id="boardCustomNameInput" type="text" maxlength="40" placeholder="未入力なら大会名を使用" />
+            </label>
             <div class="date-field">
               <div id="dateInputWrap" class="date-input-wrap">
                 <button id="openDatePickerBtn" class="date-display-button" type="button">
@@ -442,8 +446,8 @@
         <div class="field-group">
           <strong>新しい盤面</strong>
           <label class="field">
-            <span>盤面名</span>
-            <input id="newBoardNameInput" type="text" maxlength="40" placeholder="例: おさかな視聴用" />
+            <span>盤面名（自由記述）</span>
+            <input id="newBoardNameInput" type="text" maxlength="40" placeholder="未入力なら大会名を使用" />
           </label>
           <label class="field">
             <span>大会</span>
