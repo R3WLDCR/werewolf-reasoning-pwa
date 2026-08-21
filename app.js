@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.177";
+const APP_VERSION = "1.178";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -809,7 +809,7 @@ function returnToSetup() {
 function resetBoardForTesting() {
   if (isGameFinished()) return toast("終了済み盤面は次試合へ進んでからリセットしてください");
   closeBoardActionsDialog();
-  if (!confirm("CO・推理・結果・生死・メモ・人狼モードを消去し、盤面を初期化しますか？\n\n大会、開催日、試合番号、参加・休憩状態、人狼数は残ります。")) return;
+  if (!confirm("CO・推理・結果・生死・人狼モードを消去し、盤面を初期化しますか？\n\n大会、開催日、試合番号、参加・休憩状態、人狼数は残ります。")) return;
   state.gameStatus = "preparing";
   state.startedAt = "";
   resetBoardState();
@@ -3166,7 +3166,6 @@ function renderRows() {
     row.addEventListener("drop", handlePlayerDrop);
     row.addEventListener("dragend", handlePlayerDragEnd);
 
-    const memo = player.memo || "メモなし";
     const perspectiveGrid = getPerspectiveGridHtml(player);
     const impression = getPlayerImpression(player);
     const roleGuess = getDisplayedRoleGuess(player);
@@ -3186,7 +3185,6 @@ function renderRows() {
         ${perspectiveGrid}
       </button>
       <button class="impression-button impression-${impression.value}" type="button" ${isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}の要素を変更">${escapeHtml(impression.label)}</button>
-      <button class="memo-button" type="button" ${isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}のメモを変更">${escapeHtml(memo)}</button>
       <button class="status-button status-${escapeHtml(player.status || "alive")}" type="button" ${isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}の状態を変更">${escapeHtml(getStatusDisplay(player))}</button>
       <span class="order-actions" aria-label="${escapeHtml(player.name)}の並び替え">
         <button class="order-button" type="button" data-direction="-1" ${index === 0 || isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を上へ">↑</button>
@@ -3222,7 +3220,6 @@ function renderRows() {
     });
     row.querySelector(".status-button").addEventListener("click", () => openStatusDialog(player.id));
     row.querySelector(".impression-button").addEventListener("click", () => openImpressionDialog(player.id));
-    row.querySelector(".memo-button").addEventListener("click", () => openEditDialog(player.id));
     els.playerRows.appendChild(row);
   });
 }
@@ -5353,7 +5350,7 @@ function renderHistoryEditor(history) {
             ${getStatusOptionsHtml(player.status)}
           </select>
           <input data-field="statusDay" type="number" min="1" value="${player.statusDay || ""}" placeholder="日" aria-label="${escapeHtml(player.name)}の追放・襲撃順" />
-          <input data-field="memo" type="text" maxlength="80" value="${escapeHtml(player.memo || "")}" placeholder="メモ" aria-label="${escapeHtml(player.name)}のメモ" />
+          <input data-field="memo" type="hidden" value="${escapeHtml(player.memo || "")}" />
           <div class="history-impression-edit">
             <span class="impression-label impression-${getPlayerImpression(player).value}">${getPlayerImpression(player).label}</span>
             <div class="history-impression-options">${getHistoryImpressionOptionsHtml(player)}</div>
@@ -5912,7 +5909,7 @@ function buildExportText() {
   lines.push(`残り縄: ${getRemainingRopeCount()}`);
   lines.push("", "参加者");
   getActivePlayers().forEach((player) => {
-    lines.push(`- ${player.name} / ${getStatusDisplay(player)} / ${player.role ? ROLE_LABELS[player.role] : "COなし"} / ${formatRoleGuessForExport(player)} / ${formatImpressionForExport(player)}${player.memo ? ` / ${player.memo}` : ""}`);
+    lines.push(`- ${player.name} / ${getStatusDisplay(player)} / ${player.role ? ROLE_LABELS[player.role] : "COなし"} / ${formatRoleGuessForExport(player)} / ${formatImpressionForExport(player)}`);
   });
   lines.push("", "時系列");
   lines.push(...buildCurrentTimeline());

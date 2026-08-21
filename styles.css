@@ -535,7 +535,7 @@ select:disabled {
 
 .player-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 64px 110px 74px 40px;
+  grid-template-columns: minmax(0, 1fr) 64px 74px 40px;
   gap: 6px;
   align-items: center;
   min-height: 70px;
@@ -786,21 +786,6 @@ select:disabled {
   font-weight: 900;
   line-height: 1.15;
   text-align: center;
-}
-
-.memo-button {
-  min-width: 0;
-  width: 100%;
-  min-height: 34px;
-  padding: 4px 7px;
-  border-radius: 7px;
-  background: var(--paper);
-  color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.72rem;
-  font-weight: 800;
 }
 
 .impression-villager {
@@ -2395,8 +2380,8 @@ input.invalid {
 
   #reasoningView .player-row {
     width: max-content;
-    min-width: 850px;
-    grid-template-columns: 88px max-content 56px 110px 76px 38px;
+    min-width: 736px;
+    grid-template-columns: 88px max-content 56px 76px 38px;
     gap: 4px;
     min-height: 50px;
     padding: 3px 5px 3px 0;
@@ -2483,7 +2468,6 @@ input.invalid {
   }
 
   #reasoningView .impression-button,
-  #reasoningView .memo-button,
   #reasoningView .status-button {
     min-height: 30px;
     padding: 3px;
