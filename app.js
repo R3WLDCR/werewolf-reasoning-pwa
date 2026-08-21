@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.173";
+const APP_VERSION = "1.174";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3912,7 +3912,8 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
         const ownDisplay = getSeerOwnPerspectiveDisplay(player, seer);
         return `<span class="seer-result-label ${ownDisplay.className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(ownDisplay.label)}</span>`;
       }
-      const mediumPerspective = getMediumPerspectiveForSeer(player, seer, result?.value || "");
+      const mediumPerspective =
+        result?.value === "werewolf" ? null : getMediumPerspectiveForSeer(player, seer, result?.value || "");
       if (!result && mediumPerspective) {
         return `<span class="seer-result-label ${mediumPerspective.className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(mediumPerspective.label)}</span>`;
       }
@@ -3989,7 +3990,8 @@ function getSeerColumnOverrideHtml(override, seer, player = findPlayer(override.
       : RESULT_LABELS[override.value];
     const guardClaim = getNonWolfGuardClaimForSeer(player, seer, override.value);
     const rivalSeerLabel = getHumanJudgedRivalSeerLabel(player, seer, override.value, resultLabel);
-    const mediumPerspective = getMediumPerspectiveForSeer(player, seer, override.value);
+    const mediumPerspective =
+      override.value === "werewolf" ? null : getMediumPerspectiveForSeer(player, seer, override.value);
     const roleClaim = player?.autoConfirmedWhite ? "" : getSeerGridRoleLabel(player);
     const manualMediumGuess = getManualUnclaimedMediumGuess(player);
     const displayedRole = mediumPerspective?.label || roleClaim || manualMediumGuess;
