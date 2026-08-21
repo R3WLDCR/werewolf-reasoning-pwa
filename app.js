@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.174";
+const APP_VERSION = "1.175";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3623,9 +3623,6 @@ function isAdoptedMediumResultContradictingSeer(seerId, targetId, seerValue) {
 function getMediumPerspectiveForSeer(player, seer, resultValue = "") {
   if (!player || player.role !== "medium" || !seer) return null;
   if (resultValue === "werewolf") return null;
-  if (resultValue === "human" && !hasMultiSeerMediumPerspective()) {
-    return { label: `${ROLE_LABELS.medium}/${ROLE_LABELS.madman}`, className: "role-medium-madman" };
-  }
   if (!hasMultiSeerMediumPerspective()) return null;
   const adoptedMediumId = getAdoptedMediumId(seer.id);
   if (!adoptedMediumId) {
