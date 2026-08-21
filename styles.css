@@ -510,20 +510,6 @@ select:disabled {
   white-space: nowrap;
 }
 
-.match-summary {
-  min-height: 42px;
-  display: grid;
-  align-items: center;
-  padding: 9px 11px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--paper);
-  color: var(--ink);
-  font-size: 0.92rem;
-  font-weight: 900;
-  line-height: 1.25;
-}
-
 .table-panel {
   min-height: 280px;
   overflow: hidden;
