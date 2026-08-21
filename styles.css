@@ -652,6 +652,14 @@ select:disabled {
   text-align: left;
 }
 
+.participant-name-edit-label {
+  margin-left: auto;
+  color: var(--accent-strong);
+  font-size: 0.72rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
 .participation-button {
   min-height: 38px;
   border-radius: 999px;

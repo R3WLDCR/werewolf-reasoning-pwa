@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.178";
+const APP_VERSION = "1.179";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -1363,7 +1363,7 @@ function saveMemberships() {
     : false;
   closeMembershipDialog();
   renderAndStore();
-  toast("所属を保存しました");
+  toast("名前と所属を保存しました");
 }
 
 function openImpressionDialog(playerId) {
@@ -3129,6 +3129,7 @@ function renderParticipantRows() {
     row.innerHTML = `
       <button class="participant-info" type="button">
         <span class="player-name">${escapeHtml(player.name)}</span>
+        <span class="participant-name-edit-label">名前変更</span>
       </button>
       ${participationButton}
       <span class="order-actions" aria-label="${escapeHtml(player.name)}の並び替え">
