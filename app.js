@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.188";
+const APP_VERSION = "1.189";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3939,6 +3939,9 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
       const override = getSeerColumnOverride(seer.id, player.id);
       if (override) return getSeerColumnOverrideHtml(override, seer, player);
       const result = state.results.find((item) => item.seerId === seer.id && item.targetId === player.id);
+      if (isMediumConfirmedWerewolf(player)) {
+        return getMediumConfirmedWerewolfSeerCellHtml(player, seer, result);
+      }
       if (isRivalSeer && !result) {
         return getRivalPerspectiveCellHtml("seer", seer, player, getAutomaticRivalPerspectiveValue(seer, player, seers));
       }
@@ -4018,6 +4021,10 @@ function getSeerColumnOverrideHtml(override, seer, player = findPlayer(override.
   const result = state.results.find(
     (item) => item.seerId === override.seerId && item.targetId === override.targetId,
   );
+  if (isMediumConfirmedWerewolf(player)) {
+    const resultValue = Object.hasOwn(RESULT_LABELS, override.value) ? override.value : result?.value;
+    return getMediumConfirmedWerewolfSeerCellHtml(player, seer, result, resultValue);
+  }
   if (Object.hasOwn(RESULT_LABELS, override.value)) {
     const resultLabel = result
       ? getDivinationResultDisplayLabel(result, player, override.value)
@@ -4052,6 +4059,21 @@ function getSeerColumnOverrideHtml(override, seer, player = findPlayer(override.
   }
   const className = override.value === "werewolf" ? "role-werewolf" : `role-${override.value}`;
   return `<span class="seer-result-label ${className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(SEER_COLUMN_OVERRIDE_LABELS[override.value])}</span>`;
+}
+
+function getMediumConfirmedWerewolfSeerCellHtml(player, seer, result, value = result?.value) {
+  const resultValue = Object.hasOwn(RESULT_LABELS, value) ? value : "";
+  const resultLabel = resultValue
+    ? result
+      ? getDivinationResultDisplayLabel(result, player, resultValue)
+      : RESULT_LABELS[resultValue]
+    : "";
+  const label = resultLabel
+    ? resultValue === "werewolf"
+      ? resultLabel
+      : `${resultLabel} / ${ROLE_LABELS.werewolf}`
+    : ROLE_LABELS.werewolf;
+  return `<span class="seer-result-label judgement-werewolf" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(label)}</span>`;
 }
 
 function getDivinationResultDisplayLabel(result, player, value = result.value) {
