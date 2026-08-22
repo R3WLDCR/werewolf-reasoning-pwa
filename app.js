@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.184";
+const APP_VERSION = "1.185";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -25,7 +25,6 @@ const ROLE_ORDER = {
   hunter: 3,
 };
 const PRIORITY_PLAYER_NAME = "羊飼いK";
-const LEGACY_SELF_SYNCED_CLAIM_ROLES = new Set(["seer", "medium", "guard", "hunter"]);
 const RIVAL_DISPLAY_ROLES = new Set(["medium", "guard", "hunter"]);
 const RIVAL_PERSPECTIVE_ROLES = new Set(["seer", "medium", "guard", "hunter"]);
 const RIVAL_PERSPECTIVE_VALUES = new Set(["wolfSide", "werewolf", "madman"]);
@@ -6654,6 +6653,7 @@ function applySavedState(saved) {
   state.roleActions = Array.isArray(saved.roleActions) ? saved.roleActions.map(normalizeRoleAction).filter(Boolean) : [];
   removeInvalidCurrentMediumResults();
   state.claimEvents = Array.isArray(saved.claimEvents) ? saved.claimEvents.map(normalizeClaimEvent).filter(Boolean) : [];
+  restorePriorityPlayerClaimFromEvents(state.players, state.claimEvents);
   state.voteHistories = Array.isArray(saved.voteHistories) ? saved.voteHistories.map(normalizeVoteHistory).filter(Boolean) : [];
   state.customImpressionReasons = Array.isArray(saved.customImpressionReasons)
     ? saved.customImpressionReasons.map(normalizeImpressionReason).filter((reason) => reason?.custom)
@@ -7324,12 +7324,6 @@ function normalizePlayer(player) {
     : Object.hasOwn(ROLE_LABELS, player.role)
       ? player.role
       : "";
-  const isLegacySelfSyncedClaim =
-    String(player.name || "") === PRIORITY_PLAYER_NAME &&
-    !attackedWolfSideConfirmedMadman &&
-    player.manualRoleOverride !== true &&
-    LEGACY_SELF_SYNCED_CLAIM_ROLES.has(normalizedRole);
-  const normalizedIndependentRole = isLegacySelfSyncedClaim ? "" : normalizedRole;
   const restoreLegacyBrokenGuess =
     onlyLegacyManualMediumBroken &&
     player.manualRoleGuess !== true &&
@@ -7337,9 +7331,8 @@ function normalizePlayer(player) {
   return {
     id: player.id || crypto.randomUUID(),
     name: String(player.name || "名無し"),
-    role: normalizedIndependentRole,
-    manualRoleOverride:
-      attackedWolfSideConfirmedMadman || isLegacySelfSyncedClaim ? false : player.manualRoleOverride === true,
+    role: normalizedRole,
+    manualRoleOverride: attackedWolfSideConfirmedMadman ? false : player.manualRoleOverride === true,
     participating: player.participating !== false,
     tournamentIds: Array.isArray(player.tournamentIds) ? [...new Set(player.tournamentIds.map(String))] : [],
     participationByTournament:
@@ -7411,7 +7404,7 @@ function normalizePlayer(player) {
       (player.attackedAutoVillager === undefined && status === "attacked" && player.role === "villager"),
     trueRole: Object.hasOwn(ROLE_GUESS_LABELS, player.trueRole) && player.trueRole !== "unknown" ? player.trueRole : "",
     roleClaimOrder:
-      normalizedIndependentRole && getRoleClaimOrder(player) < Number.MAX_SAFE_INTEGER
+      normalizedRole && getRoleClaimOrder(player) < Number.MAX_SAFE_INTEGER
         ? Math.max(1, getRoleClaimOrder(player))
         : null,
   };
@@ -7602,6 +7595,24 @@ function normalizeClaimEvent(event) {
   };
 }
 
+function restorePriorityPlayerClaimFromEvents(players, claimEvents) {
+  const selfPlayer = players.find(isPriorityPlayer);
+  if (!selfPlayer || selfPlayer.role || selfPlayer.manualRoleOverride || selfPlayer.attackedWolfSideConfirmedMadman) return;
+  const matchingClaims = claimEvents
+    .map((event, index) => ({ event, index }))
+    .filter(({ event }) => event.playerId === selfPlayer.id)
+    .sort((a, b) => {
+      const timeDifference = Date.parse(a.event.createdAt || "") - Date.parse(b.event.createdAt || "");
+      if (Number.isFinite(timeDifference) && timeDifference !== 0) return timeDifference;
+      const dayDifference = (Number(a.event.day) || 1) - (Number(b.event.day) || 1);
+      return dayDifference || a.index - b.index;
+    });
+  const latestClaim = matchingClaims[matchingClaims.length - 1]?.event;
+  if (!latestClaim?.role || !RIVAL_PERSPECTIVE_ROLES.has(latestClaim.role)) return;
+  selfPlayer.role = latestClaim.role;
+  selfPlayer.manualRoleOverride = true;
+}
+
 function normalizeVoteHistory(vote) {
   if (!vote?.voterId || !vote.targetId) return null;
   const type = normalizeVoteType(vote.type);
@@ -7653,6 +7664,7 @@ function normalizeGameHistory(history) {
     claimEvents: Array.isArray(history.claimEvents) ? history.claimEvents.map(normalizeClaimEvent).filter(Boolean) : [],
     voteHistories: Array.isArray(history.voteHistories) ? history.voteHistories.map(normalizeVoteHistory).filter(Boolean) : [],
   };
+  restorePriorityPlayerClaimFromEvents(normalized.players, normalized.claimEvents);
   backfillRoleClaimOrders(normalized.players);
   return normalized;
 }
@@ -7688,6 +7700,7 @@ function normalizeBoard(board) {
   payload.rivalPerspectiveVersion = 2;
   payload.roleActions = Array.isArray(payload.roleActions) ? payload.roleActions.map(normalizeRoleAction).filter(Boolean) : [];
   payload.claimEvents = Array.isArray(payload.claimEvents) ? payload.claimEvents.map(normalizeClaimEvent).filter(Boolean) : [];
+  restorePriorityPlayerClaimFromEvents(payload.players, payload.claimEvents);
   payload.voteHistories = Array.isArray(payload.voteHistories) ? payload.voteHistories.map(normalizeVoteHistory).filter(Boolean) : [];
   payload.gameStatus = ["in_progress", "finished"].includes(payload.gameStatus) ? payload.gameStatus : "preparing";
   payload.winner = payload.gameStatus === "finished" ? normalizeCitizenText(payload.winner || "") : "";
