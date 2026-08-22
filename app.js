@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.183";
+const APP_VERSION = "1.184";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -741,6 +741,7 @@ function addPlayer() {
     confirmedRoleEvidence: [],
     confirmedRolePreviousGuess: null,
     mediumHumanConversion: null,
+    mediumWerewolfConversion: null,
     mediumHumanBrokenPrevious: null,
     mediumConflictBroken: false,
     confirmedResultConflictBroken: false,
@@ -1289,6 +1290,7 @@ function resetBoardState() {
     confirmedRoleEvidence: [],
     confirmedRolePreviousGuess: null,
     mediumHumanConversion: null,
+    mediumWerewolfConversion: null,
     mediumHumanBrokenPrevious: null,
     mediumConflictBroken: false,
     confirmedResultConflictBroken: false,
@@ -4223,6 +4225,7 @@ function applyConfirmedWhiteUpdates() {
   reconcileStaleNonSelfSingleSeerHumanGuesses();
   reconcileSingleClaimRoleGuesses();
   reconcileConfirmedRoleEvidence();
+  reconcileMediumWerewolfConversions();
   reconcileMediumHumanConversions();
   reconcileAttackConfirmedSeerConflicts();
   reconcileConfirmedResultSeerConflicts();
@@ -4491,7 +4494,12 @@ function reconcileConfirmedRoleEvidence() {
     }
     player.confirmedRoleEvidence = validEntries;
     player.mediumConfirmedRoleGuess = ["villager", "werewolf"].includes(preferred.value) ? preferred.value : "";
-    if (preferred.role === "medium" && preferred.value === "werewolf" && !player.manualRoleGuess) {
+    if (
+      preferred.role === "medium" &&
+      preferred.value === "werewolf" &&
+      !player.manualRoleGuess &&
+      getRoleGuessDisplay(player).value !== "wolfSide"
+    ) {
       player.roleGuessCandidates = [preferred.value];
       player.primaryRoleGuess = preferred.value;
     } else if (!player.manualRoleGuess && preferred.role !== "claim" && !usesLimitedMediumHumanConversion) {
@@ -4554,7 +4562,7 @@ function isStaleSingleClaimRolePreviousGuess(player) {
 function restoreRoleGuessBeforeConfirmation(player) {
   const previous = player.confirmedRolePreviousGuess;
   if (!previous) return;
-  if (player.mediumHumanConversion?.guess) {
+  if (player.mediumHumanConversion?.guess || player.mediumWerewolfConversion?.guess) {
     player.confirmedRolePreviousGuess = null;
     return;
   }
@@ -4566,6 +4574,51 @@ function restoreRoleGuessBeforeConfirmation(player) {
   player.confirmedRolePreviousGuess = null;
 }
 
+function reconcileMediumWerewolfConversions() {
+  getActivePlayers().forEach((player) => {
+    const hasMediumWerewolf = player.confirmedRoleEvidence?.some(
+      (evidence) => evidence.role === "medium" && evidence.value === "werewolf",
+    );
+    const conversion = player.mediumWerewolfConversion || {};
+    if (!hasMediumWerewolf) {
+      restoreMediumConvertedField(player, conversion.role, "role");
+      restoreMediumConvertedField(player, conversion.guess, "guess");
+      player.mediumWerewolfConversion = null;
+      return;
+    }
+    const roleConversion = reconcileMediumWerewolfConvertedField(player, conversion.role, "role");
+    const guessConversion = reconcileMediumWerewolfConvertedField(player, conversion.guess, "guess");
+    player.mediumWerewolfConversion =
+      roleConversion || guessConversion ? { role: roleConversion, guess: guessConversion } : null;
+  });
+}
+
+function reconcileMediumWerewolfConvertedField(player, snapshot, field) {
+  const current = field === "role" ? player.role : getRoleGuessDisplay(player).value;
+  if (snapshot) {
+    if (current !== snapshot.appliedValue) return { ...snapshot, manuallyChanged: true };
+    return snapshot;
+  }
+  if (current !== "wolfSide") return null;
+  const next = {
+    previousValue: current,
+    previousManual: field === "role" ? player.manualRoleOverride : player.manualRoleGuess,
+    appliedValue: "werewolf",
+    manuallyChanged: false,
+  };
+  if (field === "role") {
+    player.role = "werewolf";
+    player.manualRoleOverride = false;
+    player.roleClaimOrder = getNextRoleClaimOrder();
+  } else {
+    player.roleGuessCandidates = ["werewolf"];
+    player.primaryRoleGuess = "werewolf";
+    player.manualRoleGuess = false;
+    player.autoSelfRivalWolfSide = false;
+  }
+  return next;
+}
+
 function reconcileMediumHumanConversions() {
   getActivePlayers().forEach((player) => {
     const hasMediumHuman = player.confirmedRoleEvidence?.some(
@@ -4573,8 +4626,8 @@ function reconcileMediumHumanConversions() {
     );
     const conversion = player.mediumHumanConversion || {};
     if (!hasMediumHuman) {
-      restoreMediumHumanConvertedField(player, conversion.role, "role");
-      restoreMediumHumanConvertedField(player, conversion.guess, "guess");
+      restoreMediumConvertedField(player, conversion.role, "role");
+      restoreMediumConvertedField(player, conversion.guess, "guess");
       player.mediumHumanConversion = null;
       return;
     }
@@ -4611,7 +4664,7 @@ function reconcileMediumHumanConvertedField(player, snapshot, field) {
   return next;
 }
 
-function restoreMediumHumanConvertedField(player, snapshot, field) {
+function restoreMediumConvertedField(player, snapshot, field) {
   if (!snapshot || snapshot.manuallyChanged) return;
   const current = field === "role" ? player.role : getRoleGuessDisplay(player).value;
   if (current !== snapshot.appliedValue) return;
@@ -7346,6 +7399,7 @@ function normalizePlayer(player) {
       : [],
     confirmedRolePreviousGuess: normalizeConfirmedRolePreviousGuess(player.confirmedRolePreviousGuess),
     mediumHumanConversion: normalizeMediumHumanFieldState(player.mediumHumanConversion),
+    mediumWerewolfConversion: normalizeMediumHumanFieldState(player.mediumWerewolfConversion),
     mediumHumanBrokenPrevious: normalizeMediumHumanFieldState(player.mediumHumanBrokenPrevious),
     mediumConflictBroken: false,
     confirmedResultConflictBroken: player.confirmedResultConflictBroken === true || player.mediumConflictBroken === true,
