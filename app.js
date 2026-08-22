@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.187";
+const APP_VERSION = "1.188";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3952,7 +3952,7 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
         return `<span class="seer-result-label ${mediumPerspective.className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(mediumPerspective.label)}</span>`;
       }
       const mediumConfirmedDisplay = getMediumConfirmedDisplay(player);
-      const guardClaim = getNonWolfGuardClaimForSeer(player, seer, result?.value || "");
+      const guardClaim = getGuardClaimForSeer(player, seer, result?.value || "");
       if (!result && guardClaim) {
         return `<span class="seer-result-label ${getGuardClaimClass(player)}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(guardClaim)}</span>`;
       }
@@ -4022,7 +4022,7 @@ function getSeerColumnOverrideHtml(override, seer, player = findPlayer(override.
     const resultLabel = result
       ? getDivinationResultDisplayLabel(result, player, override.value)
       : RESULT_LABELS[override.value];
-    const guardClaim = getNonWolfGuardClaimForSeer(player, seer, override.value);
+    const guardClaim = getGuardClaimForSeer(player, seer, override.value);
     const rivalSeerLabel = getHumanJudgedRivalSeerLabel(player, seer, override.value, resultLabel);
     const mediumPerspective =
       override.value === "werewolf" ? null : getMediumPerspectiveForSeer(player, seer, override.value);
@@ -4067,9 +4067,10 @@ function getHumanJudgedRivalSeerLabel(player, seer, value, resultLabel) {
   return `${resultLabel} / ${ROLE_LABELS.madman}`;
 }
 
-function getNonWolfGuardClaimForSeer(player, seer, value = "") {
+function getGuardClaimForSeer(player, seer, value = "") {
   if (player?.role !== "guard" || !seer || player.id === seer.id) return "";
   if (isAttackedMultiGuardClaim(player)) return `${ROLE_LABELS.guard}/${ROLE_LABELS.madman}`;
+  if (isSurvivingGuardWithAttackedRival(player)) return `${ROLE_LABELS.guard}/${ROLE_LABELS.werewolf}`;
   if (value === "werewolf" || isMediumConfirmedWerewolf(player)) return "";
   return ROLE_LABELS.guard;
 }
@@ -4078,8 +4079,16 @@ function isAttackedMultiGuardClaim(player) {
   return Boolean(player?.role === "guard" && player.status === "attacked" && getRoleClaimants("guard").length >= 2);
 }
 
+function isSurvivingGuardWithAttackedRival(player) {
+  if (player?.role !== "guard" || player.status === "attacked") return false;
+  const guardClaimants = getRoleClaimants("guard");
+  return guardClaimants.length === 2 && guardClaimants.some((claimant) => claimant.status === "attacked");
+}
+
 function getGuardClaimClass(player) {
-  return isAttackedMultiGuardClaim(player) ? "role-guard-madman" : "role-guard";
+  if (isAttackedMultiGuardClaim(player)) return "role-guard-madman";
+  if (isSurvivingGuardWithAttackedRival(player)) return "role-guard-werewolf";
+  return "role-guard";
 }
 
 function isMediumConfirmedWerewolf(player) {

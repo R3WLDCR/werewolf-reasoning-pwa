@@ -895,6 +895,12 @@ select:disabled {
   border: 1px solid rgba(245, 157, 218, 0.48);
 }
 
+.role-guard-werewolf {
+  background: linear-gradient(90deg, #4a2b12 0%, #4a2b12 58%, #521b22 100%);
+  color: #ffd0a0;
+  border: 1px solid rgba(255, 112, 124, 0.52);
+}
+
 .role-hunter {
   background: #123f2e;
   color: #80e8a8;
