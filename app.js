@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.182";
+const APP_VERSION = "1.183";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -4198,15 +4198,15 @@ function getOutsiderExposureIdsForSeer(seer) {
     if (getAdoptedMediumResultForSeerTarget(seer.id, player.id)?.result === "werewolf") {
       ids.add(player.id);
     }
+    if (otherSeerIds.has(player.id) || ["werewolf", "wolfSide", "madman"].includes(player.role)) {
+      ids.add(player.id);
+      return;
+    }
     const override = getSeerColumnOverride(seer.id, player.id);
     if (override && (override.value === "human" || override.value === "confirmedWhite" || VILLAGER_SIDE_ROLES.has(override.value))) {
       return;
     }
-    if (
-      ["werewolf", "wolfSide", "madman"].includes(override?.value) ||
-      otherSeerIds.has(player.id) ||
-      ["werewolf", "wolfSide", "madman"].includes(player.role)
-    ) {
+    if (["werewolf", "wolfSide", "madman"].includes(override?.value)) {
       ids.add(player.id);
     }
   });
