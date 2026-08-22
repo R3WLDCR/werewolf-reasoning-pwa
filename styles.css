@@ -889,6 +889,12 @@ select:disabled {
   color: #ffbd73;
 }
 
+.role-guard-madman {
+  background: linear-gradient(90deg, #4a2b12 0%, #4a2b12 58%, #4a243d 100%);
+  color: #ffd0a0;
+  border: 1px solid rgba(245, 157, 218, 0.48);
+}
+
 .role-hunter {
   background: #123f2e;
   color: #80e8a8;
