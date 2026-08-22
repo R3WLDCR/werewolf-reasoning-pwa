@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.181";
+const APP_VERSION = "1.182";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -4079,11 +4079,13 @@ function isMediumConfirmedWerewolf(player) {
 }
 
 function shouldDisplayConfirmedWhiteForSeer(player, seerId, value) {
+  const seer = findPlayer(seerId);
   return Boolean(
     player?.autoConfirmedWhite &&
       !(player.manualRoleGuess && canOverrideAutoConfirmedWhite(player)) &&
       value === "human" &&
-      findPlayer(seerId)?.role === "seer",
+      seer?.role === "seer" &&
+      !isMediumConfirmedWerewolf(seer),
   );
 }
 
@@ -4897,9 +4899,12 @@ function setRoleGuess(player, role, { confirmed = false } = {}) {
 
 function shouldBecomeConfirmedWhite(player, seers = getCurrentSeerClaimants()) {
   const effectiveSeers = getConfirmedWhiteSeers(seers);
+  const selfSeer = getSelfPerspectivePlayer();
   if (player.status !== "alive") return false;
   if (effectiveSeers.some((seer) => seer.id === player.id)) return false;
-  if (hasSelfPerspectiveWerewolfResult(player.id)) return false;
+  if (selfSeer && effectiveSeers.some((seer) => seer.id === selfSeer.id) && hasSelfPerspectiveWerewolfResult(player.id)) {
+    return false;
+  }
   return (
     canSeersEstablishConfirmedWhite(effectiveSeers) &&
     effectiveSeers.every((seer) => isHumanViewForConfirmedWhite(player, seer))
@@ -4907,9 +4912,14 @@ function shouldBecomeConfirmedWhite(player, seers = getCurrentSeerClaimants()) {
 }
 
 function getConfirmedWhiteSeers(seers = getCurrentSeerClaimants()) {
-  const effectiveSeers = [...seers];
+  const effectiveSeers = seers.filter((seer) => !isMediumConfirmedWerewolf(seer));
   const selfSeer = getSelfPerspectivePlayer();
-  if (isSelfPerspectiveSeer() && selfSeer && !effectiveSeers.some((seer) => seer.id === selfSeer.id)) {
+  if (
+    isSelfPerspectiveSeer() &&
+    selfSeer &&
+    !isMediumConfirmedWerewolf(selfSeer) &&
+    !effectiveSeers.some((seer) => seer.id === selfSeer.id)
+  ) {
     effectiveSeers.push(selfSeer);
   }
   return effectiveSeers;
@@ -4931,7 +4941,8 @@ function canOverrideAutoConfirmedWhite(player) {
 }
 
 function canSeersEstablishConfirmedWhite(seers = getCurrentSeerClaimants()) {
-  return seers.length > 0 && !(seers.length === 1 && isPriorityPlayer(seers[0]));
+  const hasMediumConfirmedWerewolfSeer = getCurrentSeerClaimants().some(isMediumConfirmedWerewolf);
+  return seers.length > 0 && (hasMediumConfirmedWerewolfSeer || !(seers.length === 1 && isPriorityPlayer(seers[0])));
 }
 
 function getCurrentSeerClaimants() {
