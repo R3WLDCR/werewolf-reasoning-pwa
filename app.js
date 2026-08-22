@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.185";
+const APP_VERSION = "1.186";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3278,11 +3278,12 @@ function getRivalPerspectiveOverrideKey(role, viewerId, targetId) {
 }
 
 function isRivalPerspectiveTargetConfirmedMadman(target) {
-  return target.status === "attacked" || target.attackedWolfSideConfirmedMadman;
+  return Boolean(target && (target.status === "attacked" || target.attackedWolfSideConfirmedMadman));
 }
 
 function getAutomaticRivalPerspectiveValue(viewer, target, claimants) {
   if (isRivalPerspectiveTargetConfirmedMadman(target)) return "madman";
+  if (hasAttackedWolfSideConfirmedMadman()) return "werewolf";
   const threeSeerValue = getThreeSeerMediumHumanRivalValue(viewer, target, claimants);
   if (threeSeerValue) return threeSeerValue;
   if (shouldTreatWolfSideAsMadmanForSeer(viewer, target)) return "madman";
@@ -4234,7 +4235,42 @@ function applyConfirmedWhiteUpdates() {
   applySelfPerspectiveRivalRoleGuesses();
   reconcileConfirmedWhiteRoleGuessLocks(currentSeerClaimants);
   reconcileFullOutsiderRoleGuessVillagers();
+  reconcileRemainingWolfSidesAfterMadmanConfirmation();
   reconcileBlackTargets();
+}
+
+function hasAttackedWolfSideConfirmedMadman(players = getActivePlayers()) {
+  if (players.some((player) => player.attackedWolfSideConfirmedMadman)) return true;
+  return [...RIVAL_PERSPECTIVE_ROLES].some((role) => {
+    const claimants = getRoleClaimants(role, players);
+    return claimants.length >= 2 && claimants.some((player) => player.status === "attacked");
+  });
+}
+
+function reconcileRemainingWolfSidesAfterMadmanConfirmation() {
+  if (!hasAttackedWolfSideConfirmedMadman()) return;
+  state.rivalPerspectiveOverrides.forEach((override) => {
+    if (override.value !== "wolfSide") return;
+    override.value = isRivalPerspectiveTargetConfirmedMadman(findPlayer(override.targetId)) ? "madman" : "werewolf";
+  });
+  state.seerColumnOverrides.forEach((override) => {
+    if (override.value !== "wolfSide") return;
+    override.value = isRivalPerspectiveTargetConfirmedMadman(findPlayer(override.targetId)) ? "madman" : "werewolf";
+  });
+  getActivePlayers().forEach((player) => {
+    if (player.attackedWolfSideConfirmedMadman) return;
+    if (player.role === "wolfSide") {
+      player.role = "werewolf";
+      player.manualRoleOverride = false;
+      player.roleClaimOrder = getNextRoleClaimOrder();
+    }
+    if (getRoleGuessDisplay(player).value === "wolfSide") {
+      player.roleGuessCandidates = ["werewolf"];
+      player.primaryRoleGuess = "werewolf";
+      player.manualRoleGuess = false;
+      player.autoSelfRivalWolfSide = false;
+    }
+  });
 }
 
 function reconcileFullOutsiderRoleGuessVillagers() {
