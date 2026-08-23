@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.190";
+const APP_VERSION = "1.191";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -4049,7 +4049,7 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
         ? getGuardClaimClass(player, result.value)
         : rivalSeerLabel
           ? "role-madman"
-          : mediumPerspective?.className || className;
+          : getHumanResultClaimClass(player, result.value, mediumPerspective, className);
       return `<span class="seer-result-label ${displayClassName}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(label)}</span>`;
     })
     .filter(Boolean)
@@ -4087,21 +4087,26 @@ function getSeerColumnOverrideHtml(override, seer, player = findPlayer(override.
           ? `${resultLabel} / ${ROLE_LABELS.confirmedWhite}`
           : resultLabel);
     const label = isAdoptedMediumResultContradictingSeer(seer.id, player?.id, override.value) ? `${baseLabel} / 矛盾` : baseLabel;
+    const fallbackClass = manualMediumGuess
+      ? "role-medium"
+      : override.value === "werewolf"
+        ? "judgement-werewolf"
+        : "judgement-human";
     const className = guardClaim
       ? getGuardClaimClass(player, override.value)
       : rivalSeerLabel
         ? "role-madman"
-        : mediumPerspective
-          ? mediumPerspective.className
-          : manualMediumGuess
-            ? "role-medium"
-            : override.value === "werewolf"
-              ? "judgement-werewolf"
-              : "judgement-human";
+        : getHumanResultClaimClass(player, override.value, mediumPerspective, fallbackClass);
     return `<span class="seer-result-label ${className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(label)}</span>`;
   }
   const className = override.value === "werewolf" ? "role-werewolf" : `role-${override.value}`;
   return `<span class="seer-result-label ${className}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(SEER_COLUMN_OVERRIDE_LABELS[override.value])}</span>`;
+}
+
+function getHumanResultClaimClass(player, value, perspective, fallbackClass) {
+  if (perspective?.className) return perspective.className;
+  if (value === "human" && player?.role === "medium") return "role-medium";
+  return fallbackClass;
 }
 
 function getMediumConfirmedWerewolfSeerCellHtml(player, seer, result, value = result?.value) {
