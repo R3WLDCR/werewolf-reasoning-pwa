@@ -901,6 +901,12 @@ select:disabled {
   border: 1px solid rgba(255, 112, 124, 0.52);
 }
 
+.role-guard-wolfSide {
+  background: linear-gradient(90deg, #4a2b12 0%, #4a2b12 58%, #43272c 100%);
+  color: #ffd0a0;
+  border: 1px solid rgba(255, 141, 152, 0.45);
+}
+
 .role-hunter {
   background: #123f2e;
   color: #80e8a8;
@@ -2227,6 +2233,57 @@ select:disabled {
   color: var(--ink);
   font-size: 0.86rem;
   font-weight: 900;
+}
+
+.attack-rule-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 11px;
+  border: 1px solid rgba(159, 176, 173, 0.28);
+  border-radius: 7px;
+  background: #151d1e;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.attack-rule-field {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.attack-rule-field legend {
+  padding: 0 4px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.attack-rule-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 6px 9px;
+  border: 1px solid rgba(159, 176, 173, 0.22);
+  border-radius: 7px;
+  background: #111819;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.attack-rule-toggle input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: #b94b57;
 }
 
 .finish-true-role-fields {

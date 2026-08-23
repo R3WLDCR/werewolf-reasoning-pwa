@@ -104,6 +104,17 @@
                 <option value="4">4人</option>
               </select>
             </label>
+            <fieldset class="attack-rule-field">
+              <legend>襲撃ルール</legend>
+              <label class="attack-rule-toggle">
+                <input id="selfBiteAllowedInput" type="checkbox" />
+                <span>自噛みあり</span>
+              </label>
+              <label class="attack-rule-toggle">
+                <input id="noBiteAllowedInput" type="checkbox" />
+                <span>噛みなしあり</span>
+              </label>
+            </fieldset>
           </section>
 
           <section class="setup-panel" aria-label="参加者登録">
@@ -133,6 +144,7 @@
             <div class="reasoning-counts">
               <div id="wolfCountBadge" class="wolf-count-badge" aria-label="設定済み人狼数">人狼 2人</div>
               <div id="ropeCountBadge" class="rope-count-badge" aria-label="残り縄数">残り0縄</div>
+              <div id="attackRuleBadge" class="attack-rule-badge">標準襲撃</div>
               <button id="openVoteDialogBtn" class="secondary-button" type="button">投票</button>
             </div>
             <div class="perspective-toggle" role="group" aria-label="目線切替">

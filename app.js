@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.189";
+const APP_VERSION = "1.190";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -119,6 +119,8 @@ const BOARD_STATE_FIELDS = [
   "gameNumber",
   "selectedTournamentId",
   "wolfCount",
+  "selfBiteAllowed",
+  "noBiteAllowed",
   "wolfModeActive",
   "wolfModeCoverRole",
   "reasoningPerspective",
@@ -149,6 +151,8 @@ const state = {
   tournaments: [],
   selectedTournamentId: "",
   wolfCount: 2,
+  selfBiteAllowed: false,
+  noBiteAllowed: false,
   wolfModeActive: false,
   wolfModeCoverRole: "",
   reasoningPerspective: "seer",
@@ -240,7 +244,10 @@ document.addEventListener("DOMContentLoaded", () => {
     "editionNumberInput",
     "gameNumberInput",
     "wolfCountSelect",
+    "selfBiteAllowedInput",
+    "noBiteAllowedInput",
     "wolfCountBadge",
+    "attackRuleBadge",
     "addPlayerForm",
     "playerNameInput",
     "playerCountBadge",
@@ -468,6 +475,8 @@ function bindEvents() {
     state.wolfCount = normalizeWolfCount(els.wolfCountSelect.value);
     renderAndStore();
   });
+  els.selfBiteAllowedInput.addEventListener("change", saveAttackRules);
+  els.noBiteAllowedInput.addEventListener("change", saveAttackRules);
   els.startGameBtn.addEventListener("click", startGame);
   els.boardActionsBtn.addEventListener("click", openBoardActionsDialog);
   els.closeBoardActionsBtn.addEventListener("click", closeBoardActionsDialog);
@@ -1035,6 +1044,8 @@ function createGameHistory(winner, trueRoles = new Map()) {
     editionNumber: state.editionNumber,
     gameNumber: state.gameNumber,
     wolfCount: state.wolfCount,
+    selfBiteAllowed: state.selfBiteAllowed,
+    noBiteAllowed: state.noBiteAllowed,
     wolfModeActive: state.wolfModeActive,
     wolfModeCoverRole: players.find(isPriorityPlayer)?.wolfModeCoverRole || state.wolfModeCoverRole,
     winner: normalizeCitizenText(winner),
@@ -1204,6 +1215,8 @@ function createBoard(customName, tournamentId) {
     gameNumber: 1,
     selectedTournamentId,
     wolfCount: 2,
+    selfBiteAllowed: false,
+    noBiteAllowed: false,
     wolfModeActive: false,
     wolfModeCoverRole: "",
     reasoningPerspective: "seer",
@@ -2703,7 +2716,8 @@ function setPlayerStatus(status) {
     } else {
       continuationNotice = confirmPendingExileContinuation();
     }
-    invalidateInferenceForStatusChange(player);
+    const selfBiteAttackChange = state.selfBiteAllowed && (player.status === "attacked" || status === "attacked");
+    if (!selfBiteAttackChange) invalidateInferenceForStatusChange(player);
   }
   const wasInactive = isInactiveStatus(player.status);
   const isBecomingInactive = isInactiveStatus(status);
@@ -2816,6 +2830,7 @@ function saveAdoptedMediumSelection() {
 }
 
 function applyAttackRoleUpdates(attackedPlayer) {
+  if (state.selfBiteAllowed) return;
   if (attackedPlayer.role === "wolfSide") setConfirmedMadman(attackedPlayer);
   applyAttackedRoleGuess(attackedPlayer);
   const hadRole = Boolean(attackedPlayer.role);
@@ -2833,6 +2848,7 @@ function applyAttackRoleUpdates(attackedPlayer) {
 }
 
 function applyAttackedRoleGuess(player) {
+  if (state.selfBiteAllowed) return;
   if (player.attackedWolfSideConfirmedMadman) return;
   const currentGuess = normalizePrimaryRoleGuess(player.primaryRoleGuess, player.roleGuessCandidates) || "unknown";
   if (VILLAGER_SIDE_ROLES.has(currentGuess) || ["confirmedWhite", "madman"].includes(currentGuess)) return;
@@ -2977,9 +2993,30 @@ function renderMatchMeta() {
   els.seasonNumberInput.value = state.seasonNumber || "";
   els.editionNumberInput.value = state.editionNumber || "";
   els.gameNumberInput.value = String(state.gameNumber);
+  els.selfBiteAllowedInput.checked = state.selfBiteAllowed;
+  els.noBiteAllowedInput.checked = state.noBiteAllowed;
+  const attackRules = [
+    state.selfBiteAllowed ? "自噛みあり" : "",
+    state.noBiteAllowed ? "噛みなしあり" : "",
+  ].filter(Boolean);
+  els.attackRuleBadge.textContent = attackRules.join(" / ") || "標準襲撃";
   document.querySelectorAll("[data-roster-filter]").forEach((button) => {
     button.classList.toggle("active", button.dataset.rosterFilter === state.rosterFilter);
   });
+}
+
+function hasRecordedAttack() {
+  return getActivePlayers().some((player) => player.status === "attacked");
+}
+
+function saveAttackRules() {
+  if (isGameLocked() || hasRecordedAttack()) {
+    render();
+    return toast("襲撃ルールはゲーム開始前に設定してください");
+  }
+  state.selfBiteAllowed = els.selfBiteAllowedInput.checked;
+  state.noBiteAllowed = els.noBiteAllowedInput.checked;
+  renderAndStore();
 }
 
 function renderGameLifecycle() {
@@ -3010,8 +3047,10 @@ function renderGameLifecycle() {
     els.playerNameInput,
     els.addPlayerForm.querySelector('button[type="submit"]'),
     els.wolfCountSelect,
+    els.selfBiteAllowedInput,
+    els.noBiteAllowedInput,
   ].forEach((element) => {
-    element.disabled = inProgress || finished;
+    element.disabled = inProgress || finished || ([els.selfBiteAllowedInput, els.noBiteAllowedInput].includes(element) && hasRecordedAttack());
   });
   document.querySelectorAll("[data-roster-filter]").forEach((button) => {
     button.disabled = inProgress || finished;
@@ -3278,7 +3317,11 @@ function getRivalPerspectiveOverrideKey(role, viewerId, targetId) {
 }
 
 function isRivalPerspectiveTargetConfirmedMadman(target) {
-  return Boolean(target && (target.status === "attacked" || target.attackedWolfSideConfirmedMadman));
+  return Boolean(target && (isAttackNonWolfConfirmed(target) || target.attackedWolfSideConfirmedMadman));
+}
+
+function isAttackNonWolfConfirmed(player) {
+  return Boolean(player?.status === "attacked" && !state.selfBiteAllowed);
 }
 
 function getAutomaticRivalPerspectiveValue(viewer, target, claimants) {
@@ -3663,7 +3706,7 @@ function getMediumPerspectiveForSeer(player, seer, resultValue = "") {
   if (!hasMultiSeerMediumPerspective()) return null;
   const adoptedMediumId = getAdoptedMediumId(seer.id);
   if (!adoptedMediumId) {
-    if (player.status === "attacked" || resultValue === "human") {
+    if (isAttackNonWolfConfirmed(player) || resultValue === "human") {
       return { label: `${ROLE_LABELS.medium}/${ROLE_LABELS.madman}`, className: "role-medium-madman" };
     }
     return { label: "霊媒師/狼狂", className: "role-medium-wolfSide" };
@@ -3671,7 +3714,7 @@ function getMediumPerspectiveForSeer(player, seer, resultValue = "") {
   if (adoptedMediumId === player.id) {
     return { label: ROLE_LABELS.medium, className: "role-medium" };
   }
-  if (player.status === "attacked" || resultValue === "human") {
+  if (isAttackNonWolfConfirmed(player) || resultValue === "human") {
     return { label: ROLE_LABELS.madman, className: "role-madman" };
   }
   return { label: ROLE_LABELS.wolfSide, className: "judgement-rival" };
@@ -3957,7 +4000,7 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
       const mediumConfirmedDisplay = getMediumConfirmedDisplay(player);
       const guardClaim = getGuardClaimForSeer(player, seer, result?.value || "");
       if (!result && guardClaim) {
-        return `<span class="seer-result-label ${getGuardClaimClass(player)}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(guardClaim)}</span>`;
+        return `<span class="seer-result-label ${getGuardClaimClass(player, result?.value || "")}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(guardClaim)}</span>`;
       }
       const adoptedMediumResult = getAdoptedMediumResultForSeerTarget(seer.id, player.id);
       if (!result && adoptedMediumResult) {
@@ -3986,7 +4029,7 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
             ? `${exposedHumanClaim} / ${ROLE_LABELS.confirmedWhite}`
             : autoVillagerClaim;
         return autoVillagerClaim
-          ? `<span class="seer-result-label ${guardClaim ? getGuardClaimClass(player) : exposedHumanClaim ? "judgement-human" : manualMediumGuess ? "role-medium" : getAutoVillagerClass(player)}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(displayLabel)}</span>`
+          ? `<span class="seer-result-label ${guardClaim ? getGuardClaimClass(player, result?.value || "") : exposedHumanClaim ? "judgement-human" : manualMediumGuess ? "role-medium" : getAutoVillagerClass(player)}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(displayLabel)}</span>`
           : `<span class="seer-result-label empty" data-seer-id="${escapeHtml(seer.id)}" aria-hidden="true"></span>`;
       }
       const className = manualMediumGuess
@@ -4003,7 +4046,7 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
       const baseLabel = rivalSeerLabel || (guardClaim ? `${guardClaim} / ${resultLabel}` : displayedRole ? `${displayedRole} / ${resultLabel}` : resultLabel);
       const label = isAdoptedMediumResultContradictingSeer(seer.id, player.id, result.value) ? `${baseLabel} / 矛盾` : baseLabel;
       const displayClassName = guardClaim
-        ? getGuardClaimClass(player)
+        ? getGuardClaimClass(player, result.value)
         : rivalSeerLabel
           ? "role-madman"
           : mediumPerspective?.className || className;
@@ -4045,7 +4088,7 @@ function getSeerColumnOverrideHtml(override, seer, player = findPlayer(override.
           : resultLabel);
     const label = isAdoptedMediumResultContradictingSeer(seer.id, player?.id, override.value) ? `${baseLabel} / 矛盾` : baseLabel;
     const className = guardClaim
-      ? getGuardClaimClass(player)
+      ? getGuardClaimClass(player, override.value)
       : rivalSeerLabel
         ? "role-madman"
         : mediumPerspective
@@ -4091,6 +4134,12 @@ function getHumanJudgedRivalSeerLabel(player, seer, value, resultLabel) {
 
 function getGuardClaimForSeer(player, seer, value = "") {
   if (player?.role !== "guard" || !seer || player.id === seer.id) return "";
+  if (isSelfBiteAmbiguousMultiGuardClaim(player)) {
+    if (value === "werewolf" || isMediumConfirmedWerewolf(player)) return "";
+    return value === "human"
+      ? `${ROLE_LABELS.guard}/${ROLE_LABELS.madman}`
+      : `${ROLE_LABELS.guard}/${ROLE_LABELS.wolfSide}`;
+  }
   if (isAttackedMultiGuardClaim(player)) return `${ROLE_LABELS.guard}/${ROLE_LABELS.madman}`;
   if (isSurvivingGuardWithAttackedRival(player)) return `${ROLE_LABELS.guard}/${ROLE_LABELS.werewolf}`;
   if (value === "werewolf" || isMediumConfirmedWerewolf(player)) return "";
@@ -4098,16 +4147,25 @@ function getGuardClaimForSeer(player, seer, value = "") {
 }
 
 function isAttackedMultiGuardClaim(player) {
-  return Boolean(player?.role === "guard" && player.status === "attacked" && getRoleClaimants("guard").length >= 2);
+  return Boolean(player?.role === "guard" && isAttackNonWolfConfirmed(player) && getRoleClaimants("guard").length >= 2);
 }
 
 function isSurvivingGuardWithAttackedRival(player) {
-  if (player?.role !== "guard" || player.status === "attacked") return false;
+  if (player?.role !== "guard" || isAttackNonWolfConfirmed(player)) return false;
+  const guardClaimants = getRoleClaimants("guard");
+  return guardClaimants.length === 2 && guardClaimants.some(isAttackNonWolfConfirmed);
+}
+
+function isSelfBiteAmbiguousMultiGuardClaim(player) {
+  if (!state.selfBiteAllowed || player?.role !== "guard") return false;
   const guardClaimants = getRoleClaimants("guard");
   return guardClaimants.length === 2 && guardClaimants.some((claimant) => claimant.status === "attacked");
 }
 
-function getGuardClaimClass(player) {
+function getGuardClaimClass(player, value = "") {
+  if (isSelfBiteAmbiguousMultiGuardClaim(player)) {
+    return value === "human" ? "role-guard-madman" : "role-guard-wolfSide";
+  }
   if (isAttackedMultiGuardClaim(player)) return "role-guard-madman";
   if (isSurvivingGuardWithAttackedRival(player)) return "role-guard-werewolf";
   return "role-guard";
@@ -4168,11 +4226,11 @@ function getManualUnclaimedMediumGuess(player) {
 }
 
 function getWolfSideAwareRoleClass(player) {
-  return player.role === "wolfSide" && player.status === "attacked" ? "role-madman" : getRoleClass(player);
+  return player.role === "wolfSide" && isAttackNonWolfConfirmed(player) ? "role-madman" : getRoleClass(player);
 }
 
 function getWolfSideDisplayLabel(player) {
-  return player.status === "attacked" ? ROLE_LABELS.madman : ROLE_LABELS.wolfSide;
+  return isAttackNonWolfConfirmed(player) ? ROLE_LABELS.madman : ROLE_LABELS.wolfSide;
 }
 
 function shouldDisplayMediumConfirmedWerewolf(player) {
@@ -4204,7 +4262,7 @@ function getMediumConfirmedDisplay(player) {
 }
 
 function getAutoVillagerClaimForSeer(player, seerId) {
-  if (player.role || player.status !== "attacked") return "";
+  if (player.role || !isAttackNonWolfConfirmed(player)) return "";
   return hasDivinationResultForSeer(player.id, seerId) ? "" : ROLE_LABELS.villager;
 }
 
@@ -4280,6 +4338,7 @@ function applyConfirmedWhiteUpdates() {
 }
 
 function hasAttackedWolfSideConfirmedMadman(players = getActivePlayers()) {
+  if (state.selfBiteAllowed) return false;
   if (players.some((player) => player.attackedWolfSideConfirmedMadman)) return true;
   return [...RIVAL_PERSPECTIVE_ROLES].some((role) => {
     const claimants = getRoleClaimants(role, players);
@@ -4872,11 +4931,13 @@ function restoreMediumHumanBrokenSeer(seer) {
 }
 
 function reconcileAttackConfirmedSeerConflicts() {
-  const conflictingSeerIds = new Set(
-    state.results
-      .filter((result) => result.value === "werewolf" && findPlayer(result.targetId)?.status === "attacked")
-      .map((result) => result.seerId),
-  );
+  const conflictingSeerIds = state.selfBiteAllowed
+    ? new Set()
+    : new Set(
+        state.results
+          .filter((result) => result.value === "werewolf" && findPlayer(result.targetId)?.status === "attacked")
+          .map((result) => result.seerId),
+      );
   getActivePlayers().forEach((player) => {
     if (player.attackConflictBroken && !conflictingSeerIds.has(player.id)) {
       player.attackConflictBroken = false;
@@ -5280,6 +5341,8 @@ function createBoardPayloadFromHistory(history) {
     gameNumber: history.gameNumber,
     selectedTournamentId: history.selectedTournamentId,
     wolfCount: history.wolfCount,
+    selfBiteAllowed: history.selfBiteAllowed === true,
+    noBiteAllowed: history.noBiteAllowed === true,
     wolfModeActive: history.wolfModeActive === true,
     wolfModeCoverRole: history.wolfModeCoverRole || "",
     reasoningPerspective: "seer",
@@ -6700,6 +6763,8 @@ function applySavedState(saved) {
   state.tournaments = Array.isArray(saved.tournaments) ? saved.tournaments.map(normalizeTournament).filter(Boolean) : [];
   state.selectedTournamentId = String(saved.selectedTournamentId || "");
   state.wolfCount = normalizeWolfCount(saved.wolfCount);
+  state.selfBiteAllowed = saved.selfBiteAllowed === true;
+  state.noBiteAllowed = saved.noBiteAllowed === true;
   state.players = Array.isArray(saved.players) ? saved.players.map(normalizePlayer) : [];
   const legacyWolfMode =
     state.players.some((player) => player.wolfTeammate) ||
@@ -7015,6 +7080,8 @@ function resetStateToDefaults() {
     tournaments: [],
     selectedTournamentId: "",
     wolfCount: 2,
+    selfBiteAllowed: false,
+    noBiteAllowed: false,
     wolfModeActive: false,
     wolfModeCoverRole: "",
     reasoningPerspective: "seer",
@@ -7238,6 +7305,8 @@ function ensureMatchDefaults() {
   state.seasonNumber = normalizeOptionalSequenceNumber(state.seasonNumber);
   state.editionNumber = normalizeOptionalSequenceNumber(state.editionNumber);
   state.gameNumber = normalizeGameNumber(state.gameNumber);
+  state.selfBiteAllowed = state.selfBiteAllowed === true;
+  state.noBiteAllowed = state.noBiteAllowed === true;
   state.winner = state.gameStatus === "finished" ? normalizeCitizenText(state.winner || "") : "";
   state.activeView = normalizeActiveView(state.activeView);
   state.rosterFilter = normalizeRosterFilter(state.rosterFilter);
@@ -7386,8 +7455,7 @@ function getHistoryDisplayName(history) {
 
 function normalizePlayer(player) {
   const status = player.status === "dead" ? "attacked" : player.status;
-  const attackedWolfSideConfirmedMadman =
-    player.attackedWolfSideConfirmedMadman === true || (status === "attacked" && player.role === "wolfSide");
+  const attackedWolfSideConfirmedMadman = player.attackedWolfSideConfirmedMadman === true;
   const onlyLegacyManualMediumBroken =
     player.manualMediumConflictBroken === true &&
     player.confirmedResultConflictBroken !== true &&
@@ -7714,6 +7782,8 @@ function normalizeGameHistory(history) {
     editionNumber: normalizeOptionalSequenceNumber(history.editionNumber),
     gameNumber: normalizeGameNumber(history.gameNumber),
     wolfCount: normalizeWolfCount(history.wolfCount),
+    selfBiteAllowed: history.selfBiteAllowed === true,
+    noBiteAllowed: history.noBiteAllowed === true,
     wolfModeActive: history.wolfModeActive === true || history.players.some((player) => player.wolfTeammate === true),
     wolfModeCoverRole: WOLF_MODE_COVER_ROLES.has(history.wolfModeCoverRole) ? history.wolfModeCoverRole : "",
     winner: normalizeCitizenText(history.winner || "勝利陣営未設定"),
@@ -7756,6 +7826,8 @@ function normalizeBoard(board) {
   payload.gameNumber = normalizeGameNumber(payload.gameNumber);
   payload.selectedTournamentId = String(payload.selectedTournamentId || "");
   payload.wolfCount = normalizeWolfCount(payload.wolfCount);
+  payload.selfBiteAllowed = payload.selfBiteAllowed === true;
+  payload.noBiteAllowed = payload.noBiteAllowed === true;
   payload.wolfModeActive = payload.wolfModeActive === true;
   payload.wolfModeCoverRole = WOLF_MODE_COVER_ROLES.has(payload.wolfModeCoverRole) ? payload.wolfModeCoverRole : "";
   payload.reasoningPerspective = normalizeReasoningPerspective(payload.reasoningPerspective);
