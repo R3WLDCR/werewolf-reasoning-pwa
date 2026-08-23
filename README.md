@@ -2,6 +2,8 @@
 
 iPhone SafariとPCブラウザで使える、人狼の推理補助PWAです。未ログイン時は端末内へ保存し、Supabaseを設定するとPC・iPhone間で同期できます。
 
+推理ロジックの基準と変更時の確認範囲は[`GAME_RULES.md`](GAME_RULES.md)にまとめています。
+
 ## GitHub Pages
 
 公開URL:
