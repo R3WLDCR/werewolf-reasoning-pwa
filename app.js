@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.199";
+const APP_VERSION = "1.200";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -6581,7 +6581,6 @@ function buildExportText() {
   getActivePlayers().forEach((player) => {
     lines.push(`- ${player.name} / ${getStatusDisplay(player)} / ${player.role ? ROLE_LABELS[player.role] : "COなし"} / ${formatRoleGuessForExport(player)} / ${formatImpressionForExport(player)}`);
   });
-  appendPlayerRelationsToText(lines, state.playerRelations, state.players);
   lines.push("", "時系列");
   lines.push(...buildCurrentTimeline());
   return lines.join("\n");
@@ -6614,21 +6613,9 @@ function buildHistoryText(history) {
     lines.push("", "黒塗り位置");
     blackTargets.forEach((player) => lines.push(`- ${getCircledNumber(player.blackTargetRank)} ${player.name}`));
   }
-  appendPlayerRelationsToText(lines, history.playerRelations, history.players);
   lines.push("", "時系列");
   lines.push(...buildHistoryTimeline(history));
   return lines.join("\n");
-}
-
-function appendPlayerRelationsToText(lines, relations, players) {
-  const normalized = normalizePlayerRelations(relations, players);
-  if (!normalized.length) return;
-  lines.push("", "参加者ライン");
-  normalized.forEach((relation) => {
-    const playerA = players.find((player) => player.id === relation.playerAId);
-    const playerB = players.find((player) => player.id === relation.playerBId);
-    if (playerA && playerB) lines.push(`- ${PLAYER_RELATION_LABELS[relation.type]}: ${playerA.name} − ${playerB.name}`);
-  });
 }
 
 function buildHistoryTimeline(history) {
