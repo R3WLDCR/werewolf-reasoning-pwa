@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.196";
+const APP_VERSION = "1.197";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3468,6 +3468,11 @@ function renderRows() {
         );
         return;
       }
+      const mediumCell = event.target.closest("[data-medium-id]");
+      if (mediumCell) {
+        openEditDialog(player.id);
+        return;
+      }
       const seerCell = event.target.closest("[data-seer-id]");
       openEditDialog(player.id, seerCell?.dataset.seerId || "");
     });
@@ -4163,7 +4168,137 @@ function getRoleActionResultOptionsHtml(role, selectedResult = "unknown") {
 }
 
 function getPerspectiveGridHtml(player) {
+  if (state.reasoningPerspective === "medium") {
+    return getMediumGridHtml(player);
+  }
   return getSeerGridHtml(player);
+}
+
+function getMediumGridHtml(player) {
+  const mediums = getMediums();
+  if (!mediums.length) {
+    return getSeerGridHtml(player);
+  }
+  const perspectiveCells = getMediumPerspectiveCellsHtml(player, mediums);
+  if (!perspectiveCells) return "";
+  const columnCount = Math.max(1, mediums.length);
+  return `
+    <span class="seer-grid" style="--seer-columns: ${columnCount}">
+      ${perspectiveCells}
+    </span>
+  `;
+}
+
+function getMediumPerspectiveCellsHtml(player, mediums = getMediums()) {
+  const columnCount = Math.max(1, mediums.length);
+  if (player.attackedWolfSideConfirmedMadman) {
+    return Array.from({ length: columnCount }, (_, index) =>
+      `<span class="seer-result-label role-madman"${mediums[index] ? ` data-medium-id="${escapeHtml(mediums[index].id)}"` : ""}>${ROLE_LABELS.madman}</span>`,
+    ).join("");
+  }
+
+  return mediums
+    .map((medium, mediumIndex) => {
+      if (player.id === medium.id) {
+        const orderLabel = mediums.length > 1 ? `${ROLE_LABELS.medium}${getCircledNumber(mediumIndex + 1)}` : ROLE_LABELS.medium;
+        return `<span class="seer-result-label role-medium" data-medium-id="${escapeHtml(medium.id)}">${escapeHtml(orderLabel)}</span>`;
+      }
+
+      if (player.role === "medium") {
+        if (isRivalPerspectiveTargetConfirmedMadman(player)) {
+          return getRivalPerspectiveCellHtml("medium", medium, player, "madman");
+        }
+        const rivalOverride = getRivalPerspectiveOverride("medium", medium.id, player.id);
+        if (rivalOverride) {
+          return getRivalPerspectiveCellHtml("medium", medium, player, rivalOverride.value);
+        }
+        const autoValue = getAutomaticRivalPerspectiveValue(medium, player, mediums);
+        return getRivalPerspectiveCellHtml("medium", medium, player, autoValue);
+      }
+
+      if (player.status === "exiled") {
+        const action = getMediumResultActions(medium.id, player.id).find((a) => ["human", "werewolf"].includes(a.result));
+        if (action) {
+          const className = action.result === "werewolf" ? "judgement-werewolf" : "judgement-human";
+          const label = `霊媒 ${RESULT_LABELS[action.result]}`;
+          return `<span class="seer-result-label ${className}" data-medium-id="${escapeHtml(medium.id)}">${escapeHtml(label)}</span>`;
+        }
+        return `<span class="seer-result-label empty" data-medium-id="${escapeHtml(medium.id)}" aria-label="霊媒未記録"></span>`;
+      }
+
+      if (player.role && player.role !== "medium") {
+        const claimants = getRoleClaimants(player.role);
+        if (claimants.length >= 2) {
+          return `<span class="seer-result-label ${getWolfSideAwareRoleClass(player)}" data-medium-id="${escapeHtml(medium.id)}">${escapeHtml(ROLE_LABELS[player.role])}/${ROLE_LABELS.wolfSide}</span>`;
+        }
+        return `<span class="seer-result-label ${getRoleClass(player)}" data-medium-id="${escapeHtml(medium.id)}">${escapeHtml(ROLE_LABELS[player.role])}</span>`;
+      }
+
+      if (isAttackNonWolfConfirmed(player)) {
+        return `<span class="seer-result-label judgement-human" data-medium-id="${escapeHtml(medium.id)}">${escapeHtml(ROLE_LABELS.villager)}</span>`;
+      }
+
+      const exposedHumanClaim = getExposedHumanClaimForMedium(player, medium);
+      if (exposedHumanClaim) {
+        return `<span class="seer-result-label judgement-human" data-medium-id="${escapeHtml(medium.id)}">${escapeHtml(exposedHumanClaim)}</span>`;
+      }
+
+      return `<span class="seer-result-label empty" data-medium-id="${escapeHtml(medium.id)}" aria-hidden="true"></span>`;
+    })
+    .join("");
+}
+
+function getOutsiderExposureCountForMedium(medium) {
+  if (!medium || medium.role !== "medium") return 0;
+  const knownWerewolfIds = new Set();
+
+  state.roleActions
+    .filter((action) => action.actorId === medium.id && action.role === "medium" && action.result === "werewolf")
+    .forEach((action) => knownWerewolfIds.add(action.targetId));
+
+  let guaranteedOutsiders = 0;
+  const mediumClaimants = getRoleClaimants("medium");
+  if (mediumClaimants.length >= 2) {
+    guaranteedOutsiders += (mediumClaimants.length - 1);
+  }
+  const seerClaimants = getRoleClaimants("seer");
+  if (seerClaimants.length >= 2) {
+    guaranteedOutsiders += (seerClaimants.length - 1);
+  }
+  const guardClaimants = getRoleClaimants("guard");
+  if (guardClaimants.length >= 2) {
+    guaranteedOutsiders += (guardClaimants.length - 1);
+  }
+  const hunterClaimants = getRoleClaimants("hunter");
+  if (hunterClaimants.length >= 2) {
+    guaranteedOutsiders += (hunterClaimants.length - 1);
+  }
+
+  const attackConfirmedMadman = getActivePlayers().filter((p) => isRivalPerspectiveTargetConfirmedMadman(p));
+  const directCount = knownWerewolfIds.size + attackConfirmedMadman.filter((p) => !knownWerewolfIds.has(p.id)).length;
+  return Math.max(directCount, guaranteedOutsiders);
+}
+
+function isFullOutsiderExposureForMedium(medium) {
+  if (!medium) return false;
+  const maxOutsiders = (Number(state.wolfCount) || 0) + (Number(state.madmanCount) || (Number(state.wolfCount) ? 1 : 0));
+  if (maxOutsiders <= 0) return false;
+  return getOutsiderExposureCountForMedium(medium) >= maxOutsiders;
+}
+
+function getExposedHumanClaimForMedium(player, medium) {
+  if (!player || !medium || isSpecificOutsiderForMedium(player, medium)) return "";
+  if (!isFullOutsiderExposureForMedium(medium)) return "";
+  return "結果市民";
+}
+
+function isSpecificOutsiderForMedium(player, medium) {
+  if (!player || !medium) return false;
+  if (player.id === medium.id) return false;
+  if (["seer", "medium", "guard", "hunter"].includes(player.role)) return true;
+  const action = getMediumResultActions(medium.id, player.id).find((a) => ["human", "werewolf"].includes(a.result));
+  if (action?.result === "werewolf") return true;
+  return false;
 }
 
 function getSeerGridHtml(player) {
@@ -5505,6 +5640,24 @@ function getSeerColumnPriority(player) {
   const guessedSeer = getRoleGuessDisplay(player).value === "seer";
   if (guessedSeer && isPriorityPlayer(player)) return 1;
   if (guessedSeer) return 2;
+  return 3;
+}
+
+function getMediums() {
+  const mediumIds = new Set([
+    ...state.roleActions.filter((action) => action.role === "medium").map((action) => action.actorId),
+  ]);
+  return getActivePlayers()
+    .filter((player) => player.role === "medium" || mediumIds.has(player.id))
+    .slice()
+    .sort((a, b) => getMediumColumnPriority(a) - getMediumColumnPriority(b) || getRoleClaimOrder(a) - getRoleClaimOrder(b));
+}
+
+function getMediumColumnPriority(player) {
+  if (isGameFinished() && player.trueRole === "medium") return 0;
+  const guessedMedium = getRoleGuessDisplay(player).value === "medium";
+  if (guessedMedium && isPriorityPlayer(player)) return 1;
+  if (guessedMedium) return 2;
   return 3;
 }
 
