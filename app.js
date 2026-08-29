@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.195";
+const APP_VERSION = "1.196";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3545,6 +3545,24 @@ function isAttackNonWolfConfirmed(player) {
 function getAutomaticRivalPerspectiveValue(viewer, target, claimants) {
   if (isRivalPerspectiveTargetConfirmedMadman(target)) return "madman";
   if (hasAttackedWolfSideConfirmedMadman()) return "werewolf";
+  if (isMediumConfirmedWerewolf(target)) return "werewolf";
+  if (isMediumConfirmedHuman(target)) return "madman";
+
+  if (viewer?.role === "medium") {
+    const mediumResult = getMediumResultActions(viewer.id, target.id).find((a) => ["human", "werewolf"].includes(a.result));
+    if (mediumResult?.result === "werewolf") return "werewolf";
+    if (mediumResult?.result === "human") return "madman";
+  }
+
+  if (viewer?.role === "seer") {
+    const divination = state.results.find((r) => r.seerId === viewer.id && r.targetId === target.id);
+    if (divination?.value === "werewolf") return "werewolf";
+    if (divination?.value === "human") return "madman";
+    const adoptedMediumResult = getAdoptedMediumResultForSeerTarget(viewer.id, target.id);
+    if (adoptedMediumResult?.result === "werewolf") return "werewolf";
+    if (adoptedMediumResult?.result === "human") return "madman";
+  }
+
   const threeSeerValue = getThreeSeerMediumHumanRivalValue(viewer, target, claimants);
   if (threeSeerValue) return threeSeerValue;
   if (shouldTreatWolfSideAsMadmanForSeer(viewer, target)) return "madman";
@@ -5348,10 +5366,8 @@ function applySelfPerspectiveRivalRoleGuesses() {
       return;
     }
     if (!remainsRival || player.manualRoleGuess || player.attackedWolfSideConfirmedMadman) return;
-    const inferredRole = mediumHumanRival
-      ? player.id === mediumHumanRival.id
-        ? "madman"
-        : "werewolf"
+    const inferredRole = selfPlayer
+      ? getAutomaticRivalPerspectiveValue(selfPlayer, player, roleClaimants)
       : "wolfSide";
     player.roleGuessCandidates = [inferredRole];
     player.primaryRoleGuess = inferredRole;
