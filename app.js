@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.191";
+const APP_VERSION = "1.192";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -49,6 +49,12 @@ const VOTE_TYPE_LABELS = {
   normal: "通常投票",
   runoff: "決選投票",
 };
+const PLAYER_RELATION_TYPES = new Set(["ally", "enemy"]);
+const PLAYER_RELATION_LABELS = {
+  ally: "仲間",
+  enemy: "敵対",
+};
+const PLAYER_RELATION_COLORS = ["#39b8c8", "#e0ad3b", "#60b878", "#a985d8", "#df718d", "#5e91d8"];
 const ROLE_ACTION_RESULT_LABELS = {
   medium: {
     unknown: "不明",
@@ -133,6 +139,7 @@ const BOARD_STATE_FIELDS = [
   "roleActions",
   "claimEvents",
   "voteHistories",
+  "playerRelations",
   "gameStatus",
   "winner",
   "startedAt",
@@ -165,6 +172,7 @@ const state = {
   roleActions: [],
   claimEvents: [],
   voteHistories: [],
+  playerRelations: [],
   gameStatus: "preparing",
   winner: "",
   startedAt: "",
@@ -255,6 +263,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "participantEmptyState",
     "ropeCountBadge",
     "openVoteDialogBtn",
+    "openPlayerRelationDialogBtn",
     "seerPerspectiveBtn",
     "mediumPerspectiveBtn",
     "playerRows",
@@ -311,6 +320,13 @@ document.addEventListener("DOMContentLoaded", () => {
     "voteSummaryPanel",
     "toggleVoteHistoryEditBtn",
     "voteHistoryList",
+    "playerRelationDialog",
+    "closePlayerRelationBtn",
+    "relationPlayerASelect",
+    "relationPlayerBSelect",
+    "relationTypeSelect",
+    "savePlayerRelationBtn",
+    "playerRelationList",
     "membershipDialog",
     "membershipForm",
     "membershipPlayerName",
@@ -520,6 +536,7 @@ function bindEvents() {
   els.markAttackedBtn.addEventListener("click", () => setPlayerStatus("attacked"));
   els.markAliveBtn.addEventListener("click", () => setPlayerStatus("alive"));
   els.openVoteDialogBtn.addEventListener("click", openVoteDialog);
+  els.openPlayerRelationDialogBtn.addEventListener("click", openPlayerRelationDialog);
   els.seerPerspectiveBtn.addEventListener("click", () => setReasoningPerspective("seer"));
   els.mediumPerspectiveBtn.addEventListener("click", () => setReasoningPerspective("medium"));
   els.closeVoteBtn.addEventListener("click", closeVoteDialog);
@@ -536,6 +553,12 @@ function bindEvents() {
   });
   els.voteDialog.addEventListener("click", (event) => {
     if (event.target === els.voteDialog) closeVoteDialog();
+  });
+  els.closePlayerRelationBtn.addEventListener("click", closePlayerRelationDialog);
+  els.relationPlayerASelect.addEventListener("change", renderPlayerRelationTargetOptions);
+  els.savePlayerRelationBtn.addEventListener("click", savePlayerRelation);
+  els.playerRelationDialog.addEventListener("click", (event) => {
+    if (event.target === els.playerRelationDialog) closePlayerRelationDialog();
   });
   els.closeMembershipBtn.addEventListener("click", closeMembershipDialog);
   els.membershipDialog.addEventListener("click", (event) => {
@@ -793,6 +816,7 @@ function hasBoardProgress() {
   if (state.roleActions.length) return true;
   if (state.claimEvents.length) return true;
   if (state.voteHistories.length) return true;
+  if (state.playerRelations.length) return true;
   return getActivePlayers().some(
     (player) =>
       Boolean(player.role) ||
@@ -1060,6 +1084,7 @@ function createGameHistory(winner, trueRoles = new Map()) {
     roleActions: structuredClone(state.roleActions),
     claimEvents: structuredClone(state.claimEvents),
     voteHistories: structuredClone(state.voteHistories),
+    playerRelations: structuredClone(state.playerRelations),
     selectedTournamentId: state.selectedTournamentId,
     boardId: activeBoardId,
   };
@@ -1229,6 +1254,7 @@ function createBoard(customName, tournamentId) {
     roleActions: [],
     claimEvents: [],
     voteHistories: [],
+    playerRelations: [],
     gameStatus: "preparing",
     winner: "",
     startedAt: "",
@@ -1320,6 +1346,7 @@ function resetBoardState() {
   state.roleActions = [];
   state.claimEvents = [];
   state.voteHistories = [];
+  state.playerRelations = [];
 }
 
 function applySelectedTournamentParticipation() {
@@ -2031,6 +2058,191 @@ function openStatusDialog(playerId) {
 function closeStatusDialog() {
   statusPlayerId = "";
   els.statusDialog.close();
+}
+
+function openPlayerRelationDialog() {
+  if (!getActivePlayers().length) return toast("参加者がいません");
+  renderPlayerRelationDialog();
+  els.playerRelationDialog.showModal();
+}
+
+function closePlayerRelationDialog() {
+  els.playerRelationDialog.close();
+}
+
+function renderPlayerRelationDialog() {
+  const players = getActivePlayers();
+  const previousA = els.relationPlayerASelect.value;
+  els.relationPlayerASelect.innerHTML = players
+    .map((player) => `<option value="${escapeHtml(player.id)}">${escapeHtml(player.name)}</option>`)
+    .join("");
+  if (players.some((player) => player.id === previousA)) els.relationPlayerASelect.value = previousA;
+  renderPlayerRelationTargetOptions();
+  const locked = isGameFinished() || players.length < 2;
+  els.relationPlayerASelect.disabled = locked;
+  els.relationPlayerBSelect.disabled = locked;
+  els.relationTypeSelect.disabled = locked;
+  els.savePlayerRelationBtn.hidden = isGameFinished();
+  els.savePlayerRelationBtn.disabled = players.length < 2;
+  renderPlayerRelationList();
+}
+
+function renderPlayerRelationTargetOptions() {
+  const playerAId = els.relationPlayerASelect.value;
+  const previousB = els.relationPlayerBSelect.value;
+  const candidates = getActivePlayers().filter((player) => player.id !== playerAId);
+  els.relationPlayerBSelect.innerHTML = candidates
+    .map((player) => `<option value="${escapeHtml(player.id)}">${escapeHtml(player.name)}</option>`)
+    .join("");
+  if (candidates.some((player) => player.id === previousB)) els.relationPlayerBSelect.value = previousB;
+}
+
+function savePlayerRelation() {
+  if (isGameFinished()) return toast("終了済み盤面は編集できません");
+  const playerAId = els.relationPlayerASelect.value;
+  const playerBId = els.relationPlayerBSelect.value;
+  const type = els.relationTypeSelect.value;
+  if (!playerAId || !playerBId || playerAId === playerBId || !PLAYER_RELATION_TYPES.has(type)) {
+    return toast("2人と関係を選択してください");
+  }
+  const pairKey = getPlayerRelationPairKey(playerAId, playerBId);
+  const existing = state.playerRelations.find(
+    (relation) => getPlayerRelationPairKey(relation.playerAId, relation.playerBId) === pairKey,
+  );
+  state.playerRelations = state.playerRelations.filter(
+    (relation) => getPlayerRelationPairKey(relation.playerAId, relation.playerBId) !== pairKey,
+  );
+  state.playerRelations.push({
+    id: existing?.id || crypto.randomUUID(),
+    playerAId,
+    playerBId,
+    type,
+    colorIndex:
+      existing?.type === type
+        ? normalizePlayerRelationColorIndex(existing.colorIndex)
+        : getNextPlayerRelationColorIndex(type),
+    createdAt: existing?.createdAt || new Date().toISOString(),
+  });
+  reconcileAllyRelationColors();
+  renderAndStore();
+  renderPlayerRelationDialog();
+  toast(existing ? "ラインを変更しました" : "ラインを設定しました");
+}
+
+function renderPlayerRelationList() {
+  const relations = [...state.playerRelations].sort((a, b) => {
+    const typeDiff = a.type.localeCompare(b.type);
+    return typeDiff || String(a.createdAt).localeCompare(String(b.createdAt));
+  });
+  if (!relations.length) {
+    els.playerRelationList.innerHTML = '<div class="empty-inline">設定したラインはありません</div>';
+    return;
+  }
+  els.playerRelationList.innerHTML = relations
+    .map((relation) => {
+      const playerA = findPlayer(relation.playerAId);
+      const playerB = findPlayer(relation.playerBId);
+      if (!playerA || !playerB) return "";
+      const color = getPlayerRelationColor(relation.colorIndex);
+      return `
+        <div class="player-relation-item" data-player-relation-id="${escapeHtml(relation.id)}">
+          <span class="player-relation-swatch ${escapeHtml(relation.type)}" style="--relation-color: ${color}" aria-hidden="true"></span>
+          <span class="player-relation-names">${escapeHtml(playerA.name)} − ${escapeHtml(playerB.name)}</span>
+          <span class="player-relation-type">${escapeHtml(PLAYER_RELATION_LABELS[relation.type])}</span>
+          ${isGameFinished() ? "" : '<button class="ghost-button" type="button" data-remove-player-relation>解除</button>'}
+        </div>`;
+    })
+    .join("");
+  els.playerRelationList.querySelectorAll("[data-remove-player-relation]").forEach((button) => {
+    button.addEventListener("click", () => removePlayerRelation(button.closest("[data-player-relation-id]")?.dataset.playerRelationId));
+  });
+}
+
+function removePlayerRelation(relationId) {
+  if (!relationId || isGameFinished()) return;
+  state.playerRelations = state.playerRelations.filter((relation) => relation.id !== relationId);
+  reconcileAllyRelationColors();
+  renderAndStore();
+  renderPlayerRelationDialog();
+  toast("ラインを解除しました");
+}
+
+function getPlayerRelationPairKey(playerAId, playerBId) {
+  return [String(playerAId), String(playerBId)].sort().join(":");
+}
+
+function getPlayerRelationColor(colorIndex) {
+  return PLAYER_RELATION_COLORS[normalizePlayerRelationColorIndex(colorIndex)];
+}
+
+function normalizePlayerRelationColorIndex(value) {
+  const index = Number.isFinite(Number(value)) ? Math.max(0, Math.trunc(Number(value))) : 0;
+  return index % PLAYER_RELATION_COLORS.length;
+}
+
+function getNextPlayerRelationColorIndex(type) {
+  const used = new Set(
+    state.playerRelations.filter((relation) => relation.type === type).map((relation) => normalizePlayerRelationColorIndex(relation.colorIndex)),
+  );
+  const available = PLAYER_RELATION_COLORS.findIndex((_, index) => !used.has(index));
+  return available >= 0 ? available : state.playerRelations.filter((relation) => relation.type === type).length % PLAYER_RELATION_COLORS.length;
+}
+
+function reconcileAllyRelationColors(relations = state.playerRelations) {
+  const allyRelations = relations.filter((relation) => relation.type === "ally");
+  const adjacency = new Map();
+  allyRelations.forEach((relation) => {
+    if (!adjacency.has(relation.playerAId)) adjacency.set(relation.playerAId, new Set());
+    if (!adjacency.has(relation.playerBId)) adjacency.set(relation.playerBId, new Set());
+    adjacency.get(relation.playerAId).add(relation.playerBId);
+    adjacency.get(relation.playerBId).add(relation.playerAId);
+  });
+  const components = [];
+  const visited = new Set();
+  adjacency.forEach((_, playerId) => {
+    if (visited.has(playerId)) return;
+    const ids = new Set();
+    const queue = [playerId];
+    while (queue.length) {
+      const current = queue.shift();
+      if (visited.has(current)) continue;
+      visited.add(current);
+      ids.add(current);
+      adjacency.get(current)?.forEach((next) => queue.push(next));
+    }
+    const relations = allyRelations.filter((relation) => ids.has(relation.playerAId) && ids.has(relation.playerBId));
+    components.push({ ids, relations });
+  });
+  components.sort((a, b) => String(a.relations[0]?.createdAt || "").localeCompare(String(b.relations[0]?.createdAt || "")));
+  const used = new Set();
+  components.forEach((component, componentIndex) => {
+    const preferred = component.relations
+      .map((relation) => normalizePlayerRelationColorIndex(relation.colorIndex))
+      .find((index) => !used.has(index));
+    const available = PLAYER_RELATION_COLORS.findIndex((_, index) => !used.has(index));
+    const colorIndex = preferred ?? (available >= 0 ? available : componentIndex % PLAYER_RELATION_COLORS.length);
+    used.add(colorIndex);
+    component.relations.forEach((relation) => {
+      relation.colorIndex = colorIndex;
+    });
+  });
+}
+
+function getPlayerRelationMarkersHtml(playerId) {
+  const ally = state.playerRelations.find(
+    (relation) => relation.type === "ally" && [relation.playerAId, relation.playerBId].includes(playerId),
+  );
+  const enemyColors = [...new Set(
+    state.playerRelations
+      .filter((relation) => relation.type === "enemy" && [relation.playerAId, relation.playerBId].includes(playerId))
+      .map((relation) => getPlayerRelationColor(relation.colorIndex)),
+  )];
+  if (!ally && !enemyColors.length) return "";
+  return `
+    <span class="player-relation-markers" aria-hidden="true">
+      ${ally ? `<i class="player-ally-marker" style="--relation-color: ${getPlayerRelationColor(ally.colorIndex)}"></i>` : ""}
+      ${enemyColors.length ? `<span class="player-enemy-markers">${enemyColors.map((color) => `<i style="--relation-color: ${color}"></i>`).join("")}</span>` : ""}
+    </span>`;
 }
 
 function openVoteDialog() {
@@ -3032,6 +3244,7 @@ function renderGameLifecycle() {
   els.finishGameBtn.hidden = !reasoningView || !inProgress;
   els.nextGameBtn.hidden = !reasoningView || !finished;
   els.openVoteDialogBtn.hidden = !reasoningView || finished;
+  els.openPlayerRelationDialogBtn.hidden = !reasoningView;
   els.dateInputWrap.classList.toggle("locked", inProgress || finished);
   [
     els.tournamentSelect,
@@ -3207,11 +3420,13 @@ function renderRows() {
     const perspectiveGrid = getPerspectiveGridHtml(player);
     const impression = getPlayerImpression(player);
     const roleGuess = getDisplayedRoleGuess(player);
+    const relationMarkers = getPlayerRelationMarkersHtml(player.id);
     row.innerHTML = `
-      <button class="sticky-player-name" type="button" ${isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を編集">${escapeHtml(player.name)}</button>
+      <button class="sticky-player-name" type="button" ${isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を編集">${relationMarkers}<span class="sticky-player-name-text">${escapeHtml(player.name)}</span></button>
       <button class="player-info" type="button" ${isGameFinished() ? "disabled" : ""}>
         <span class="player-main">
           <span class="player-name-row">
+            ${relationMarkers}
             <span class="player-name">${escapeHtml(player.name)}</span>
             ${isGameFinished() && player.trueRole ? `<span class="true-role-label ${getRoleGuessClass(player.trueRole)}">${escapeHtml(ROLE_GUESS_LABELS[player.trueRole] || player.trueRole)}</span>` : ""}
             <span class="role-guess-label ${getRoleGuessClass(roleGuess.value)} ${player.wolfTeammate || (isWolfMode() && isPriorityPlayer(player)) ? "wolf-teammate" : ""} ${player.blackTargetRank ? "black-target" : ""}">
@@ -5329,6 +5544,7 @@ function createBoardPayloadFromHistory(history) {
   const roleActions = structuredClone(history.roleActions || []);
   const claimEvents = structuredClone(history.claimEvents || []);
   const voteHistories = structuredClone(history.voteHistories || []);
+  const playerRelations = structuredClone(history.playerRelations || []);
   const day = Math.max(
     1,
     ...results.map(getDivinationOrder),
@@ -5360,6 +5576,7 @@ function createBoardPayloadFromHistory(history) {
     roleActions,
     claimEvents,
     voteHistories,
+    playerRelations,
     gameStatus: "finished",
     winner: normalizeCitizenText(history.winner || ""),
     startedAt: history.startedAt || "",
@@ -6116,6 +6333,7 @@ function buildExportText() {
   getActivePlayers().forEach((player) => {
     lines.push(`- ${player.name} / ${getStatusDisplay(player)} / ${player.role ? ROLE_LABELS[player.role] : "COなし"} / ${formatRoleGuessForExport(player)} / ${formatImpressionForExport(player)}`);
   });
+  appendPlayerRelationsToText(lines, state.playerRelations, state.players);
   lines.push("", "時系列");
   lines.push(...buildCurrentTimeline());
   return lines.join("\n");
@@ -6148,9 +6366,21 @@ function buildHistoryText(history) {
     lines.push("", "黒塗り位置");
     blackTargets.forEach((player) => lines.push(`- ${getCircledNumber(player.blackTargetRank)} ${player.name}`));
   }
+  appendPlayerRelationsToText(lines, history.playerRelations, history.players);
   lines.push("", "時系列");
   lines.push(...buildHistoryTimeline(history));
   return lines.join("\n");
+}
+
+function appendPlayerRelationsToText(lines, relations, players) {
+  const normalized = normalizePlayerRelations(relations, players);
+  if (!normalized.length) return;
+  lines.push("", "参加者ライン");
+  normalized.forEach((relation) => {
+    const playerA = players.find((player) => player.id === relation.playerAId);
+    const playerB = players.find((player) => player.id === relation.playerBId);
+    if (playerA && playerB) lines.push(`- ${PLAYER_RELATION_LABELS[relation.type]}: ${playerA.name} − ${playerB.name}`);
+  });
 }
 
 function buildHistoryTimeline(history) {
@@ -6634,6 +6864,13 @@ function getMeaningfulProgressSignature() {
       targetId,
       note: "",
     })),
+    playerRelations: sortById(state.playerRelations).map(({ id, playerAId, playerBId, type, colorIndex }) => ({
+      id,
+      playerAId,
+      playerBId,
+      type,
+      colorIndex,
+    })),
   });
 }
 
@@ -6801,6 +7038,7 @@ function applySavedState(saved) {
   state.claimEvents = Array.isArray(saved.claimEvents) ? saved.claimEvents.map(normalizeClaimEvent).filter(Boolean) : [];
   restorePriorityPlayerClaimFromEvents(state.players, state.claimEvents);
   state.voteHistories = Array.isArray(saved.voteHistories) ? saved.voteHistories.map(normalizeVoteHistory).filter(Boolean) : [];
+  state.playerRelations = normalizePlayerRelations(saved.playerRelations, state.players);
   state.customImpressionReasons = Array.isArray(saved.customImpressionReasons)
     ? saved.customImpressionReasons.map(normalizeImpressionReason).filter((reason) => reason?.custom)
     : [];
@@ -7099,6 +7337,7 @@ function resetStateToDefaults() {
     roleActions: [],
     claimEvents: [],
     voteHistories: [],
+    playerRelations: [],
     gameStatus: "preparing",
     winner: "",
     startedAt: "",
@@ -7312,6 +7551,7 @@ function ensureMatchDefaults() {
   state.gameNumber = normalizeGameNumber(state.gameNumber);
   state.selfBiteAllowed = state.selfBiteAllowed === true;
   state.noBiteAllowed = state.noBiteAllowed === true;
+  state.playerRelations = normalizePlayerRelations(state.playerRelations, state.players);
   state.winner = state.gameStatus === "finished" ? normalizeCitizenText(state.winner || "") : "";
   state.activeView = normalizeActiveView(state.activeView);
   state.rosterFilter = normalizeRosterFilter(state.rosterFilter);
@@ -7777,6 +8017,30 @@ function normalizeVoteHistory(vote) {
   };
 }
 
+function normalizePlayerRelations(relations, players = []) {
+  if (!Array.isArray(relations)) return [];
+  const validIds = new Set((Array.isArray(players) ? players : []).map((player) => String(player.id)));
+  const byPair = new Map();
+  relations.forEach((relation) => {
+    if (!relation?.playerAId || !relation?.playerBId || !PLAYER_RELATION_TYPES.has(relation.type)) return;
+    const playerAId = String(relation.playerAId);
+    const playerBId = String(relation.playerBId);
+    if (playerAId === playerBId) return;
+    if (validIds.size && (!validIds.has(playerAId) || !validIds.has(playerBId))) return;
+    byPair.set(getPlayerRelationPairKey(playerAId, playerBId), {
+      id: String(relation.id || crypto.randomUUID()),
+      playerAId,
+      playerBId,
+      type: relation.type,
+      colorIndex: normalizePlayerRelationColorIndex(relation.colorIndex),
+      createdAt: String(relation.createdAt || ""),
+    });
+  });
+  const normalized = [...byPair.values()];
+  reconcileAllyRelationColors(normalized);
+  return normalized;
+}
+
 function normalizeGameHistory(history) {
   if (!history?.id || !Array.isArray(history.players) || !Array.isArray(history.results)) return null;
   const normalized = {
@@ -7814,6 +8078,7 @@ function normalizeGameHistory(history) {
     roleActions: Array.isArray(history.roleActions) ? history.roleActions.map(normalizeRoleAction).filter(Boolean) : [],
     claimEvents: Array.isArray(history.claimEvents) ? history.claimEvents.map(normalizeClaimEvent).filter(Boolean) : [],
     voteHistories: Array.isArray(history.voteHistories) ? history.voteHistories.map(normalizeVoteHistory).filter(Boolean) : [],
+    playerRelations: normalizePlayerRelations(history.playerRelations, history.players),
   };
   restorePriorityPlayerClaimFromEvents(normalized.players, normalized.claimEvents);
   backfillRoleClaimOrders(normalized.players);
@@ -7855,6 +8120,7 @@ function normalizeBoard(board) {
   payload.claimEvents = Array.isArray(payload.claimEvents) ? payload.claimEvents.map(normalizeClaimEvent).filter(Boolean) : [];
   restorePriorityPlayerClaimFromEvents(payload.players, payload.claimEvents);
   payload.voteHistories = Array.isArray(payload.voteHistories) ? payload.voteHistories.map(normalizeVoteHistory).filter(Boolean) : [];
+  payload.playerRelations = normalizePlayerRelations(payload.playerRelations, payload.players);
   payload.gameStatus = ["in_progress", "finished"].includes(payload.gameStatus) ? payload.gameStatus : "preparing";
   payload.winner = payload.gameStatus === "finished" ? normalizeCitizenText(payload.winner || "") : "";
   payload.startedAt = payload.gameStatus !== "preparing" ? String(payload.startedAt || "") : "";

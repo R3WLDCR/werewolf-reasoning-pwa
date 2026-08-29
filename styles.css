@@ -703,6 +703,48 @@ select:disabled {
   flex: 1 1 auto;
 }
 
+.player-relation-markers {
+  display: inline-grid;
+  grid-template-columns: 5px 4px;
+  gap: 2px;
+  width: 11px;
+  height: 28px;
+  flex: 0 0 11px;
+  align-self: center;
+}
+
+.player-ally-marker {
+  width: 5px;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--relation-color);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.player-enemy-markers {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+}
+
+.player-enemy-markers i {
+  display: block;
+  width: 4px;
+  min-height: 3px;
+  flex: 1 1 auto;
+  border-radius: 2px;
+  background: var(--relation-color);
+}
+
+.sticky-player-name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .role-guess-label,
 .true-role-label {
   flex: 0 0 auto;
@@ -1407,6 +1449,7 @@ select:disabled {
 .impression-dialog,
 .role-guess-dialog,
 .vote-dialog,
+.player-relation-dialog,
 .rival-perspective-dialog {
   width: min(760px, 100%);
   max-width: 100%;
@@ -1426,6 +1469,7 @@ select:disabled {
 .impression-dialog::backdrop,
 .role-guess-dialog::backdrop,
 .vote-dialog::backdrop,
+.player-relation-dialog::backdrop,
 .rival-perspective-dialog::backdrop {
   background: rgba(22, 35, 38, 0.42);
 }
@@ -1439,6 +1483,7 @@ select:disabled {
 .impression-dialog form,
 .role-guess-dialog form,
 .vote-dialog form,
+.player-relation-dialog form,
 .rival-perspective-dialog form {
   display: grid;
   gap: 13px;
@@ -1451,6 +1496,96 @@ select:disabled {
 
 .impression-dialog form {
   max-height: 92dvh;
+}
+
+.player-relation-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(112px, 0.7fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.relation-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.relation-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.relation-legend i {
+  display: inline-block;
+  background: #39b8c8;
+}
+
+.relation-legend-ally {
+  width: 5px;
+  height: 20px;
+  border-radius: 3px;
+}
+
+.relation-legend-enemy {
+  width: 16px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.player-relation-list {
+  display: grid;
+  gap: 7px;
+}
+
+.player-relation-item {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 46px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--paper);
+}
+
+.player-relation-swatch {
+  display: block;
+  background: var(--relation-color);
+}
+
+.player-relation-swatch.ally {
+  width: 6px;
+  height: 28px;
+  border-radius: 3px;
+}
+
+.player-relation-swatch.enemy {
+  width: 18px;
+  height: 4px;
+  border-radius: 2px;
+}
+
+.player-relation-names {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 900;
+}
+
+.player-relation-type {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
 }
 
 .board-list {
@@ -2454,7 +2589,9 @@ input.invalid {
     position: sticky;
     left: 0;
     z-index: 5;
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 5px;
     width: 88px;
     height: 44px;
     padding: 0 8px 0 10px;
@@ -2501,6 +2638,18 @@ input.invalid {
 
   #reasoningView .player-name {
     display: none;
+  }
+
+  #reasoningView .player-name-row > .player-relation-markers {
+    display: none;
+  }
+
+  .player-relation-entry {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .player-relation-entry .primary-button {
+    min-height: 44px;
   }
 
   #reasoningView .role-guess-label,

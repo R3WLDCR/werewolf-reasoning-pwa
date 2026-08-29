@@ -145,6 +145,7 @@
               <div id="wolfCountBadge" class="wolf-count-badge" aria-label="設定済み人狼数">人狼 2人</div>
               <div id="ropeCountBadge" class="rope-count-badge" aria-label="残り縄数">残り0縄</div>
               <div id="attackRuleBadge" class="attack-rule-badge">標準襲撃</div>
+              <button id="openPlayerRelationDialogBtn" class="secondary-button" type="button">ライン</button>
               <button id="openVoteDialogBtn" class="secondary-button" type="button">投票</button>
             </div>
             <div class="perspective-toggle" role="group" aria-label="目線切替">
@@ -416,6 +417,36 @@
           <button id="toggleVoteHistoryEditBtn" class="ghost-button" type="button">履歴編集を表示</button>
         </div>
         <div id="voteHistoryList" class="role-action-list"></div>
+      </form>
+    </dialog>
+
+    <dialog id="playerRelationDialog" class="player-relation-dialog">
+      <form method="dialog">
+        <div class="sheet-handle" aria-hidden="true"></div>
+        <div class="sheet-heading">
+          <div>
+            <p class="kicker">Player Lines</p>
+            <h2>参加者ライン</h2>
+          </div>
+          <button id="closePlayerRelationBtn" class="round-button" type="button" aria-label="閉じる">×</button>
+        </div>
+        <div class="player-relation-entry">
+          <label class="field"><span>参加者A</span><select id="relationPlayerASelect"></select></label>
+          <label class="field"><span>参加者B</span><select id="relationPlayerBSelect"></select></label>
+          <label class="field">
+            <span>関係</span>
+            <select id="relationTypeSelect">
+              <option value="ally">仲間</option>
+              <option value="enemy">敵対</option>
+            </select>
+          </label>
+          <button id="savePlayerRelationBtn" class="primary-button" type="button">ラインを設定</button>
+        </div>
+        <div class="relation-legend" aria-label="ライン色の見方">
+          <span><i class="relation-legend-ally" aria-hidden="true"></i>左の太線: 仲間</span>
+          <span><i class="relation-legend-enemy" aria-hidden="true"></i>細い色: 敵対</span>
+        </div>
+        <div id="playerRelationList" class="player-relation-list"></div>
       </form>
     </dialog>
 
