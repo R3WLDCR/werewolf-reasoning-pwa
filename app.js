@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.194";
+const APP_VERSION = "1.195";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -2228,21 +2228,22 @@ function reconcileAllyRelationColors(relations = state.playerRelations) {
   });
 }
 
-function getPlayerRelationMarkersHtml(playerId) {
+function getPlayerAllyMarkerHtml(playerId) {
   const ally = state.playerRelations.find(
     (relation) => relation.type === "ally" && [relation.playerAId, relation.playerBId].includes(playerId),
   );
+  if (!ally) return "";
+  return `<i class="player-ally-marker" style="--relation-color: ${getPlayerRelationColor(ally.colorIndex)}" aria-hidden="true"></i>`;
+}
+
+function getPlayerEnemyMarkersHtml(playerId) {
   const enemyColors = [...new Set(
     state.playerRelations
       .filter((relation) => relation.type === "enemy" && [relation.playerAId, relation.playerBId].includes(playerId))
       .map((relation) => getPlayerRelationColor(relation.colorIndex)),
   )];
-  if (!ally && !enemyColors.length) return "";
-  return `
-    <span class="player-relation-markers" aria-hidden="true">
-      ${ally ? `<i class="player-ally-marker" style="--relation-color: ${getPlayerRelationColor(ally.colorIndex)}"></i>` : ""}
-      ${enemyColors.length ? `<span class="player-enemy-markers">${enemyColors.map((color) => `<i style="--relation-color: ${color}"></i>`).join("")}</span>` : ""}
-    </span>`;
+  if (!enemyColors.length) return "";
+  return `<span class="player-enemy-markers" aria-hidden="true">${enemyColors.map((color) => `<i style="--relation-color: ${color}"></i>`).join("")}</span>`;
 }
 
 function openVoteDialog() {
@@ -3420,14 +3421,16 @@ function renderRows() {
     const perspectiveGrid = getPerspectiveGridHtml(player);
     const impression = getPlayerImpression(player);
     const roleGuess = getDisplayedRoleGuess(player);
-    const relationMarkers = getPlayerRelationMarkersHtml(player.id);
+    const allyMarker = getPlayerAllyMarkerHtml(player.id);
+    const enemyMarkers = getPlayerEnemyMarkersHtml(player.id);
     row.innerHTML = `
-      <button class="sticky-player-name" type="button" ${isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を編集">${relationMarkers}<span class="sticky-player-name-text">${escapeHtml(player.name)}</span></button>
+      <button class="sticky-player-name" type="button" ${isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を編集">${allyMarker}<span class="sticky-player-name-text">${escapeHtml(player.name)}</span>${enemyMarkers}</button>
       <button class="player-info" type="button" ${isGameFinished() ? "disabled" : ""}>
         <span class="player-main">
           <span class="player-name-row">
-            ${relationMarkers}
+            ${allyMarker}
             <span class="player-name">${escapeHtml(player.name)}</span>
+            ${enemyMarkers}
             ${isGameFinished() && player.trueRole ? `<span class="true-role-label ${getRoleGuessClass(player.trueRole)}">${escapeHtml(ROLE_GUESS_LABELS[player.trueRole] || player.trueRole)}</span>` : ""}
             <span class="role-guess-label ${getRoleGuessClass(roleGuess.value)} ${player.wolfTeammate || (isWolfMode() && isPriorityPlayer(player)) ? "wolf-teammate" : ""} ${player.blackTargetRank ? "black-target" : ""}">
               ${escapeHtml(roleGuess.label)}
