@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.193";
+const APP_VERSION = "1.194";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -4642,25 +4642,33 @@ function reconcileFullOutsiderRoleGuessVillagers() {
   const outsiderRoles = new Set(["werewolf", "wolfSide", "madman"]);
   const requiredOutsiders = (Number(state.wolfCount) || 0) + 1;
 
-  const multiCoRoles = ["seer", "medium", "guard", "hunter"];
-  let groupOutsiderCount = 0;
-  const processedPlayerIds = new Set();
+  const seers = getCurrentSeerClaimants().filter((s) => !isBrokenSeer(s));
+  const hasUnresolvedMultiSeer = seers.length >= 2;
+  const isSelfSeer = isSelfPerspectiveSeer();
 
-  multiCoRoles.forEach((role) => {
-    const claimants = players.filter((p) => p.role === role);
-    if (claimants.length === 0) return;
-    claimants.forEach((p) => processedPlayerIds.add(p.id));
-    const roleGuessedOutsiders = claimants.filter((p) => outsiderRoles.has(getDisplayedRoleGuess(p).value)).length;
-    const guaranteedOutsiders = Math.max(0, claimants.length - 1);
-    groupOutsiderCount += Math.max(roleGuessedOutsiders, guaranteedOutsiders);
-  });
+  let allOutsidersFilled = false;
 
-  const nonClaimantOutsiders = players.filter(
-    (p) => !processedPlayerIds.has(p.id) && outsiderRoles.has(getDisplayedRoleGuess(p).value),
-  ).length;
+  if (!hasUnresolvedMultiSeer && !isSelfSeer) {
+    const multiCoRoles = ["seer", "medium", "guard", "hunter"];
+    let groupOutsiderCount = 0;
+    const processedPlayerIds = new Set();
 
-  const totalOutsiders = groupOutsiderCount + nonClaimantOutsiders;
-  const allOutsidersFilled = requiredOutsiders > 1 && totalOutsiders >= requiredOutsiders;
+    multiCoRoles.forEach((role) => {
+      const claimants = players.filter((p) => p.role === role);
+      if (claimants.length === 0) return;
+      claimants.forEach((p) => processedPlayerIds.add(p.id));
+      const roleGuessedOutsiders = claimants.filter((p) => outsiderRoles.has(getDisplayedRoleGuess(p).value)).length;
+      const guaranteedOutsiders = Math.max(0, claimants.length - 1);
+      groupOutsiderCount += Math.max(roleGuessedOutsiders, guaranteedOutsiders);
+    });
+
+    const nonClaimantOutsiders = players.filter(
+      (p) => !processedPlayerIds.has(p.id) && outsiderRoles.has(getDisplayedRoleGuess(p).value),
+    ).length;
+
+    const totalOutsiders = groupOutsiderCount + nonClaimantOutsiders;
+    allOutsidersFilled = requiredOutsiders > 1 && totalOutsiders >= requiredOutsiders;
+  }
 
   players.forEach((player) => {
     const savedGuess = getRoleGuessDisplay(player).value;
