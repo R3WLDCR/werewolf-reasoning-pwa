@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.192";
+const APP_VERSION = "1.193";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -4497,43 +4497,88 @@ function getExposedHumanClaimForSeer(player, seer) {
 
 function isFullOutsiderExposureForSeer(seer) {
   if (!seer || isBrokenSeer(seer)) return false;
-  return getOutsiderExposureIdsForSeer(seer).size >= getTotalOutsiderCount();
+  return getOutsiderExposureCountForSeer(seer) >= getTotalOutsiderCount();
 }
 
 function getTotalOutsiderCount() {
   return Math.max(0, Number(state.wolfCount) || 0) + 1;
 }
 
-function getOutsiderExposureIdsForSeer(seer) {
-  const ids = new Set();
+function getOutsiderExposureCountForSeer(seer) {
+  if (!seer) return 0;
+  const activePlayers = getActivePlayers();
+  const multiCoRoles = ["medium", "guard", "hunter"];
   const otherSeerIds = new Set(getSeers().filter((claimant) => claimant.id !== seer.id).map((claimant) => claimant.id));
-  getActivePlayers().forEach((player) => {
-    const mediumConfirmedWerewolf =
-      player.mediumConfirmedRoleGuess === "werewolf" &&
-      player.confirmedRoleEvidence?.some((evidence) => evidence.role === "medium" && evidence.value === "werewolf");
-    if (mediumConfirmedWerewolf) {
-      ids.add(player.id);
-      return;
-    }
-    if (getAdoptedMediumResultForSeerTarget(seer.id, player.id)?.result === "werewolf") {
-      ids.add(player.id);
-    }
-    if (otherSeerIds.has(player.id) || ["werewolf", "wolfSide", "madman"].includes(player.role)) {
-      ids.add(player.id);
-      return;
-    }
-    const override = getSeerColumnOverride(seer.id, player.id);
-    if (override && (override.value === "human" || override.value === "confirmedWhite" || VILLAGER_SIDE_ROLES.has(override.value))) {
-      return;
-    }
-    if (["werewolf", "wolfSide", "madman"].includes(override?.value)) {
-      ids.add(player.id);
+  const adoptedMediumId = getAdoptedMediumId(seer.id);
+
+  let groupExposureCount = 0;
+  const multiCoPlayerIds = new Set();
+
+  multiCoRoles.forEach((role) => {
+    const claimants = activePlayers.filter((p) => p.role === role);
+    if (claimants.length === 0) return;
+    claimants.forEach((p) => multiCoPlayerIds.add(p.id));
+
+    let specificOutsiderCount = 0;
+    claimants.forEach((player) => {
+      if (isSpecificOutsiderForSeer(player, seer, adoptedMediumId)) {
+        specificOutsiderCount += 1;
+      }
+    });
+
+    const guaranteedOutsiders = Math.max(0, claimants.length - 1);
+    groupExposureCount += Math.max(specificOutsiderCount, guaranteedOutsiders);
+  });
+
+  const otherSeerCount = otherSeerIds.size;
+
+  let nonClaimantOutsiderCount = 0;
+  activePlayers.forEach((player) => {
+    if (player.id === seer.id) return;
+    if (otherSeerIds.has(player.id)) return;
+    if (multiCoPlayerIds.has(player.id)) return;
+    if (isSpecificOutsiderForSeer(player, seer, adoptedMediumId)) {
+      nonClaimantOutsiderCount += 1;
     }
   });
-  state.results
-    .filter((result) => result.seerId === seer.id && result.value === "werewolf")
-    .forEach((result) => ids.add(result.targetId));
-  return ids;
+
+  return otherSeerCount + groupExposureCount + nonClaimantOutsiderCount;
+}
+
+function isSpecificOutsiderForSeer(player, seer, adoptedMediumId = getAdoptedMediumId(seer?.id)) {
+  if (!player || !seer) return false;
+  if (player.id === seer.id) return false;
+
+  const override = getSeerColumnOverride(seer.id, player.id);
+  if (override && (override.value === "human" || override.value === "confirmedWhite" || VILLAGER_SIDE_ROLES.has(override.value))) {
+    return false;
+  }
+  if (override && ["werewolf", "wolfSide", "madman"].includes(override.value)) {
+    return true;
+  }
+
+  const mediumConfirmedWerewolf =
+    player.mediumConfirmedRoleGuess === "werewolf" &&
+    player.confirmedRoleEvidence?.some((evidence) => evidence.role === "medium" && evidence.value === "werewolf");
+  if (mediumConfirmedWerewolf) return true;
+
+  if (getAdoptedMediumResultForSeerTarget(seer.id, player.id)?.result === "werewolf") {
+    return true;
+  }
+
+  if (["werewolf", "wolfSide", "madman"].includes(player.role)) {
+    return true;
+  }
+
+  if (state.results.some((result) => result.seerId === seer.id && result.targetId === player.id && result.value === "werewolf")) {
+    return true;
+  }
+
+  if (adoptedMediumId && player.role === "medium" && player.id !== adoptedMediumId) {
+    return true;
+  }
+
+  return false;
 }
 
 function applyConfirmedWhiteUpdates() {
@@ -4596,8 +4641,26 @@ function reconcileFullOutsiderRoleGuessVillagers() {
   const players = getActivePlayers();
   const outsiderRoles = new Set(["werewolf", "wolfSide", "madman"]);
   const requiredOutsiders = (Number(state.wolfCount) || 0) + 1;
-  const outsiderCount = players.filter((player) => outsiderRoles.has(getDisplayedRoleGuess(player).value)).length;
-  const allOutsidersFilled = requiredOutsiders > 1 && outsiderCount >= requiredOutsiders;
+
+  const multiCoRoles = ["seer", "medium", "guard", "hunter"];
+  let groupOutsiderCount = 0;
+  const processedPlayerIds = new Set();
+
+  multiCoRoles.forEach((role) => {
+    const claimants = players.filter((p) => p.role === role);
+    if (claimants.length === 0) return;
+    claimants.forEach((p) => processedPlayerIds.add(p.id));
+    const roleGuessedOutsiders = claimants.filter((p) => outsiderRoles.has(getDisplayedRoleGuess(p).value)).length;
+    const guaranteedOutsiders = Math.max(0, claimants.length - 1);
+    groupOutsiderCount += Math.max(roleGuessedOutsiders, guaranteedOutsiders);
+  });
+
+  const nonClaimantOutsiders = players.filter(
+    (p) => !processedPlayerIds.has(p.id) && outsiderRoles.has(getDisplayedRoleGuess(p).value),
+  ).length;
+
+  const totalOutsiders = groupOutsiderCount + nonClaimantOutsiders;
+  const allOutsidersFilled = requiredOutsiders > 1 && totalOutsiders >= requiredOutsiders;
 
   players.forEach((player) => {
     const savedGuess = getRoleGuessDisplay(player).value;
@@ -4613,7 +4676,7 @@ function reconcileFullOutsiderRoleGuessVillagers() {
       }
       return;
     }
-    if (!allOutsidersFilled || player.manualRoleGuess || getDisplayedRoleGuess(player).value !== "unknown") return;
+    if (!allOutsidersFilled || player.manualRoleGuess || player.role || getDisplayedRoleGuess(player).value !== "unknown") return;
     player.roleGuessCandidates = ["villager"];
     player.primaryRoleGuess = "villager";
     player.manualRoleGuess = false;
