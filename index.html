@@ -165,7 +165,7 @@
 
         <section id="exportView" class="view-stack" aria-label="ログ">
           <section class="setup-panel">
-            <button id="copyExportBtn" class="secondary-button wide" type="button">現在の盤面をコピー</button>
+            <button id="copyExportBtn" class="secondary-button wide" type="button">現在盤面をMarkdownコピー</button>
           </section>
           <section class="history-panel" aria-label="終了済みゲーム">
             <div class="section-heading">
@@ -176,6 +176,9 @@
               <button id="selectAllHistoriesBtn" class="secondary-button" type="button">すべて選択</button>
               <button id="clearHistorySelectionBtn" class="secondary-button" type="button">選択解除</button>
               <button id="deleteSelectedHistoriesBtn" class="danger-button" type="button" disabled>選択削除</button>
+            </div>
+            <div class="history-export-actions">
+              <button id="downloadHistoryCsvBtn" class="secondary-button wide" type="button">全履歴CSVをダウンロード</button>
             </div>
             <div id="historyList" class="history-list"></div>
             <div id="historyEmptyState" class="empty-state compact">
@@ -188,7 +191,7 @@
               <button id="closeHistoryDetailBtn" class="secondary-button" type="button">一覧へ</button>
               <button id="openHistoryBoardBtn" class="primary-button" type="button">終了盤面を開く</button>
               <button id="editHistoryBtn" class="secondary-button" type="button">盤面を編集</button>
-              <button id="copyHistoryBtn" class="secondary-button" type="button">コピー</button>
+              <button id="copyHistoryBtn" class="secondary-button" type="button">Markdownコピー</button>
               <button id="deleteHistoryBtn" class="danger-button" type="button">削除</button>
             </div>
             <pre id="historyDetailPreview"></pre>

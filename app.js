@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.200";
+const APP_VERSION = "1.201";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -275,6 +275,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "selectAllHistoriesBtn",
     "clearHistorySelectionBtn",
     "deleteSelectedHistoriesBtn",
+    "downloadHistoryCsvBtn",
     "historyDetailPanel",
     "historyDetailPreview",
     "closeHistoryDetailBtn",
@@ -508,6 +509,7 @@ function bindEvents() {
   els.openHistoryBoardBtn.addEventListener("click", openSelectedHistoryBoard);
   els.editHistoryBtn.addEventListener("click", openHistoryEditDialog);
   els.copyHistoryBtn.addEventListener("click", copySelectedHistory);
+  els.downloadHistoryCsvBtn.addEventListener("click", downloadHistoryCsv);
   els.deleteHistoryBtn.addEventListener("click", deleteSelectedHistory);
   els.selectAllHistoriesBtn.addEventListener("click", selectAllHistories);
   els.clearHistorySelectionBtn.addEventListener("click", clearHistorySelection);
@@ -3306,6 +3308,7 @@ function renderHistories() {
   renderHistorySelectionControls();
   els.deleteTournamentHistoriesBtn.disabled = getHistoriesForTournament(state.selectedTournamentId).length === 0;
   els.deleteAllHistoriesBtn.disabled = state.gameHistories.length === 0;
+  els.downloadHistoryCsvBtn.disabled = state.gameHistories.length === 0;
 }
 
 function renderSyncStatus() {
@@ -5744,7 +5747,7 @@ async function copyExport() {
   const text = buildExportText();
   try {
     await navigator.clipboard.writeText(text);
-    toast("ログをコピーしました");
+    toast("Markdownをコピーしました");
   } catch {
     showExportFallback(text);
   }
@@ -5843,7 +5846,7 @@ async function copySelectedHistory() {
   const text = buildHistoryText(history);
   try {
     await navigator.clipboard.writeText(text);
-    toast("履歴をコピーしました");
+    toast("履歴Markdownをコピーしました");
   } catch {
     showExportFallback(text);
   }
@@ -6574,26 +6577,40 @@ function showExportFallback(text) {
   toast("テキストを選択しました");
 }
 
+function downloadHistoryCsv() {
+  if (!state.gameHistories.length) return;
+  const text = `\uFEFF${buildHistoryCsv()}`;
+  downloadTextFile("werewolf-game-histories.csv", text, "text/csv;charset=utf-8");
+  toast("履歴CSVをダウンロードしました");
+}
+
+function downloadTextFile(filename, text, type) {
+  const blob = new Blob([text], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 function buildExportText() {
-  const lines = [getMatchSummary(), `人狼: ${state.wolfCount}`];
-  lines.push(`残り縄: ${getRemainingRopeCount()}`);
-  lines.push("", "参加者");
-  getActivePlayers().forEach((player) => {
-    lines.push(`- ${player.name} / ${getStatusDisplay(player)} / ${player.role ? ROLE_LABELS[player.role] : "COなし"} / ${formatRoleGuessForExport(player)} / ${formatImpressionForExport(player)}`);
-  });
-  lines.push("", "時系列");
+  const lines = [`# ${getMatchSummary()}`, "", `- 状態: ${getGameStatusLabel(state.gameStatus)}`, `- 人狼: ${state.wolfCount}人`, `- 残り縄: ${getRemainingRopeCount()}`];
+  appendBoardMarkdown(lines, getActivePlayers());
+  lines.push("", "## 時系列");
   lines.push(...buildCurrentTimeline());
   return lines.join("\n");
 }
 
 function buildHistoryText(history) {
   const lines = [
-    `${getHistoryDisplayName(history)} / ${history.eventDate || "日付未選択"} / 第${history.gameNumber}試合`,
-    `勝利: ${normalizeCitizenText(history.winner) || "未設定"}`,
-    `人狼: ${history.wolfCount}`,
+    `# ${getHistoryDisplayName(history)} / ${history.eventDate || "日付未選択"} / 第${history.gameNumber}試合`,
     "",
-    "真の役職",
+    `- 勝利: ${normalizeCitizenText(history.winner) || "未設定"}`,
+    `- 人狼: ${history.wolfCount}人`,
   ];
+  appendBoardMarkdown(lines, getHistoryActivePlayers(history));
+  lines.push("", "## 真の役職");
   lines.push(...formatTrueRoleGroups(getHistoryActivePlayers(history)));
   const teammates = getHistoryActivePlayers(history).filter((player) => player.wolfTeammate);
   if (teammates.length) lines.push("", `仲間: ${teammates.map((player) => player.name).join("、")}`);
@@ -6613,9 +6630,57 @@ function buildHistoryText(history) {
     lines.push("", "黒塗り位置");
     blackTargets.forEach((player) => lines.push(`- ${getCircledNumber(player.blackTargetRank)} ${player.name}`));
   }
-  lines.push("", "時系列");
+  lines.push("", "## 時系列");
   lines.push(...buildHistoryTimeline(history));
   return lines.join("\n");
+}
+
+function appendBoardMarkdown(lines, players) {
+  lines.push("", "## 盤面", "", "| 名前 | 状態 | CO | 役職推理 | 印象 | 真役職 |", "| --- | --- | --- | --- | --- | --- |");
+  players.forEach((player) => {
+    const values = [
+      player.name,
+      getStatusDisplay(player),
+      player.role ? ROLE_LABELS[player.role] : "COなし",
+      formatRoleGuessForExport(player),
+      formatImpressionForExport(player),
+      player.trueRole ? ROLE_GUESS_LABELS[player.trueRole] || ROLE_LABELS[player.trueRole] || "" : "",
+    ];
+    lines.push(`| ${values.map(escapeMarkdownTableCell).join(" | ")} |`);
+  });
+}
+
+function escapeMarkdownTableCell(value) {
+  return String(value || "").replaceAll("|", "\\|").replaceAll("\n", " ");
+}
+
+function getGameStatusLabel(status) {
+  if (status === "in_progress") return "進行中";
+  if (status === "finished") return "終了済み";
+  return "準備中";
+}
+
+function buildHistoryCsv() {
+  const rows = [
+    ["大会名", "シーズン", "開催回", "開催日", "試合番号", "勝利陣営", "人狼数", "参加人数", "完了日時"],
+    ...state.gameHistories.map((history) => [
+      history.eventName || "",
+      normalizeOptionalSequenceNumber(history.seasonNumber) || "",
+      normalizeOptionalSequenceNumber(history.editionNumber) || "",
+      history.eventDate || "",
+      normalizeGameNumber(history.gameNumber),
+      normalizeCitizenText(history.winner) || "",
+      normalizeWolfCount(history.wolfCount),
+      getHistoryActivePlayers(history).length,
+      history.finishedAt || "",
+    ]),
+  ];
+  return rows.map((row) => row.map(escapeCsvCell).join(",")).join("\r\n");
+}
+
+function escapeCsvCell(value) {
+  const text = String(value ?? "");
+  return /[",\r\n]/.test(text) ? `"${text.replaceAll("\"", "\"\"")}"` : text;
 }
 
 function buildHistoryTimeline(history) {

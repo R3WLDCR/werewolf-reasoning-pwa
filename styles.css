@@ -1314,6 +1314,10 @@ select:disabled {
   padding: 0 12px 10px;
 }
 
+.history-export-actions {
+  padding: 0 12px 10px;
+}
+
 .delete-warning {
   display: grid;
   gap: 6px;
