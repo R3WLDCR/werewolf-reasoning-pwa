@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.201";
+const APP_VERSION = "1.202";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -6741,7 +6741,7 @@ function buildHistoryTimeline(history) {
       .filter((player) => player.status === "exiled" && (Number(player.statusDay) || 1) === day)
       .forEach((player) => events.push(`追放: ${player.name}`));
     if (events.length) {
-      lines.push(`${day}日目`);
+      lines.push(`### ${day}日目`);
       events.forEach((event) => lines.push(`- ${event}`));
     }
   }
@@ -6808,7 +6808,7 @@ function buildCurrentTimeline() {
       .filter((player) => player.status === "exiled" && (Number(player.statusDay) || 1) === day)
       .forEach((player) => events.push(`追放: ${player.name}`));
     if (events.length) {
-      lines.push(`${day}日目`);
+      lines.push(`### ${day}日目`);
       events.forEach((event) => lines.push(`- ${event}`));
     }
   }
