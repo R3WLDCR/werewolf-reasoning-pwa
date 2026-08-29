@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.198";
+const APP_VERSION = "1.199";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -4259,33 +4259,29 @@ function getMediumPerspectiveCellsHtml(player, mediums = getMediums()) {
 
 function getOutsiderExposureCountForMedium(medium) {
   if (!medium || medium.role !== "medium") return 0;
-  const knownWerewolfIds = new Set();
+  const specificOutsiderIds = new Set();
 
   state.roleActions
     .filter((action) => action.actorId === medium.id && action.role === "medium" && action.result === "werewolf")
-    .forEach((action) => knownWerewolfIds.add(action.targetId));
+    .forEach((action) => specificOutsiderIds.add(action.targetId));
 
-  let guaranteedOutsiders = 0;
-  const mediumClaimants = getRoleClaimants("medium");
-  if (mediumClaimants.length >= 2) {
-    guaranteedOutsiders += (mediumClaimants.length - 1);
-  }
-  const seerClaimants = getRoleClaimants("seer");
-  if (seerClaimants.length >= 2) {
-    guaranteedOutsiders += (seerClaimants.length - 1);
-  }
-  const guardClaimants = getRoleClaimants("guard");
-  if (guardClaimants.length >= 2) {
-    guaranteedOutsiders += (guardClaimants.length - 1);
-  }
-  const hunterClaimants = getRoleClaimants("hunter");
-  if (hunterClaimants.length >= 2) {
-    guaranteedOutsiders += (hunterClaimants.length - 1);
-  }
+  getActivePlayers()
+    .filter((player) => isRivalPerspectiveTargetConfirmedMadman(player))
+    .forEach((player) => specificOutsiderIds.add(player.id));
 
-  const attackConfirmedMadman = getActivePlayers().filter((p) => isRivalPerspectiveTargetConfirmedMadman(p));
-  const directCount = knownWerewolfIds.size + attackConfirmedMadman.filter((p) => !knownWerewolfIds.has(p.id)).length;
-  return Math.max(directCount, guaranteedOutsiders);
+  const claimantIdGroups = ["medium", "seer", "guard", "hunter"].map((role) =>
+    getRoleClaimants(role).map((claimant) => claimant.id),
+  );
+  return countOutsiderExposureWithGroupGuarantees(specificOutsiderIds, claimantIdGroups);
+}
+
+function countOutsiderExposureWithGroupGuarantees(specificOutsiderIds, claimantIdGroups) {
+  const specificIds = new Set(specificOutsiderIds);
+  return claimantIdGroups.reduce((exposureCount, claimantIds) => {
+    const guaranteedOutsiders = Math.max(0, claimantIds.length - 1);
+    const specificOutsidersInGroup = claimantIds.filter((id) => specificIds.has(id)).length;
+    return exposureCount + Math.max(0, guaranteedOutsiders - specificOutsidersInGroup);
+  }, specificIds.size);
 }
 
 function isFullOutsiderExposureForMedium(medium) {
