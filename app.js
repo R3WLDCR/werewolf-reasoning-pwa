@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.197";
+const APP_VERSION = "1.198";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3851,7 +3851,9 @@ function getMediumResultActions(actorId, targetId) {
 }
 
 function renderMediumPerspectiveResultControl(target) {
-  const mediumClaimants = getRoleClaimants("medium").filter((medium) => medium.id !== target.id);
+  const mediumClaimants = getRoleClaimants("medium").filter(
+    (medium) => medium.id !== target.id && !isInactiveStatus(medium.status),
+  );
   const canShow = mediumClaimants.length > 0;
   els.mediumPerspectiveResultSection.hidden = !canShow;
   if (!canShow) {
@@ -3988,7 +3990,7 @@ function saveMediumPerspectiveResults(target) {
   const selects = Array.from(els.mediumPerspectiveResultList.querySelectorAll("[data-medium-result-actor-id]"));
   selects.forEach((select) => {
     const medium = findPlayer(select.dataset.mediumResultActorId);
-    if (!medium || medium.role !== "medium" || medium.id === target.id) return;
+    if (!medium || medium.role !== "medium" || isInactiveStatus(medium.status) || medium.id === target.id) return;
     const existing = getMediumResultActions(medium.id, target.id);
     const value = select.value;
     const previousValue = ["human", "werewolf"].includes(existing[0]?.result) ? existing[0].result : "";
@@ -4017,9 +4019,10 @@ function renderRoleActionControls(player, roleOverride = els.roleSelect.value) {
     els.roleActionList.innerHTML = "";
     return;
   }
+  const inactiveMedium = role === "medium" && isInactiveStatus(player.status);
   els.roleActionTitle.textContent = `${ROLE_LABELS[role]}の行動結果`;
   const targetPlayers = getRoleActionTargetPlayers(role, player.id);
-  els.addRoleActionBtn.disabled = !targetPlayers.length;
+  els.addRoleActionBtn.disabled = inactiveMedium || !targetPlayers.length;
   const actions = state.roleActions
     .filter(
       (action) =>
@@ -4030,15 +4033,20 @@ function renderRoleActionControls(player, roleOverride = els.roleSelect.value) {
     .sort((a, b) => a.day - b.day);
   els.roleActionList.innerHTML = actions.length
     ? actions.map((action) => getRoleActionEditorRowHtml(action, targetPlayers, role)).join("")
-    : `<div class="empty-inline">${role === "medium" && !targetPlayers.length ? "追放者なし" : "行動結果なし"}</div>`;
+    : `<div class="empty-inline">${inactiveMedium ? "死亡後は霊媒結果を入力できません" : role === "medium" && !targetPlayers.length ? "追放者なし" : "行動結果なし"}</div>`;
   bindRoleActionDeleteButtons(els.roleActionList);
+  if (inactiveMedium) {
+    els.roleActionList.querySelectorAll("input, select, button").forEach((control) => {
+      control.disabled = true;
+    });
+  }
 }
 
 function addRoleActionEditorRow() {
   const player = findPlayer(editingPlayerId);
   const role = els.roleSelect.value;
   const players = getRoleActionTargetPlayers(role, player?.id);
-  if (!player || !ROLE_ACTION_ROLES.has(role) || !players.length) return;
+  if (!player || !ROLE_ACTION_ROLES.has(role) || (role === "medium" && isInactiveStatus(player.status)) || !players.length) return;
   els.roleActionList.querySelector(".empty-inline")?.remove();
   const action = {
     id: `new-${crypto.randomUUID()}`,
@@ -4074,6 +4082,7 @@ function bindRoleActionDeleteButtons(root) {
 }
 
 function saveRoleActionResults(player) {
+  if (player.role === "medium" && isInactiveStatus(player.status)) return;
   const previousActions = state.roleActions.filter((action) => action.actorId === player.id && action.role === player.role);
   state.roleActions = state.roleActions.filter((action) => action.actorId !== player.id || action.role !== player.role);
   if (!ROLE_ACTION_ROLES.has(player.role)) return;
