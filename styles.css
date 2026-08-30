@@ -767,7 +767,15 @@ button.role-guess-label {
   touch-action: manipulation;
 }
 
-.player-name[role="button"] {
+.player-name-button {
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
 }
 

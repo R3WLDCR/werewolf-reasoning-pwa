@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.215";
+const APP_VERSION = "1.216";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -1634,6 +1634,11 @@ function renderRoleGuessDialog(player) {
   renderPrimaryRoleGuessOptions(selectedValue === "unknown" ? "" : selectedValue);
   renderImpressionSection();
   els.exitWolfModeBtn.hidden = !(isWolfMode() && isPriorityPlayer(player));
+}
+
+function handleRoleGuessCandidateChange(event) {
+  const input = event.currentTarget;
+  renderPrimaryRoleGuessOptions(input.value === "unknown" ? "" : input.value);
 }
 
 function renderMediumResultShortcut(player) {
@@ -3498,12 +3503,17 @@ function handlePlayerRowsClick(event) {
     if (playerId) openEditDialog(playerId);
     return;
   }
+  const playerInfo = event.target.closest(".player-info");
+  if (playerInfo) {
+    event.preventDefault();
+    const row = playerInfo.closest(".player-row");
+    const playerId = row?.dataset.playerId;
+    if (playerId) openEditDialog(playerId);
+  }
 }
 
 function renderRows() {
   els.playerRows.innerHTML = "";
-  els.playerRows.removeEventListener("click", handlePlayerRowsClick);
-  els.playerRows.addEventListener("click", handlePlayerRowsClick);
   const players = getReasoningDisplayPlayers();
   els.emptyState.hidden = players.length > 0;
   players.forEach((player, index) => {
@@ -3529,7 +3539,7 @@ function renderRows() {
         <span class="player-main">
           <span class="player-name-row">
             ${allyMarker}
-            <span class="player-name" role="button" tabindex="0">${escapeHtml(player.name)}</span>
+            <button class="player-name player-name-button" type="button" ${isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を編集">${escapeHtml(player.name)}</button>
             ${enemyMarkers}
             ${isGameFinished() && player.trueRole ? `<span class="true-role-label ${getRoleGuessClass(player.trueRole)}">${escapeHtml(ROLE_GUESS_LABELS[player.trueRole] || player.trueRole)}</span>` : ""}
             <button class="role-guess-label ${getRoleGuessClass(roleGuess.value)} impression-${impression.value} ${player.wolfTeammate || (isWolfMode() && isPriorityPlayer(player)) ? "wolf-teammate" : ""} ${player.blackTargetRank ? "black-target" : ""}" type="button" ${isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}の役職推理を変更">
@@ -3546,44 +3556,6 @@ function renderRows() {
         <button class="order-button" type="button" data-direction="1" ${index === state.players.length - 1 || isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を下へ">↓</button>
       </span>
     `;
-    row.querySelector(".sticky-player-name").addEventListener("click", () => openEditDialog(player.id));
-    row.querySelector(".player-name")?.addEventListener("click", () => openEditDialog(player.id));
-    row.querySelector(".role-guess-label")?.addEventListener("click", (event) => {
-      event.stopPropagation();
-      openRoleGuessDialog(player.id);
-    });
-    row.querySelector(".player-info").addEventListener("click", (event) => {
-      if (event.target.closest(".role-guess-label")) return;
-      const rivalCell = event.target.closest("[data-rival-role]");
-      if (rivalCell) {
-        event.stopPropagation();
-        if (rivalCell.dataset.rivalRole === "seer") {
-          openEditDialog(rivalCell.dataset.rivalTargetId, rivalCell.dataset.rivalViewerId);
-          return;
-        }
-        openRivalPerspectiveDialog(
-          rivalCell.dataset.rivalRole,
-          rivalCell.dataset.rivalViewerId,
-          rivalCell.dataset.rivalTargetId,
-        );
-        return;
-      }
-      const mediumCell = event.target.closest("[data-medium-id]");
-      if (mediumCell) {
-        openEditDialog(player.id);
-        return;
-      }
-      const seerCell = event.target.closest("[data-seer-id]");
-      if (seerCell) {
-        openEditDialog(player.id, seerCell.dataset.seerId || "");
-        return;
-      }
-      openEditDialog(player.id);
-    });
-    row.querySelectorAll(".order-button").forEach((button) => {
-      button.addEventListener("click", () => movePlayer(player.id, Number(button.dataset.direction)));
-    });
-    row.querySelector(".status-button").addEventListener("click", () => openStatusDialog(player.id));
     els.playerRows.appendChild(row);
   });
 }

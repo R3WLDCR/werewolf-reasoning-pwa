@@ -1,10 +1,11 @@
-const CACHE_NAME = "werewolf-reasoning-note-v1215";
+const CACHE_NAME = "werewolf-reasoning-note-v1216";
+const ASSET_VERSION = "1.216";
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css",
-  "./app.js",
-  "./sync-config.js",
+  `./styles.css?v=${ASSET_VERSION}`,
+  `./app.js?v=${ASSET_VERSION}`,
+  `./sync-config.js?v=${ASSET_VERSION}`,
   "./manifest.json",
   "./icons/icon-192.svg",
   "./icons/icon-512.svg",
