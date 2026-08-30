@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.208";
+const APP_VERSION = "1.209";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3478,7 +3478,7 @@ function renderRows() {
 function getInactivePlayerOrderKey(player) {
   const day = Number(player.statusDay) || 1;
   const timingOrder = player.status === "attacked" ? 1 : 2;
-  return day * 10 + timingOrder;
+  return -(day * 10 + timingOrder);
 }
 
 function sortPlayersForBoardDisplay(players) {
