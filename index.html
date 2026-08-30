@@ -10,7 +10,7 @@
     <title>人狼推理ノート</title>
     <link rel="manifest" href="./manifest.json" />
     <link rel="apple-touch-icon" href="./icons/icon-192.svg" />
-    <link rel="stylesheet" href="./styles.css?v=1.221" />
+    <link rel="stylesheet" href="./styles.css?v=1.222" />
   </head>
   <body>
     <div class="app-shell">
@@ -648,6 +648,7 @@
           </div>
           <button id="closeRoleGuessBtn" class="round-button" type="button" aria-label="閉じる">×</button>
         </div>
+        <button id="saveRoleGuessBtn" class="primary-button wide" type="submit">推理と印象を保存</button>
         <div id="wolfModeEntryHint" class="wolf-mode-entry-hint" hidden></div>
         <div class="field-title">役職推理</div>
         <div id="roleGuessCandidateOptions" class="role-guess-options"></div>
@@ -681,7 +682,6 @@
           </div>
           <div id="customReasonList" class="custom-reason-list"></div>
         </section>
-        <button id="saveRoleGuessBtn" class="primary-button wide" type="submit">推理と印象を保存</button>
         <button id="exitWolfModeBtn" class="danger-button wide" type="button" hidden>人狼モード終了</button>
       </form>
     </dialog>
@@ -713,7 +713,7 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./sync-config.js?v=1.221"></script>
-    <script src="./app.js?v=1.221"></script>
+    <script src="./sync-config.js?v=1.222"></script>
+    <script src="./app.js?v=1.222"></script>
   </body>
 </html>
