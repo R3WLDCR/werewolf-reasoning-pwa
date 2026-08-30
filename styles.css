@@ -1413,16 +1413,35 @@ select:disabled {
 }
 
 .winner-label {
-  max-width: 110px;
+  max-width: 120px;
   overflow: hidden;
-  padding: 6px 9px;
+  padding: 5px 10px;
   border-radius: 999px;
-  background: #263637;
-  color: var(--accent-strong);
+  background: #202d2e;
+  color: var(--muted);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   font-size: 0.78rem;
   font-weight: 900;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.winner-label.winner-villager {
+  background: rgba(78, 205, 196, 0.18);
+  color: #5ce6dc;
+  border-color: rgba(78, 205, 196, 0.4);
+}
+
+.winner-label.winner-werewolf {
+  background: rgba(255, 107, 107, 0.18);
+  color: #ff8585;
+  border-color: rgba(255, 107, 107, 0.4);
+}
+
+.winner-label.winner-other {
+  background: rgba(255, 217, 61, 0.18);
+  color: #ffd93d;
+  border-color: rgba(255, 217, 61, 0.4);
 }
 
 .empty-state.compact {

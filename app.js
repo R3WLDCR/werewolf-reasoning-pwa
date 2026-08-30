@@ -3275,7 +3275,7 @@ function renderHistories() {
         <strong>${escapeHtml(getHistoryDisplayName(history))}</strong>
         <span>${escapeHtml(history.eventDate || "日付未選択")} / 第${normalizeGameNumber(history.gameNumber)}試合</span>
       </span>
-      <span class="winner-label">${escapeHtml(normalizeCitizenText(history.winner) || "勝利陣営未設定")}</span>
+      <span class="winner-label ${getWinnerClass(history.winner)}">${escapeHtml(normalizeCitizenText(history.winner) || "勝利未設定")}</span>
     `;
     button.addEventListener("click", () => openHistoryDetail(history.id));
     row.append(checkbox, button);
@@ -5803,19 +5803,20 @@ function renderHistoryDetail(history) {
   els.historyDetailPreview.textContent = buildHistoryText(history);
 
   if (els.historyDetailHeader) {
-    const winnerText = normalizeCitizenText(history.winner) || "未設定";
-    const winnerClass = winnerText.includes("人狼")
-      ? "winner-werewolf"
-      : winnerText.includes("市民")
-        ? "winner-villager"
-        : "winner-other";
+    const rawWinner = normalizeCitizenText(history.winner) || "";
+    const winnerClass = getWinnerClass(rawWinner);
+    const winnerLabel = rawWinner
+      ? rawWinner.endsWith("勝利") || rawWinner.endsWith("陣営")
+        ? `🏆 ${rawWinner} 勝利`
+        : `🏆 ${rawWinner} 勝利`
+      : "勝利陣営未設定";
     els.historyDetailHeader.innerHTML = `
       <div class="history-meta-title">
         <h3>${escapeHtml(getHistoryDisplayName(history))} 第${normalizeGameNumber(history.gameNumber)}試合</h3>
         <span class="history-event-date">${escapeHtml(history.eventDate || "日付未選択")}</span>
       </div>
       <div class="history-counts">
-        <span class="winner-badge ${winnerClass}">勝利: ${escapeHtml(winnerText)}</span>
+        <span class="winner-badge ${winnerClass}">${escapeHtml(winnerLabel)}</span>
         <div class="wolf-count-badge">人狼 ${escapeHtml(normalizeWolfCount(history.wolfCount))}人</div>
       </div>
     `;
@@ -6748,7 +6749,7 @@ function buildHistoryText(history) {
   const lines = [
     `# ${getHistoryDisplayName(history)} / ${history.eventDate || "日付未選択"} / 第${history.gameNumber}試合`,
     "",
-    `- 勝利: ${normalizeCitizenText(history.winner) || "未設定"}`,
+    `- 🏆 勝利: ${normalizeCitizenText(history.winner) || "未設定"}`,
     `- 人狼: ${history.wolfCount}人`,
   ];
   const activePlayers = getHistoryActivePlayers(history);
