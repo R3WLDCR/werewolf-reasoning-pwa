@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.210";
+const APP_VERSION = "1.211";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -6738,7 +6738,7 @@ function downloadTextFile(filename, text, type) {
 
 function buildExportText() {
   const lines = [`# ${getMatchSummary()}`, "", `- 状態: ${getGameStatusLabel(state.gameStatus)}`, `- 人狼: ${state.wolfCount}人`, `- 残り縄: ${getRemainingRopeCount()}`];
-  appendBoardMarkdown(lines, getActivePlayers());
+  appendBoardMarkdown(lines, getActivePlayers(), { results: state.results, seers: getSeers() });
   lines.push("", "## 時系列");
   lines.push(...buildCurrentTimeline());
   return lines.join("\n");
@@ -6751,7 +6751,12 @@ function buildHistoryText(history) {
     `- 勝利: ${normalizeCitizenText(history.winner) || "未設定"}`,
     `- 人狼: ${history.wolfCount}人`,
   ];
-  appendBoardMarkdown(lines, getHistoryActivePlayers(history));
+  const activePlayers = getHistoryActivePlayers(history);
+  appendBoardMarkdown(lines, activePlayers, {
+    isHistory: true,
+    results: history.results || [],
+    seers: getMarkdownSeers(activePlayers, history.results || []),
+  });
   lines.push("", "## 時系列");
   lines.push(...buildHistoryTimeline(history));
   return lines.join("\n");
@@ -6759,30 +6764,57 @@ function buildHistoryText(history) {
 
 function appendBoardMarkdown(lines, players, options = {}) {
   const isHistory = options.isHistory ?? players.some((p) => p.trueRole);
+  const results = options.results || [];
+  const seers = options.seers || getMarkdownSeers(players, results);
   const sortedPlayers = sortPlayersForBoardDisplay(players);
   if (isHistory) {
-    lines.push("", "## 盤面", "", "| 名前 | 状態 | CO | 真役職 |", "| --- | --- | --- | --- |");
+    const headers = ["名前", "状態", "CO", ...seers.map((seer) => `${seer.name}の占い結果`), "真役職"];
+    lines.push("", "## 盤面", "", `| ${headers.map(escapeMarkdownTableCell).join(" | ")} |`, `| ${headers.map(() => "---").join(" | ")} |`);
     sortedPlayers.forEach((player) => {
       const values = [
         player.name,
         getStatusDisplay(player),
         player.role ? ROLE_LABELS[player.role] : "COなし",
+        ...seers.map((seer) => formatMarkdownDivinationResults(results, seer.id, player.id)),
         player.trueRole ? ROLE_GUESS_LABELS[player.trueRole] || ROLE_LABELS[player.trueRole] || "" : "",
       ];
       lines.push(`| ${values.map(escapeMarkdownTableCell).join(" | ")} |`);
     });
   } else {
-    lines.push("", "## 盤面", "", "| 名前 | 状態 | CO | 役職推理 |", "| --- | --- | --- | --- |");
+    const headers = ["名前", "状態", "CO", "役職推理", ...seers.map((seer) => `${seer.name}の占い結果`)];
+    lines.push("", "## 盤面", "", `| ${headers.map(escapeMarkdownTableCell).join(" | ")} |`, `| ${headers.map(() => "---").join(" | ")} |`);
     sortedPlayers.forEach((player) => {
       const values = [
         player.name,
         getStatusDisplay(player),
         player.role ? ROLE_LABELS[player.role] : "COなし",
         formatCombinedInferenceForExport(player),
+        ...seers.map((seer) => formatMarkdownDivinationResults(results, seer.id, player.id)),
       ];
       lines.push(`| ${values.map(escapeMarkdownTableCell).join(" | ")} |`);
     });
   }
+}
+
+function getMarkdownSeers(players, results = []) {
+  const seerIds = new Set(results.map((result) => result.seerId));
+  return players
+    .filter((player) => player.role === "seer" || seerIds.has(player.id))
+    .slice()
+    .sort(
+      (a, b) =>
+        Number(b.trueRole === "seer") - Number(a.trueRole === "seer") ||
+        getRoleClaimOrder(a) - getRoleClaimOrder(b),
+    );
+}
+
+function formatMarkdownDivinationResults(results, seerId, targetId) {
+  return results
+    .filter((result) => result.seerId === seerId && result.targetId === targetId && Object.hasOwn(RESULT_LABELS, result.value))
+    .slice()
+    .sort((a, b) => getDivinationOrder(a) - getDivinationOrder(b))
+    .map((result) => `占い${getDivinationOrder(result)} ${RESULT_LABELS[result.value]}`)
+    .join(" / ");
 }
 
 function formatCombinedInferenceForExport(player) {
