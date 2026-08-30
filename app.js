@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.207";
+const APP_VERSION = "1.208";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3475,16 +3475,50 @@ function renderRows() {
   });
 }
 
+function getInactivePlayerOrderKey(player) {
+  const day = Number(player.statusDay) || 1;
+  const timingOrder = player.status === "attacked" ? 1 : 2;
+  return day * 10 + timingOrder;
+}
+
+function sortPlayersForBoardDisplay(players) {
+  const indexed = players.map((player, index) => ({ player, index }));
+  const active = indexed
+    .filter(({ player }) => !isInactiveStatus(player.status))
+    .map(({ player }) => player);
+  const inactive = indexed
+    .filter(({ player }) => isInactiveStatus(player.status))
+    .sort(
+      (a, b) =>
+        getInactivePlayerOrderKey(a.player) - getInactivePlayerOrderKey(b.player) ||
+        a.index - b.index,
+    )
+    .map(({ player }) => player);
+  return [...active, ...inactive];
+}
+
 function getReasoningDisplayPlayers() {
   const players = getActivePlayers();
-  if (state.reasoningPerspective !== "medium") return players;
-  return players
-    .map((player, index) => ({ player, index }))
+  const indexed = players.map((player, index) => ({ player, index }));
+  const active = indexed
+    .filter(({ player }) => !isInactiveStatus(player.status))
     .sort((a, b) => {
-      const roleDiff = (b.player.role === "medium") - (a.player.role === "medium");
-      return roleDiff || a.index - b.index;
+      if (state.reasoningPerspective === "medium") {
+        const roleDiff = (b.player.role === "medium") - (a.player.role === "medium");
+        if (roleDiff) return roleDiff;
+      }
+      return a.index - b.index;
     })
     .map(({ player }) => player);
+  const inactive = indexed
+    .filter(({ player }) => isInactiveStatus(player.status))
+    .sort(
+      (a, b) =>
+        getInactivePlayerOrderKey(a.player) - getInactivePlayerOrderKey(b.player) ||
+        a.index - b.index,
+    )
+    .map(({ player }) => player);
+  return [...active, ...inactive];
 }
 
 function getPlayerImpression(player) {
@@ -3715,7 +3749,14 @@ function reorderPlayersForBoard() {
         a.index - b.index,
     )
     .map(({ player }) => player);
-  const inactive = indexed.filter(({ player }) => isInactiveStatus(player.status)).map(({ player }) => player);
+  const inactive = indexed
+    .filter(({ player }) => isInactiveStatus(player.status))
+    .sort(
+      (a, b) =>
+        getInactivePlayerOrderKey(a.player) - getInactivePlayerOrderKey(b.player) ||
+        a.index - b.index,
+    )
+    .map(({ player }) => player);
   state.players = [...active, ...inactive];
 }
 
@@ -6718,9 +6759,10 @@ function buildHistoryText(history) {
 
 function appendBoardMarkdown(lines, players, options = {}) {
   const isHistory = options.isHistory ?? players.some((p) => p.trueRole);
+  const sortedPlayers = sortPlayersForBoardDisplay(players);
   if (isHistory) {
     lines.push("", "## 盤面", "", "| 名前 | 状態 | CO | 真役職 |", "| --- | --- | --- | --- |");
-    players.forEach((player) => {
+    sortedPlayers.forEach((player) => {
       const values = [
         player.name,
         getStatusDisplay(player),
@@ -6731,7 +6773,7 @@ function appendBoardMarkdown(lines, players, options = {}) {
     });
   } else {
     lines.push("", "## 盤面", "", "| 名前 | 状態 | CO | 役職推理 |", "| --- | --- | --- | --- |");
-    players.forEach((player) => {
+    sortedPlayers.forEach((player) => {
       const values = [
         player.name,
         getStatusDisplay(player),
