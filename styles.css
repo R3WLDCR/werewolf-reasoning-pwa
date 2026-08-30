@@ -760,8 +760,6 @@ button.role-guess-label {
   appearance: none;
   -webkit-appearance: none;
   border: 1px solid transparent;
-  background-color: var(--paper);
-  color: inherit;
   font-family: inherit;
   cursor: pointer;
   touch-action: manipulation;
