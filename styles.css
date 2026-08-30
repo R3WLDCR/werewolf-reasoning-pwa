@@ -2785,3 +2785,235 @@ input.invalid {
 .role-guess-label.impression-strong_werewolf {
   box-shadow: inset 0 0 0 1px rgba(255, 107, 107, 0.45);
 }
+
+/* History detail board preview in reasoning tab style */
+.history-detail-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 12px 14px;
+  border-radius: 7px;
+  background: #111a1b;
+  border: 1px solid var(--line);
+}
+
+.history-meta-title h3 {
+  margin: 0 0 3px;
+  font-size: 1.05rem;
+  color: var(--ink);
+}
+
+.history-event-date {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.history-counts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.winner-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.winner-badge.winner-villager {
+  background: rgba(78, 205, 196, 0.16);
+  color: #5ce6dc;
+  border: 1px solid rgba(78, 205, 196, 0.35);
+}
+
+.winner-badge.winner-werewolf {
+  background: rgba(255, 107, 107, 0.16);
+  color: #ff7b7b;
+  border: 1px solid rgba(255, 107, 107, 0.35);
+}
+
+.winner-badge.winner-other {
+  background: rgba(255, 217, 61, 0.16);
+  color: #ffd93d;
+  border: 1px solid rgba(255, 217, 61, 0.35);
+}
+
+.history-table-panel {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: #070a0b;
+}
+
+.history-table-panel .player-rows {
+  width: max-content;
+  min-width: 100%;
+}
+
+.history-table-panel .player-row {
+  width: max-content;
+  min-width: 630px;
+  grid-template-columns: 92px max-content 76px;
+  gap: 4px;
+  min-height: 48px;
+  padding: 3px 5px 3px 0;
+  cursor: default;
+}
+
+.history-table-panel .sticky-player-name {
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 92px;
+  height: 44px;
+  padding: 0 6px 0 8px;
+  border-right: 1px solid var(--line);
+  background: #070a0b;
+  color: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.88rem;
+  font-weight: 900;
+}
+
+.history-table-panel .sticky-player-name-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-table-panel .player-status-exiled .sticky-player-name {
+  background: #202829;
+  text-decoration: line-through;
+}
+
+.history-table-panel .player-status-attacked .sticky-player-name {
+  background: #3a2025;
+  text-decoration: line-through;
+}
+
+.history-table-panel .player-info {
+  width: max-content;
+  grid-template-columns: max-content max-content;
+  gap: 2px;
+  min-height: 42px;
+  cursor: default;
+}
+
+.history-table-panel .player-main {
+  grid-template-columns: max-content;
+  align-items: center;
+  gap: 4px;
+}
+
+.history-table-panel .player-name-row {
+  flex-wrap: nowrap;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.history-table-panel .player-name {
+  display: none;
+}
+
+.history-table-panel .player-name-row > .player-ally-marker,
+.history-table-panel .player-name-row > .player-enemy-markers {
+  display: none;
+}
+
+.history-table-panel .role-guess-label,
+.history-table-panel .true-role-label {
+  min-height: 28px;
+  padding: 4px 7px;
+  font-size: 0.7rem;
+}
+
+.history-table-panel .role-guess-label {
+  width: max-content;
+  min-width: 84px;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-table-panel .seer-grid {
+  grid-column: auto;
+  width: max(380px, calc(var(--seer-columns) * 118px));
+  height: 38px;
+  grid-template-columns: repeat(var(--seer-columns), minmax(114px, 1fr));
+  gap: 3px;
+  padding: 3px 4px;
+}
+
+.history-timeline-section {
+  display: grid;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.history-timeline-list {
+  display: grid;
+  gap: 8px;
+}
+
+.history-timeline-day {
+  padding: 10px 14px;
+  border-radius: 7px;
+  background: #111a1b;
+  border: 1px solid var(--line);
+}
+
+.history-timeline-day h4 {
+  margin: 0 0 6px;
+  font-size: 0.88rem;
+  color: #4ecdc4;
+}
+
+.history-timeline-day ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+  font-size: 0.84rem;
+  color: var(--ink);
+}
+
+.history-markdown-details {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 7px;
+  background: #090e0f;
+  border: 1px solid var(--line);
+}
+
+.history-markdown-details summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.history-markdown-details summary:hover {
+  color: var(--ink);
+}
+
+.history-markdown-details pre {
+  margin-top: 10px;
+}

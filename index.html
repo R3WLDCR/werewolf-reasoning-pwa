@@ -194,7 +194,20 @@
               <button id="copyHistoryBtn" class="secondary-button" type="button">Markdownコピー</button>
               <button id="deleteHistoryBtn" class="danger-button" type="button">削除</button>
             </div>
-            <pre id="historyDetailPreview"></pre>
+            <div id="historyDetailHeader" class="history-detail-header"></div>
+            <div class="table-panel history-table-panel" aria-label="終了盤面">
+              <div id="historyPlayerRows" class="player-rows"></div>
+            </div>
+            <div class="history-timeline-section">
+              <div class="section-heading flush">
+                <strong>時系列ログ</strong>
+              </div>
+              <div id="historyDetailTimeline" class="history-timeline-list"></div>
+            </div>
+            <details class="history-markdown-details">
+              <summary>Markdownテキストを表示</summary>
+              <pre id="historyDetailPreview"></pre>
+            </details>
           </section>
           <section class="history-management-panel" aria-label="履歴管理">
             <div class="section-heading">

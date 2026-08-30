@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.203";
+const APP_VERSION = "1.204";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -277,6 +277,9 @@ document.addEventListener("DOMContentLoaded", () => {
     "deleteSelectedHistoriesBtn",
     "downloadHistoryCsvBtn",
     "historyDetailPanel",
+    "historyDetailHeader",
+    "historyPlayerRows",
+    "historyDetailTimeline",
     "historyDetailPreview",
     "closeHistoryDetailBtn",
     "openHistoryBoardBtn",
@@ -3280,7 +3283,7 @@ function renderHistories() {
   });
   const selected = getSelectedHistory();
   els.historyDetailPanel.hidden = !selected;
-  if (selected) els.historyDetailPreview.textContent = buildHistoryText(selected);
+  if (selected) renderHistoryDetail(selected);
   renderHistorySelectionControls();
   els.deleteTournamentHistoriesBtn.disabled = getHistoriesForTournament(state.selectedTournamentId).length === 0;
   els.deleteAllHistoriesBtn.disabled = state.gameHistories.length === 0;
@@ -5735,6 +5738,124 @@ async function copyExport() {
   } catch {
     showExportFallback(text);
   }
+}
+
+
+function withHistoryState(history, fn) {
+  const originalState = state;
+  const historyPayload = createBoardPayloadFromHistory(history);
+  const tempState = {
+    ...originalState,
+    ...historyPayload,
+    selectedTournamentId: history.selectedTournamentId || originalState.selectedTournamentId,
+  };
+  try {
+    state = tempState;
+    return fn();
+  } finally {
+    state = originalState;
+  }
+}
+
+function renderHistoryDetail(history) {
+  if (!history) return;
+  els.historyDetailPreview.textContent = buildHistoryText(history);
+
+  if (els.historyDetailHeader) {
+    const winnerText = normalizeCitizenText(history.winner) || "未設定";
+    const winnerClass = winnerText.includes("人狼")
+      ? "winner-werewolf"
+      : winnerText.includes("市民")
+        ? "winner-villager"
+        : "winner-other";
+    els.historyDetailHeader.innerHTML = `
+      <div class="history-meta-title">
+        <h3>${escapeHtml(getHistoryDisplayName(history))} 第${normalizeGameNumber(history.gameNumber)}試合</h3>
+        <span class="history-event-date">${escapeHtml(history.eventDate || "日付未選択")}</span>
+      </div>
+      <div class="history-counts">
+        <span class="winner-badge ${winnerClass}">勝利: ${escapeHtml(winnerText)}</span>
+        <div class="wolf-count-badge">人狼 ${escapeHtml(normalizeWolfCount(history.wolfCount))}人</div>
+      </div>
+    `;
+  }
+
+  if (els.historyPlayerRows) {
+    withHistoryState(history, () => {
+      els.historyPlayerRows.innerHTML = "";
+      const players = getReasoningDisplayPlayers();
+      players.forEach((player) => {
+        const row = document.createElement("div");
+        row.className = `player-row player-status-${player.status || "alive"} history-player-row`;
+        const perspectiveGrid = getPerspectiveGridHtml(player);
+        const impression = getPlayerImpression(player);
+        const roleGuess = getDisplayedRoleGuess(player);
+        const inferenceText = getInferenceDisplayText(player);
+        const allyMarker = getPlayerAllyMarkerHtml(player.id);
+        const enemyMarkers = getPlayerEnemyMarkersHtml(player.id);
+        row.innerHTML = `
+          <div class="sticky-player-name" aria-label="${escapeHtml(player.name)}">${allyMarker}<span class="sticky-player-name-text">${escapeHtml(player.name)}</span>${enemyMarkers}</div>
+          <div class="player-info">
+            <span class="player-main">
+              <span class="player-name-row">
+                ${allyMarker}
+                <span class="player-name">${escapeHtml(player.name)}</span>
+                ${enemyMarkers}
+                ${player.trueRole ? `<span class="true-role-label ${getRoleGuessClass(player.trueRole)}">${escapeHtml(ROLE_GUESS_LABELS[player.trueRole] || player.trueRole)}</span>` : ""}
+                <span class="role-guess-label ${getRoleGuessClass(roleGuess.value)} impression-${impression.value} ${player.wolfTeammate ? "wolf-teammate" : ""} ${player.blackTargetRank ? "black-target" : ""}">
+                  ${escapeHtml(inferenceText)}
+                  ${player.blackTargetRank ? `<span class="black-target-rank" aria-label="黒塗り順位 ${player.blackTargetRank}">${escapeHtml(getCircledNumber(player.blackTargetRank))}</span>` : ""}
+                </span>
+              </span>
+            </span>
+            ${perspectiveGrid}
+          </div>
+          <div class="status-button status-${escapeHtml(player.status || "alive")}">${escapeHtml(getStatusDisplay(player))}</div>
+        `;
+        els.historyPlayerRows.appendChild(row);
+      });
+    });
+  }
+
+  renderHistoryDetailTimeline(history);
+}
+
+function renderHistoryDetailTimeline(history) {
+  if (!els.historyDetailTimeline) return;
+  const lines = buildHistoryTimeline(history);
+  if (!lines.length) {
+    els.historyDetailTimeline.innerHTML = '<div class="empty-inline">時系列ログなし</div>';
+    return;
+  }
+  let html = "";
+  let currentDayGroup = [];
+  let currentDayTitle = "";
+
+  lines.forEach((line) => {
+    if (line.startsWith("### ")) {
+      if (currentDayTitle || currentDayGroup.length) {
+        html += `
+          <div class="history-timeline-day">
+            <h4>${escapeHtml(currentDayTitle)}</h4>
+            <ul>${currentDayGroup.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+          </div>
+        `;
+      }
+      currentDayTitle = line.replace("### ", "");
+      currentDayGroup = [];
+    } else if (line.startsWith("- ")) {
+      currentDayGroup.push(line.replace("- ", ""));
+    }
+  });
+  if (currentDayTitle || currentDayGroup.length) {
+    html += `
+      <div class="history-timeline-day">
+        <h4>${escapeHtml(currentDayTitle)}</h4>
+        <ul>${currentDayGroup.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+      </div>
+    `;
+  }
+  els.historyDetailTimeline.innerHTML = html || '<div class="empty-inline">時系列ログなし</div>';
 }
 
 function openHistoryDetail(historyId) {
