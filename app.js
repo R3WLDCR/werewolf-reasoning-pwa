@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.218";
+const APP_VERSION = "1.219";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3964,7 +3964,7 @@ function getMediumResultActions(actorId, targetId) {
 
 function renderMediumPerspectiveResultControl(target) {
   const mediumClaimants = getRoleClaimants("medium").filter(
-    (medium) => medium.id !== target.id && !isInactiveStatus(medium.status),
+    (medium) => medium.id !== target.id,
   );
   const canShow = mediumClaimants.length > 0;
   els.mediumPerspectiveResultSection.hidden = !canShow;
@@ -3972,17 +3972,14 @@ function renderMediumPerspectiveResultControl(target) {
     els.mediumPerspectiveResultList.innerHTML = "";
     return;
   }
-  if (target.status !== "exiled") {
-    els.mediumPerspectiveResultList.innerHTML = `<div class="empty-inline">追放された参加者だけ霊媒結果を入力できます</div>`;
-    return;
-  }
-  els.mediumPerspectiveResultList.innerHTML = mediumClaimants
+  const isExiled = target.status === "exiled";
+  const rowsHtml = mediumClaimants
     .map((medium) => {
       const existing = getMediumResultActions(medium.id, target.id)[0];
       const value = ["human", "werewolf"].includes(existing?.result) ? existing.result : "";
       return `
         <label class="medium-perspective-result-row">
-          <span>${escapeHtml(medium.name)}</span>
+          <span>${escapeHtml(medium.name)}${isInactiveStatus(medium.status) ? ` (${STATUS_LABELS[medium.status]})` : ""}</span>
           <select data-medium-result-actor-id="${escapeHtml(medium.id)}" aria-label="${escapeHtml(medium.name)}の霊媒結果">
             <option value="" ${value === "" ? "selected" : ""}>未記録</option>
             <option value="human" ${value === "human" ? "selected" : ""}>市民</option>
@@ -3992,6 +3989,12 @@ function renderMediumPerspectiveResultControl(target) {
       `;
     })
     .join("");
+
+  const hintHtml = isExiled
+    ? ""
+    : `<div class="field-hint" style="margin-bottom: 6px; font-size: 0.8rem; color: var(--accent-strong);">※未追放の参加者に霊媒結果を入力して保存すると、自動で追放状態になります</div>`;
+
+  els.mediumPerspectiveResultList.innerHTML = `${hintHtml}${rowsHtml}`;
 }
 
 function renderAdoptedMediumControl() {
@@ -4098,11 +4101,18 @@ function saveIndependentMediumResult(target) {
 }
 
 function saveMediumPerspectiveResults(target) {
-  if (els.mediumPerspectiveResultSection.hidden || target.status !== "exiled") return;
+  if (els.mediumPerspectiveResultSection.hidden) return;
   const selects = Array.from(els.mediumPerspectiveResultList.querySelectorAll("[data-medium-result-actor-id]"));
+  const hasResult = selects.some((select) => ["human", "werewolf"].includes(select.value));
+
+  if (hasResult && target.status !== "exiled") {
+    target.status = "exiled";
+    target.statusDay = getNextStatusDayForStatus("exiled");
+  }
+
   selects.forEach((select) => {
     const medium = findPlayer(select.dataset.mediumResultActorId);
-    if (!medium || medium.role !== "medium" || isInactiveStatus(medium.status) || medium.id === target.id) return;
+    if (!medium || medium.role !== "medium" || medium.id === target.id) return;
     const existing = getMediumResultActions(medium.id, target.id);
     const value = select.value;
     const previousValue = ["human", "werewolf"].includes(existing[0]?.result) ? existing[0].result : "";
@@ -4131,10 +4141,9 @@ function renderRoleActionControls(player, roleOverride = els.roleSelect.value) {
     els.roleActionList.innerHTML = "";
     return;
   }
-  const inactiveMedium = role === "medium" && isInactiveStatus(player.status);
   els.roleActionTitle.textContent = `${ROLE_LABELS[role]}の行動結果`;
   const targetPlayers = getRoleActionTargetPlayers(role, player.id);
-  els.addRoleActionBtn.disabled = inactiveMedium || !targetPlayers.length;
+  els.addRoleActionBtn.disabled = !targetPlayers.length;
   const actions = state.roleActions
     .filter(
       (action) =>
@@ -4145,20 +4154,15 @@ function renderRoleActionControls(player, roleOverride = els.roleSelect.value) {
     .sort((a, b) => a.day - b.day);
   els.roleActionList.innerHTML = actions.length
     ? actions.map((action) => getRoleActionEditorRowHtml(action, targetPlayers, role)).join("")
-    : `<div class="empty-inline">${inactiveMedium ? "死亡後は霊媒結果を入力できません" : role === "medium" && !targetPlayers.length ? "追放者なし" : "行動結果なし"}</div>`;
+    : `<div class="empty-inline">${role === "medium" && !targetPlayers.length ? "追放者なし" : "行動結果なし"}</div>`;
   bindRoleActionDeleteButtons(els.roleActionList);
-  if (inactiveMedium) {
-    els.roleActionList.querySelectorAll("input, select, button").forEach((control) => {
-      control.disabled = true;
-    });
-  }
 }
 
 function addRoleActionEditorRow() {
   const player = findPlayer(editingPlayerId);
   const role = els.roleSelect.value;
   const players = getRoleActionTargetPlayers(role, player?.id);
-  if (!player || !ROLE_ACTION_ROLES.has(role) || (role === "medium" && isInactiveStatus(player.status)) || !players.length) return;
+  if (!player || !ROLE_ACTION_ROLES.has(role) || !players.length) return;
   els.roleActionList.querySelector(".empty-inline")?.remove();
   const action = {
     id: `new-${crypto.randomUUID()}`,
