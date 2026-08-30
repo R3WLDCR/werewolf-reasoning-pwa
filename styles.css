@@ -3001,26 +3001,3 @@ input.invalid {
   font-size: 0.84rem;
   color: var(--ink);
 }
-
-.history-markdown-details {
-  margin-top: 8px;
-  padding: 8px 12px;
-  border-radius: 7px;
-  background: #090e0f;
-  border: 1px solid var(--line);
-}
-
-.history-markdown-details summary {
-  cursor: pointer;
-  font-size: 0.82rem;
-  font-weight: 800;
-  color: var(--muted);
-}
-
-.history-markdown-details summary:hover {
-  color: var(--ink);
-}
-
-.history-markdown-details pre {
-  margin-top: 10px;
-}
