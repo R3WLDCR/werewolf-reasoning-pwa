@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.213";
+const APP_VERSION = "1.214";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -1543,6 +1543,7 @@ function openRoleGuessDialog(playerId) {
   impressionDraftReasons = (player.impressionReasons || []).map((reason) => ({ ...reason }));
   els.roleGuessPlayerName.textContent = player.name;
   renderRoleGuessDialog(player);
+  if (els.roleGuessDialog.open) els.roleGuessDialog.close();
   els.roleGuessDialog.showModal();
 }
 
@@ -1570,6 +1571,7 @@ function openRivalPerspectiveDialog(role, viewerId, targetId) {
     els.rivalPerspectiveValueSelect.value = "madman";
     els.rivalPerspectiveHint.textContent += "（襲撃により裏切り者で確定）";
   }
+  if (els.rivalPerspectiveDialog.open) els.rivalPerspectiveDialog.close();
   els.rivalPerspectiveDialog.showModal();
 }
 
@@ -2032,6 +2034,7 @@ function openEditDialog(playerId, seerId = "") {
   renderMediumResultControl(player);
   renderMediumPerspectiveResultControl(player);
   renderRoleActionControls(player);
+  if (els.editDialog.open) els.editDialog.close();
   els.editDialog.showModal();
 }
 
@@ -2049,6 +2052,7 @@ function openStatusDialog(playerId) {
   statusPlayerId = playerId;
   els.statusPlayerName.textContent = player.name;
   els.markAliveBtn.hidden = !isInactiveStatus(player.status);
+  if (els.statusDialog.open) els.statusDialog.close();
   els.statusDialog.showModal();
 }
 
@@ -2060,6 +2064,7 @@ function closeStatusDialog() {
 function openPlayerRelationDialog() {
   if (!getActivePlayers().length) return toast("参加者がいません");
   renderPlayerRelationDialog();
+  if (els.playerRelationDialog.open) els.playerRelationDialog.close();
   els.playerRelationDialog.showModal();
 }
 
