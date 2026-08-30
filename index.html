@@ -628,16 +628,28 @@
       </form>
     </dialog>
 
-    <dialog id="impressionDialog" class="impression-dialog">
+    <dialog id="roleGuessDialog" class="role-guess-dialog">
       <form method="dialog">
         <div class="sheet-handle" aria-hidden="true"></div>
         <div class="sheet-heading">
           <div>
-            <p class="kicker">Impression</p>
-            <h2 id="impressionPlayerName">プレイヤー</h2>
+            <p class="kicker">Inference</p>
+            <h2 id="roleGuessPlayerName">プレイヤー</h2>
           </div>
-          <button id="closeImpressionBtn" class="round-button" type="button" aria-label="閉じる">×</button>
+          <button id="closeRoleGuessBtn" class="round-button" type="button" aria-label="閉じる">×</button>
         </div>
+        <div id="wolfModeEntryHint" class="wolf-mode-entry-hint" hidden></div>
+        <div class="field-title">役職推理</div>
+        <div id="roleGuessCandidateOptions" class="role-guess-options"></div>
+        <button id="openMediumResultFromGuessBtn" class="secondary-button wide" type="button" hidden>霊媒結果を入力</button>
+        <label id="blackTargetField" class="field" hidden>
+          <span>黒塗り位置</span>
+          <select id="blackTargetSelect"></select>
+        </label>
+        <label class="field" hidden>
+          <span>本命役職</span>
+          <select id="primaryRoleGuessSelect"></select>
+        </label>
         <div id="impressionSummary" class="impression-summary">印象なし</div>
         <section class="impression-reason-section villager-side">
           <div class="field-title">市民要素</div>
@@ -659,33 +671,7 @@
           </div>
           <div id="customReasonList" class="custom-reason-list"></div>
         </section>
-        <button id="saveImpressionBtn" class="primary-button wide" type="button">印象を保存</button>
-      </form>
-    </dialog>
-
-    <dialog id="roleGuessDialog" class="role-guess-dialog">
-      <form method="dialog">
-        <div class="sheet-handle" aria-hidden="true"></div>
-        <div class="sheet-heading">
-          <div>
-            <p class="kicker">Role Guess</p>
-            <h2 id="roleGuessPlayerName">プレイヤー</h2>
-          </div>
-          <button id="closeRoleGuessBtn" class="round-button" type="button" aria-label="閉じる">×</button>
-        </div>
-        <div id="wolfModeEntryHint" class="wolf-mode-entry-hint" hidden></div>
-        <div class="field-title">役職推理</div>
-        <div id="roleGuessCandidateOptions" class="role-guess-options"></div>
-        <button id="openMediumResultFromGuessBtn" class="secondary-button wide" type="button" hidden>霊媒結果を入力</button>
-        <label id="blackTargetField" class="field" hidden>
-          <span>黒塗り位置</span>
-          <select id="blackTargetSelect"></select>
-        </label>
-        <label class="field" hidden>
-          <span>本命役職</span>
-          <select id="primaryRoleGuessSelect"></select>
-        </label>
-        <button id="saveRoleGuessBtn" class="primary-button wide" type="button">役職推理を保存</button>
+        <button id="saveRoleGuessBtn" class="primary-button wide" type="submit">推理と印象を保存</button>
         <button id="exitWolfModeBtn" class="danger-button wide" type="button" hidden>人狼モード終了</button>
       </form>
     </dialog>

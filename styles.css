@@ -521,7 +521,7 @@ select:disabled {
 
 .player-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 64px 74px 40px;
+  grid-template-columns: minmax(0, 1fr) 74px 40px;
   gap: 6px;
   align-items: center;
   min-height: 70px;
@@ -2579,8 +2579,8 @@ input.invalid {
 
   #reasoningView .player-row {
     width: max-content;
-    min-width: 736px;
-    grid-template-columns: 92px max-content 56px 76px 38px;
+    min-width: 672px;
+    grid-template-columns: 92px max-content 76px 38px;
     gap: 4px;
     min-height: 50px;
     padding: 3px 5px 3px 0;
@@ -2678,7 +2678,12 @@ input.invalid {
   }
 
   #reasoningView .role-guess-label {
-    width: 96px;
+    width: max-content;
+    min-width: 84px;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   #reasoningView .seer-grid {
@@ -2770,4 +2775,13 @@ input.invalid {
   .history-role-action-edit {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+.role-guess-label.impression-villager,
+.role-guess-label.impression-strong_villager {
+  box-shadow: inset 0 0 0 1px rgba(78, 205, 196, 0.45);
+}
+.role-guess-label.impression-werewolf,
+.role-guess-label.impression-strong_werewolf {
+  box-shadow: inset 0 0 0 1px rgba(255, 107, 107, 0.45);
 }

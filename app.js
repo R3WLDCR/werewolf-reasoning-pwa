@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.202";
+const APP_VERSION = "1.203";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -372,8 +372,6 @@ document.addEventListener("DOMContentLoaded", () => {
     "bulkDeleteHistoryMessage",
     "confirmBulkDeleteHistoryBtn",
     "closeBulkDeleteHistoryBtn",
-    "impressionDialog",
-    "impressionPlayerName",
     "impressionSummary",
     "villagerReasonOptions",
     "werewolfReasonOptions",
@@ -382,8 +380,6 @@ document.addEventListener("DOMContentLoaded", () => {
     "customReasonNameInput",
     "customReasonSideSelect",
     "addCustomReasonBtn",
-    "saveImpressionBtn",
-    "closeImpressionBtn",
     "roleGuessDialog",
     "roleGuessPlayerName",
     "wolfModeEntryHint",
@@ -606,12 +602,7 @@ function bindEvents() {
   els.bulkDeleteHistoryDialog.addEventListener("click", (event) => {
     if (event.target === els.bulkDeleteHistoryDialog) closeBulkDeleteHistoryDialog();
   });
-  els.closeImpressionBtn.addEventListener("click", closeImpressionDialog);
-  els.saveImpressionBtn.addEventListener("click", saveImpressionSelection);
-  els.addCustomReasonBtn.addEventListener("click", addCustomImpressionReason);
-  els.impressionDialog.addEventListener("click", (event) => {
-    if (event.target === els.impressionDialog) closeImpressionDialog();
-  });
+  els.addCustomReasonBtn?.addEventListener("click", addCustomImpressionReason);
   els.closeRoleGuessBtn.addEventListener("click", closeRoleGuessDialog);
   els.saveRoleGuessBtn.addEventListener("click", saveRoleGuess);
   els.openMediumResultFromGuessBtn.addEventListener("click", openMediumResultFromRoleGuess);
@@ -1410,24 +1401,19 @@ function saveMemberships() {
 }
 
 function openImpressionDialog(playerId) {
-  if (isGameFinished()) return toast("終了済み盤面は編集できません");
-  const player = findPlayer(playerId);
-  if (!player) return;
-  impressionPlayerId = playerId;
-  impressionDraftReasons = player.impressionReasons.map((reason) => ({ ...reason }));
-  els.impressionPlayerName.textContent = player.name;
-  renderImpressionDialog();
-  els.impressionDialog.showModal();
+  openRoleGuessDialog(playerId);
 }
 
 function closeImpressionDialog() {
-  impressionPlayerId = "";
-  impressionDraftReasons = [];
-  els.impressionDialog.close();
+  closeRoleGuessDialog();
 }
 
 function renderImpressionDialog() {
-  const player = findPlayer(impressionPlayerId);
+  renderImpressionSection();
+}
+
+function renderImpressionSection() {
+  const player = findPlayer(impressionPlayerId || roleGuessPlayerId);
   if (!player) return;
   const selectedIds = new Set(impressionDraftReasons.map((reason) => reason.id));
   const reasons = getAvailableImpressionReasons();
@@ -1472,7 +1458,6 @@ function getImpressionReasonOptionsHtml(reasons, selectedIds) {
 }
 
 function getAvailableImpressionReasons() {
-  const player = findPlayer(impressionPlayerId);
   const available = [...STANDARD_IMPRESSION_REASONS, ...state.customImpressionReasons];
   const ids = new Set(available.map((reason) => reason.id));
   impressionDraftReasons.forEach((reason) => {
@@ -1487,27 +1472,21 @@ function updateImpressionDialogSummary() {
   const impression = getImpressionFromReasons(reasons);
   els.impressionSummary.textContent = `${impression.label} / 市${impression.villagerCount}・狼${impression.werewolfCount}`;
   els.impressionSummary.className = `impression-summary impression-${impression.value}`;
-  els.impressionDialog.querySelectorAll('.impression-reason-options input[type="checkbox"]').forEach((input) => {
+  els.roleGuessDialog.querySelectorAll('.impression-reason-options input[type="checkbox"]').forEach((input) => {
     input.onchange = updateImpressionDialogSummary;
   });
 }
 
 function getSelectedImpressionReasonsFromDialog() {
   const reasonMap = new Map(getAvailableImpressionReasons().map((reason) => [reason.id, reason]));
-  return Array.from(els.impressionDialog.querySelectorAll('.impression-reason-options input[type="checkbox"]:checked'))
+  return Array.from(els.roleGuessDialog.querySelectorAll('.impression-reason-options input[type="checkbox"]:checked'))
     .map((input) => reasonMap.get(input.value))
     .filter(Boolean)
     .map((reason) => ({ ...reason }));
 }
 
 function saveImpressionSelection() {
-  const player = findPlayer(impressionPlayerId);
-  if (!player) return;
-  player.impressionReasons = impressionDraftReasons.map((reason) => ({ ...reason }));
-  autoStartGameFromBoardInput();
-  closeImpressionDialog();
-  renderAndStore();
-  toast("印象を保存しました");
+  saveRoleGuess();
 }
 
 function addCustomImpressionReason() {
@@ -1519,7 +1498,7 @@ function addCustomImpressionReason() {
   }
   state.customImpressionReasons.push({ id: crypto.randomUUID(), label, side, custom: true });
   els.customReasonNameInput.value = "";
-  renderImpressionDialog();
+  renderImpressionSection();
   store();
   toast("観察ラベルを追加しました");
 }
@@ -1528,7 +1507,7 @@ function deleteCustomImpressionReason(reasonId) {
   const reason = state.customImpressionReasons.find((item) => item.id === reasonId);
   if (!reason || !confirm(`「${reason.label}」を今後の候補から削除しますか？`)) return;
   state.customImpressionReasons = state.customImpressionReasons.filter((item) => item.id !== reasonId);
-  renderImpressionDialog();
+  renderImpressionSection();
   store();
   toast("候補から削除しました");
 }
@@ -1541,6 +1520,8 @@ function openRoleGuessDialog(playerId) {
     return toast("確定白成立中は役職推理を変更できません");
   }
   roleGuessPlayerId = playerId;
+  impressionPlayerId = playerId;
+  impressionDraftReasons = (player.impressionReasons || []).map((reason) => ({ ...reason }));
   els.roleGuessPlayerName.textContent = player.name;
   renderRoleGuessDialog(player);
   els.roleGuessDialog.showModal();
@@ -1548,6 +1529,8 @@ function openRoleGuessDialog(playerId) {
 
 function closeRoleGuessDialog() {
   roleGuessPlayerId = "";
+  impressionPlayerId = "";
+  impressionDraftReasons = [];
   els.roleGuessDialog.close();
 }
 
@@ -1627,6 +1610,7 @@ function renderRoleGuessDialog(player) {
     input.addEventListener("change", handleRoleGuessCandidateChange);
   });
   renderPrimaryRoleGuessOptions(selectedValue === "unknown" ? "" : selectedValue);
+  renderImpressionSection();
   els.exitWolfModeBtn.hidden = !(isWolfMode() && isPriorityPlayer(player));
 }
 
@@ -1652,30 +1636,21 @@ function renderBlackTargetOptions(player) {
     els.blackTargetSelect.innerHTML = "";
     return;
   }
-  const selected =
-    player.blackTargetPreference === "exclude"
-      ? "exclude"
-      : player.blackTargetPreference === "fixed" && player.blackTargetFixedRank
-        ? `fixed-${player.blackTargetFixedRank}`
-        : "auto";
-  els.blackTargetSelect.innerHTML = [
-    ["auto", "自動"],
-    ["exclude", "対象外"],
-    ...Array.from({ length: state.wolfCount }, (_, index) => [`fixed-${index + 1}`, `黒塗り${getCircledNumber(index + 1)}`]),
-  ]
-    .map(([value, label]) => `<option value="${value}" ${selected === value ? "selected" : ""}>${label}</option>`)
-    .join("");
+  const teammateCount = getWolfTeammates().length;
+  const maxRank = Math.min(3, teammateCount + 1);
+  const currentRank = player.blackTargetRank || 0;
+  const options = [
+    '<option value="0">黒塗り対象外</option>',
+    ...Array.from({ length: maxRank }, (_, i) => i + 1).map(
+      (rank) => `<option value="${rank}" ${rank === currentRank ? "selected" : ""}>黒塗り順位 ${rank}</option>`,
+    ),
+  ];
+  els.blackTargetSelect.innerHTML = options.join("");
 }
 
-function handleRoleGuessCandidateChange(event) {
-  const input = event.currentTarget;
-  renderPrimaryRoleGuessOptions(els.primaryRoleGuessSelect.value);
-  if (input.value !== "unknown") els.primaryRoleGuessSelect.value = input.value;
-}
-
-function renderPrimaryRoleGuessOptions(currentValue = "") {
-  const candidates = getSelectedRoleGuessCandidates();
-  const primaryCandidates = candidates.filter((value) => value !== "unknown");
+function renderPrimaryRoleGuessOptions(currentValue) {
+  const selectedCandidates = getSelectedRoleGuessCandidates();
+  const primaryCandidates = selectedCandidates.filter((value) => value !== "unknown");
   els.primaryRoleGuessSelect.innerHTML = [
     '<option value="">不明</option>',
     ...primaryCandidates.map((value) => `<option value="${value}">${ROLE_GUESS_LABELS[value]}</option>`),
@@ -1704,6 +1679,7 @@ function saveRoleGuess() {
     selectedCandidates.find((value) => value !== "unknown") ||
     "";
   const selectedWerewolfForSelf = isPriorityPlayer(player) && selectedCandidates.includes("werewolf");
+  player.impressionReasons = impressionDraftReasons.map((reason) => ({ ...reason }));
   if (isWolfMode() && isWolfModeMember(player)) {
     player.wolfModeCoverRole = WOLF_MODE_COVER_ROLES.has(selectedPrimary) ? selectedPrimary : "unknown";
     closeRoleGuessDialog();
@@ -1750,7 +1726,7 @@ function saveRoleGuess() {
       ? "仲間の人狼を選択しました"
       : shouldRegisterWolfTeammate
         ? `仲間の人狼を選択しました（残り${teammateLimit - getWolfTeammates().length}人）`
-        : "役職推理を保存しました",
+        : "推理と印象を保存しました",
   );
 }
 
@@ -3406,6 +3382,15 @@ function renderRopeCount() {
   els.ropeCountBadge.textContent = `生存${aliveCount} / 残り${getRemainingRopeCount()}縄`;
 }
 
+function getInferenceDisplayText(player) {
+  const roleGuess = getDisplayedRoleGuess(player);
+  const impression = getPlayerImpression(player);
+  if (impression.value === "flat") {
+    return roleGuess.label;
+  }
+  return `${roleGuess.label}・${impression.label}`;
+}
+
 function renderRows() {
   els.playerRows.innerHTML = "";
   const players = getReasoningDisplayPlayers();
@@ -3424,6 +3409,7 @@ function renderRows() {
     const perspectiveGrid = getPerspectiveGridHtml(player);
     const impression = getPlayerImpression(player);
     const roleGuess = getDisplayedRoleGuess(player);
+    const inferenceText = getInferenceDisplayText(player);
     const allyMarker = getPlayerAllyMarkerHtml(player.id);
     const enemyMarkers = getPlayerEnemyMarkersHtml(player.id);
     row.innerHTML = `
@@ -3435,15 +3421,14 @@ function renderRows() {
             <span class="player-name">${escapeHtml(player.name)}</span>
             ${enemyMarkers}
             ${isGameFinished() && player.trueRole ? `<span class="true-role-label ${getRoleGuessClass(player.trueRole)}">${escapeHtml(ROLE_GUESS_LABELS[player.trueRole] || player.trueRole)}</span>` : ""}
-            <span class="role-guess-label ${getRoleGuessClass(roleGuess.value)} ${player.wolfTeammate || (isWolfMode() && isPriorityPlayer(player)) ? "wolf-teammate" : ""} ${player.blackTargetRank ? "black-target" : ""}">
-              ${escapeHtml(roleGuess.label)}
+            <span class="role-guess-label ${getRoleGuessClass(roleGuess.value)} impression-${impression.value} ${player.wolfTeammate || (isWolfMode() && isPriorityPlayer(player)) ? "wolf-teammate" : ""} ${player.blackTargetRank ? "black-target" : ""}">
+              ${escapeHtml(inferenceText)}
               ${player.blackTargetRank ? `<span class="black-target-rank" aria-label="黒塗り順位 ${player.blackTargetRank}">${escapeHtml(getCircledNumber(player.blackTargetRank))}</span>` : ""}
             </span>
           </span>
         </span>
         ${perspectiveGrid}
       </button>
-      <button class="impression-button impression-${impression.value}" type="button" ${isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}の要素を変更">${escapeHtml(impression.label)}</button>
       <button class="status-button status-${escapeHtml(player.status || "alive")}" type="button" ${isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}の状態を変更">${escapeHtml(getStatusDisplay(player))}</button>
       <span class="order-actions" aria-label="${escapeHtml(player.name)}の並び替え">
         <button class="order-button" type="button" data-direction="-1" ${index === 0 || isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を上へ">↑</button>
@@ -3483,7 +3468,6 @@ function renderRows() {
       button.addEventListener("click", () => movePlayer(player.id, Number(button.dataset.direction)));
     });
     row.querySelector(".status-button").addEventListener("click", () => openStatusDialog(player.id));
-    row.querySelector(".impression-button").addEventListener("click", () => openImpressionDialog(player.id));
     els.playerRows.appendChild(row);
   });
 }
@@ -6636,18 +6620,28 @@ function buildHistoryText(history) {
 }
 
 function appendBoardMarkdown(lines, players) {
-  lines.push("", "## 盤面", "", "| 名前 | 状態 | CO | 役職推理 | 印象 | 真役職 |", "| --- | --- | --- | --- | --- | --- |");
+  lines.push("", "## 盤面", "", "| 名前 | 状態 | CO | 役職推理 | 真役職 |", "| --- | --- | --- | --- | --- |");
   players.forEach((player) => {
     const values = [
       player.name,
       getStatusDisplay(player),
       player.role ? ROLE_LABELS[player.role] : "COなし",
-      formatRoleGuessForExport(player),
-      formatImpressionForExport(player),
+      formatCombinedInferenceForExport(player),
       player.trueRole ? ROLE_GUESS_LABELS[player.trueRole] || ROLE_LABELS[player.trueRole] || "" : "",
     ];
     lines.push(`| ${values.map(escapeMarkdownTableCell).join(" | ")} |`);
   });
+}
+
+function formatCombinedInferenceForExport(player) {
+  const roleGuessText = formatRoleGuessForExport(player);
+  const impression = getPlayerImpression(player);
+  const reasons = formatImpressionReasons(player.impressionReasons);
+  if (impression.value === "flat" && !reasons) {
+    return roleGuessText;
+  }
+  const impressionText = reasons ? `${impression.label}: ${reasons}` : impression.label;
+  return `${roleGuessText}（${impressionText}）`;
 }
 
 function escapeMarkdownTableCell(value) {
