@@ -2786,6 +2786,12 @@ input.invalid {
   box-shadow: inset 0 0 0 1px rgba(255, 107, 107, 0.45);
 }
 
+/* History detail panel layout */
+#historyDetailPanel {
+  display: grid;
+  gap: 10px;
+}
+
 /* History detail board preview in reasoning tab style */
 .history-detail-header {
   display: flex;
@@ -2846,6 +2852,7 @@ input.invalid {
 }
 
 .history-table-panel {
+  min-height: auto;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
