@@ -4360,7 +4360,7 @@ function getMediumPerspectiveCellsHtml(player, mediums = getMediums()) {
       }
 
       if (isAttackNonWolfConfirmed(player)) {
-        return `<span class="seer-result-label judgement-human" data-medium-id="${escapeHtml(medium.id)}">${escapeHtml(ROLE_LABELS.villager)}</span>`;
+        return `<span class="seer-result-label judgement-human" data-medium-id="${escapeHtml(medium.id)}">結果市民</span>`;
       }
 
       const exposedHumanClaim = getExposedHumanClaimForMedium(player, medium);
@@ -4521,7 +4521,7 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
             ? `${exposedHumanClaim} / ${ROLE_LABELS.confirmedWhite}`
             : autoVillagerClaim;
         return autoVillagerClaim
-          ? `<span class="seer-result-label ${guardClaim ? getGuardClaimClass(player, result?.value || "") : exposedHumanClaim ? "judgement-human" : manualMediumGuess ? "role-medium" : getAutoVillagerClass(player)}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(displayLabel)}</span>`
+          ? `<span class="seer-result-label ${guardClaim ? getGuardClaimClass(player, result?.value || "") : (exposedHumanClaim || autoVillagerClaim === "結果市民") ? "judgement-human" : manualMediumGuess ? "role-medium" : getAutoVillagerClass(player)}" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(displayLabel)}</span>`
           : `<span class="seer-result-label empty" data-seer-id="${escapeHtml(seer.id)}" aria-hidden="true"></span>`;
       }
       const className = manualMediumGuess
@@ -4760,7 +4760,7 @@ function getMediumConfirmedDisplay(player) {
 
 function getAutoVillagerClaimForSeer(player, seerId) {
   if (player.role || !isAttackNonWolfConfirmed(player)) return "";
-  return hasDivinationResultForSeer(player.id, seerId) ? "" : ROLE_LABELS.villager;
+  return hasDivinationResultForSeer(player.id, seerId) ? "" : "結果市民";
 }
 
 function getExposedHumanClaimForSeer(player, seer) {
