@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.222";
+const APP_VERSION = "1.223";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -4352,7 +4352,7 @@ function getMediumPerspectiveCellsHtml(player, mediums = getMediums()) {
         return `<span class="seer-result-label empty" data-medium-id="${escapeHtml(medium.id)}" aria-label="霊媒未記録"></span>`;
       }
 
-      if (player.role && player.role !== "medium") {
+      if (player.role && player.role !== "medium" && player.role !== "villager") {
         const claimants = getRoleClaimants(player.role);
         if (claimants.length >= 2) {
           return `<span class="seer-result-label ${getWolfSideAwareRoleClass(player)}" data-medium-id="${escapeHtml(medium.id)}">${escapeHtml(ROLE_LABELS[player.role])}/${ROLE_LABELS.wolfSide}</span>`;
@@ -4360,7 +4360,7 @@ function getMediumPerspectiveCellsHtml(player, mediums = getMediums()) {
         return `<span class="seer-result-label ${getRoleClass(player)}" data-medium-id="${escapeHtml(medium.id)}">${escapeHtml(ROLE_LABELS[player.role])}</span>`;
       }
 
-      if (isAttackNonWolfConfirmed(player)) {
+      if (isAttackNonWolfConfirmed(player) && (!player.role || player.role === "villager")) {
         return `<span class="seer-result-label judgement-human" data-medium-id="${escapeHtml(medium.id)}">結果市民</span>`;
       }
 
@@ -4457,6 +4457,9 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
     ).join("");
   }
   if (!seers.length) {
+    if (isAttackNonWolfConfirmed(player) && (!player.role || player.role === "villager")) {
+      return `<span class="seer-result-label judgement-human">結果市民</span>`;
+    }
     const mediumConfirmedDisplay = getMediumConfirmedDisplay(player);
     if (mediumConfirmedDisplay) {
       return `<span class="seer-result-label ${mediumConfirmedDisplay.className}">${escapeHtml(mediumConfirmedDisplay.label)}</span>`;
@@ -4511,6 +4514,9 @@ function getSeerPerspectiveCellsHtml(player, seers = getSeers()) {
       }
       if (shouldDisplayMediumConfirmedWerewolf(player)) {
         return `<span class="seer-result-label judgement-werewolf" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(RESULT_LABELS.werewolf)}</span>`;
+      }
+      if (!result && isAttackNonWolfConfirmed(player) && (!player.role || player.role === "villager")) {
+        return `<span class="seer-result-label judgement-human" data-seer-id="${escapeHtml(seer.id)}">結果市民</span>`;
       }
       const roleClaim = player.autoConfirmedWhite ? "" : getSeerGridRoleLabel(player);
       const manualMediumGuess = getManualUnclaimedMediumGuess(player);
@@ -4760,7 +4766,7 @@ function getMediumConfirmedDisplay(player) {
 }
 
 function getAutoVillagerClaimForSeer(player, seerId) {
-  if (player.role || !isAttackNonWolfConfirmed(player)) return "";
+  if ((player.role && player.role !== "villager") || !isAttackNonWolfConfirmed(player)) return "";
   return hasDivinationResultForSeer(player.id, seerId) ? "" : "結果市民";
 }
 
