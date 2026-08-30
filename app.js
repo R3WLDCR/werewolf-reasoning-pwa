@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.214";
+const APP_VERSION = "1.215";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -637,6 +637,7 @@ function bindEvents() {
   els.rivalPerspectiveDialog.addEventListener("click", (event) => {
     if (event.target === els.rivalPerspectiveDialog) closeRivalPerspectiveDialog();
   });
+  els.playerRows.addEventListener("click", handlePlayerRowsClick);
   els.remoteUpdateBanner.addEventListener("click", () => {
     state.activeView = "sync";
     render();
@@ -3418,8 +3419,91 @@ function getInferenceDisplayText(player) {
   return `${roleGuess.label}・${impression.label}`;
 }
 
+function handlePlayerRowsClick(event) {
+  const roleGuessBtn = event.target.closest(".role-guess-label, [data-role-guess-id]");
+  if (roleGuessBtn) {
+    event.preventDefault();
+    event.stopPropagation();
+    const row = roleGuessBtn.closest(".player-row");
+    const playerId = roleGuessBtn.dataset.roleGuessId || row?.dataset.playerId;
+    if (playerId) openRoleGuessDialog(playerId);
+    return;
+  }
+  const stickyNameBtn = event.target.closest(".sticky-player-name");
+  if (stickyNameBtn) {
+    event.preventDefault();
+    event.stopPropagation();
+    const row = stickyNameBtn.closest(".player-row");
+    const playerId = row?.dataset.playerId;
+    if (playerId) openEditDialog(playerId);
+    return;
+  }
+  const statusBtn = event.target.closest(".status-button");
+  if (statusBtn) {
+    event.preventDefault();
+    event.stopPropagation();
+    const row = statusBtn.closest(".player-row");
+    const playerId = row?.dataset.playerId;
+    if (playerId) openStatusDialog(playerId);
+    return;
+  }
+  const orderBtn = event.target.closest(".order-button");
+  if (orderBtn) {
+    event.preventDefault();
+    event.stopPropagation();
+    const row = orderBtn.closest(".player-row");
+    const playerId = row?.dataset.playerId;
+    if (playerId) movePlayer(playerId, Number(orderBtn.dataset.direction));
+    return;
+  }
+  const rivalCell = event.target.closest("[data-rival-role]");
+  if (rivalCell) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (rivalCell.dataset.rivalRole === "seer") {
+      openEditDialog(rivalCell.dataset.rivalTargetId, rivalCell.dataset.rivalViewerId);
+      return;
+    }
+    openRivalPerspectiveDialog(
+      rivalCell.dataset.rivalRole,
+      rivalCell.dataset.rivalViewerId,
+      rivalCell.dataset.rivalTargetId,
+    );
+    return;
+  }
+  const mediumCell = event.target.closest("[data-medium-id]");
+  if (mediumCell) {
+    event.preventDefault();
+    event.stopPropagation();
+    const row = mediumCell.closest(".player-row");
+    const playerId = row?.dataset.playerId;
+    if (playerId) openEditDialog(playerId);
+    return;
+  }
+  const seerCell = event.target.closest("[data-seer-id]");
+  if (seerCell) {
+    event.preventDefault();
+    event.stopPropagation();
+    const row = seerCell.closest(".player-row");
+    const playerId = row?.dataset.playerId;
+    if (playerId) openEditDialog(playerId, seerCell.dataset.seerId || "");
+    return;
+  }
+  const playerNameEl = event.target.closest(".player-name");
+  if (playerNameEl) {
+    event.preventDefault();
+    event.stopPropagation();
+    const row = playerNameEl.closest(".player-row");
+    const playerId = row?.dataset.playerId;
+    if (playerId) openEditDialog(playerId);
+    return;
+  }
+}
+
 function renderRows() {
   els.playerRows.innerHTML = "";
+  els.playerRows.removeEventListener("click", handlePlayerRowsClick);
+  els.playerRows.addEventListener("click", handlePlayerRowsClick);
   const players = getReasoningDisplayPlayers();
   els.emptyState.hidden = players.length > 0;
   players.forEach((player, index) => {
@@ -3440,7 +3524,7 @@ function renderRows() {
     const allyMarker = getPlayerAllyMarkerHtml(player.id);
     const enemyMarkers = getPlayerEnemyMarkersHtml(player.id);
     row.innerHTML = `
-      <button class="sticky-player-name" type="button" ${isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を編集">${allyMarker}<span class="sticky-player-name-text">${escapeHtml(player.name)}</span>${enemyMarkers}</button>
+      <button class="sticky-player-name" type="button" data-player-id="${escapeHtml(player.id)}" ${isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を編集">${allyMarker}<span class="sticky-player-name-text">${escapeHtml(player.name)}</span>${enemyMarkers}</button>
       <div class="player-info">
         <span class="player-main">
           <span class="player-name-row">
@@ -3832,7 +3916,7 @@ function getMaxStatusDay(status) {
 }
 
 function handlePlayerDragStart(event) {
-  if (isGameFinished()) {
+  if (isGameFinished() || event.target.closest("button, select, input, .role-guess-label, .player-name, .seer-result-label, [data-role-guess-id], [data-rival-role], [data-medium-id], [data-seer-id]")) {
     event.preventDefault();
     return;
   }
