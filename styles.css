@@ -756,6 +756,21 @@ select:disabled {
   white-space: nowrap;
 }
 
+button.role-guess-label {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid transparent;
+  background-color: var(--paper);
+  color: inherit;
+  font-family: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.player-name[role="button"] {
+  cursor: pointer;
+}
+
 .role-guess-label {
   width: 112px;
   position: relative;

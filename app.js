@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.212";
+const APP_VERSION = "1.213";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -54,7 +54,9 @@ const PLAYER_RELATION_LABELS = {
   ally: "仲間",
   enemy: "敵対",
 };
-const PLAYER_RELATION_COLORS = ["#39b8c8", "#e0ad3b", "#60b878", "#a985d8", "#df718d", "#5e91d8"];
+const PLAYER_ALLY_COLORS = ["#39b8c8", "#4a90e2", "#5cb85c", "#e5a93b", "#9b6bcc", "#20b2aa"];
+const PLAYER_ENEMY_COLORS = ["#e53935", "#ff5252", "#d81b60", "#ff5722", "#c62828", "#ad1457"];
+const PLAYER_RELATION_COLORS = PLAYER_ALLY_COLORS;
 const ROLE_ACTION_RESULT_LABELS = {
   medium: {
     unknown: "不明",
@@ -2138,7 +2140,7 @@ function renderPlayerRelationList() {
       const playerA = findPlayer(relation.playerAId);
       const playerB = findPlayer(relation.playerBId);
       if (!playerA || !playerB) return "";
-      const color = getPlayerRelationColor(relation.colorIndex);
+      const color = getPlayerRelationColor(relation.colorIndex, relation.type);
       return `
         <div class="player-relation-item" data-player-relation-id="${escapeHtml(relation.id)}">
           <span class="player-relation-swatch ${escapeHtml(relation.type)}" style="--relation-color: ${color}" aria-hidden="true"></span>
@@ -2166,21 +2168,24 @@ function getPlayerRelationPairKey(playerAId, playerBId) {
   return [String(playerAId), String(playerBId)].sort().join(":");
 }
 
-function getPlayerRelationColor(colorIndex) {
-  return PLAYER_RELATION_COLORS[normalizePlayerRelationColorIndex(colorIndex)];
+function getPlayerRelationColor(colorIndex, type = "ally") {
+  const colors = type === "enemy" ? PLAYER_ENEMY_COLORS : PLAYER_ALLY_COLORS;
+  return colors[normalizePlayerRelationColorIndex(colorIndex, type)];
 }
 
-function normalizePlayerRelationColorIndex(value) {
+function normalizePlayerRelationColorIndex(value, type = "ally") {
+  const colors = type === "enemy" ? PLAYER_ENEMY_COLORS : PLAYER_ALLY_COLORS;
   const index = Number.isFinite(Number(value)) ? Math.max(0, Math.trunc(Number(value))) : 0;
-  return index % PLAYER_RELATION_COLORS.length;
+  return index % colors.length;
 }
 
 function getNextPlayerRelationColorIndex(type) {
+  const colors = type === "enemy" ? PLAYER_ENEMY_COLORS : PLAYER_ALLY_COLORS;
   const used = new Set(
-    state.playerRelations.filter((relation) => relation.type === type).map((relation) => normalizePlayerRelationColorIndex(relation.colorIndex)),
+    state.playerRelations.filter((relation) => relation.type === type).map((relation) => normalizePlayerRelationColorIndex(relation.colorIndex, type)),
   );
-  const available = PLAYER_RELATION_COLORS.findIndex((_, index) => !used.has(index));
-  return available >= 0 ? available : state.playerRelations.filter((relation) => relation.type === type).length % PLAYER_RELATION_COLORS.length;
+  const available = colors.findIndex((_, index) => !used.has(index));
+  return available >= 0 ? available : state.playerRelations.filter((relation) => relation.type === type).length % colors.length;
 }
 
 function reconcileAllyRelationColors(relations = state.playerRelations) {
@@ -2212,10 +2217,10 @@ function reconcileAllyRelationColors(relations = state.playerRelations) {
   const used = new Set();
   components.forEach((component, componentIndex) => {
     const preferred = component.relations
-      .map((relation) => normalizePlayerRelationColorIndex(relation.colorIndex))
+      .map((relation) => normalizePlayerRelationColorIndex(relation.colorIndex, "ally"))
       .find((index) => !used.has(index));
-    const available = PLAYER_RELATION_COLORS.findIndex((_, index) => !used.has(index));
-    const colorIndex = preferred ?? (available >= 0 ? available : componentIndex % PLAYER_RELATION_COLORS.length);
+    const available = PLAYER_ALLY_COLORS.findIndex((_, index) => !used.has(index));
+    const colorIndex = preferred ?? (available >= 0 ? available : componentIndex % PLAYER_ALLY_COLORS.length);
     used.add(colorIndex);
     component.relations.forEach((relation) => {
       relation.colorIndex = colorIndex;
@@ -2228,14 +2233,14 @@ function getPlayerAllyMarkerHtml(playerId) {
     (relation) => relation.type === "ally" && [relation.playerAId, relation.playerBId].includes(playerId),
   );
   if (!ally) return "";
-  return `<i class="player-ally-marker" style="--relation-color: ${getPlayerRelationColor(ally.colorIndex)}" aria-hidden="true"></i>`;
+  return `<i class="player-ally-marker" style="--relation-color: ${getPlayerRelationColor(ally.colorIndex, "ally")}" aria-hidden="true"></i>`;
 }
 
 function getPlayerEnemyMarkersHtml(playerId) {
   const enemyColors = [...new Set(
     state.playerRelations
       .filter((relation) => relation.type === "enemy" && [relation.playerAId, relation.playerBId].includes(playerId))
-      .map((relation) => getPlayerRelationColor(relation.colorIndex)),
+      .map((relation) => getPlayerRelationColor(relation.colorIndex, "enemy")),
   )];
   if (!enemyColors.length) return "";
   return `<span class="player-enemy-markers" aria-hidden="true">${enemyColors.map((color) => `<i style="--relation-color: ${color}"></i>`).join("")}</span>`;
@@ -3431,21 +3436,21 @@ function renderRows() {
     const enemyMarkers = getPlayerEnemyMarkersHtml(player.id);
     row.innerHTML = `
       <button class="sticky-player-name" type="button" ${isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を編集">${allyMarker}<span class="sticky-player-name-text">${escapeHtml(player.name)}</span>${enemyMarkers}</button>
-      <button class="player-info" type="button" ${isGameFinished() ? "disabled" : ""}>
+      <div class="player-info">
         <span class="player-main">
           <span class="player-name-row">
             ${allyMarker}
-            <span class="player-name">${escapeHtml(player.name)}</span>
+            <span class="player-name" role="button" tabindex="0">${escapeHtml(player.name)}</span>
             ${enemyMarkers}
             ${isGameFinished() && player.trueRole ? `<span class="true-role-label ${getRoleGuessClass(player.trueRole)}">${escapeHtml(ROLE_GUESS_LABELS[player.trueRole] || player.trueRole)}</span>` : ""}
-            <span class="role-guess-label ${getRoleGuessClass(roleGuess.value)} impression-${impression.value} ${player.wolfTeammate || (isWolfMode() && isPriorityPlayer(player)) ? "wolf-teammate" : ""} ${player.blackTargetRank ? "black-target" : ""}">
+            <button class="role-guess-label ${getRoleGuessClass(roleGuess.value)} impression-${impression.value} ${player.wolfTeammate || (isWolfMode() && isPriorityPlayer(player)) ? "wolf-teammate" : ""} ${player.blackTargetRank ? "black-target" : ""}" type="button" ${isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}の役職推理を変更">
               ${escapeHtml(inferenceText)}
               ${player.blackTargetRank ? `<span class="black-target-rank" aria-label="黒塗り順位 ${player.blackTargetRank}">${escapeHtml(getCircledNumber(player.blackTargetRank))}</span>` : ""}
-            </span>
+            </button>
           </span>
         </span>
         ${perspectiveGrid}
-      </button>
+      </div>
       <button class="status-button status-${escapeHtml(player.status || "alive")}" type="button" ${isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}の状態を変更">${escapeHtml(getStatusDisplay(player))}</button>
       <span class="order-actions" aria-label="${escapeHtml(player.name)}の並び替え">
         <button class="order-button" type="button" data-direction="-1" ${index === 0 || isGameFinished() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を上へ">↑</button>
@@ -3453,12 +3458,13 @@ function renderRows() {
       </span>
     `;
     row.querySelector(".sticky-player-name").addEventListener("click", () => openEditDialog(player.id));
+    row.querySelector(".player-name")?.addEventListener("click", () => openEditDialog(player.id));
+    row.querySelector(".role-guess-label")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openRoleGuessDialog(player.id);
+    });
     row.querySelector(".player-info").addEventListener("click", (event) => {
-      if (event.target.closest(".role-guess-label")) {
-        event.stopPropagation();
-        openRoleGuessDialog(player.id);
-        return;
-      }
+      if (event.target.closest(".role-guess-label")) return;
       const rivalCell = event.target.closest("[data-rival-role]");
       if (rivalCell) {
         event.stopPropagation();
@@ -3479,7 +3485,11 @@ function renderRows() {
         return;
       }
       const seerCell = event.target.closest("[data-seer-id]");
-      openEditDialog(player.id, seerCell?.dataset.seerId || "");
+      if (seerCell) {
+        openEditDialog(player.id, seerCell.dataset.seerId || "");
+        return;
+      }
+      openEditDialog(player.id);
     });
     row.querySelectorAll(".order-button").forEach((button) => {
       button.addEventListener("click", () => movePlayer(player.id, Number(button.dataset.direction)));
