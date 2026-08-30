@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.206";
+const APP_VERSION = "1.207";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -6711,26 +6711,6 @@ function buildHistoryText(history) {
     `- 人狼: ${history.wolfCount}人`,
   ];
   appendBoardMarkdown(lines, getHistoryActivePlayers(history));
-  lines.push("", "## 真の役職");
-  lines.push(...formatTrueRoleGroups(getHistoryActivePlayers(history)));
-  const teammates = getHistoryActivePlayers(history).filter((player) => player.wolfTeammate);
-  if (teammates.length) lines.push("", `仲間: ${teammates.map((player) => player.name).join("、")}`);
-  if (history.wolfModeActive) {
-    const wolfSidePlayers = getHistoryActivePlayers(history).filter(
-      (player) => isPriorityPlayer(player) || player.wolfTeammate,
-    );
-    lines.push("", "人狼陣営の表向き役職");
-    wolfSidePlayers.forEach((player) => {
-      lines.push(`- ${player.name}: ${ROLE_GUESS_LABELS[player.wolfModeCoverRole] || ROLE_GUESS_LABELS.unknown}`);
-    });
-  }
-  const blackTargets = getHistoryActivePlayers(history)
-    .filter((player) => player.blackTargetRank)
-    .sort((a, b) => a.blackTargetRank - b.blackTargetRank);
-  if (blackTargets.length) {
-    lines.push("", "黒塗り位置");
-    blackTargets.forEach((player) => lines.push(`- ${getCircledNumber(player.blackTargetRank)} ${player.name}`));
-  }
   lines.push("", "## 時系列");
   lines.push(...buildHistoryTimeline(history));
   return lines.join("\n");
