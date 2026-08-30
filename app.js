@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.204";
+const APP_VERSION = "1.205";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -5802,10 +5802,6 @@ function renderHistoryDetail(history) {
                 <span class="player-name">${escapeHtml(player.name)}</span>
                 ${enemyMarkers}
                 ${player.trueRole ? `<span class="true-role-label ${getRoleGuessClass(player.trueRole)}">${escapeHtml(ROLE_GUESS_LABELS[player.trueRole] || player.trueRole)}</span>` : ""}
-                <span class="role-guess-label ${getRoleGuessClass(roleGuess.value)} impression-${impression.value} ${player.wolfTeammate ? "wolf-teammate" : ""} ${player.blackTargetRank ? "black-target" : ""}">
-                  ${escapeHtml(inferenceText)}
-                  ${player.blackTargetRank ? `<span class="black-target-rank" aria-label="黒塗り順位 ${player.blackTargetRank}">${escapeHtml(getCircledNumber(player.blackTargetRank))}</span>` : ""}
-                </span>
               </span>
             </span>
             ${perspectiveGrid}
@@ -6740,18 +6736,31 @@ function buildHistoryText(history) {
   return lines.join("\n");
 }
 
-function appendBoardMarkdown(lines, players) {
-  lines.push("", "## 盤面", "", "| 名前 | 状態 | CO | 役職推理 | 真役職 |", "| --- | --- | --- | --- | --- |");
-  players.forEach((player) => {
-    const values = [
-      player.name,
-      getStatusDisplay(player),
-      player.role ? ROLE_LABELS[player.role] : "COなし",
-      formatCombinedInferenceForExport(player),
-      player.trueRole ? ROLE_GUESS_LABELS[player.trueRole] || ROLE_LABELS[player.trueRole] || "" : "",
-    ];
-    lines.push(`| ${values.map(escapeMarkdownTableCell).join(" | ")} |`);
-  });
+function appendBoardMarkdown(lines, players, options = {}) {
+  const isHistory = options.isHistory ?? players.some((p) => p.trueRole);
+  if (isHistory) {
+    lines.push("", "## 盤面", "", "| 名前 | 状態 | CO | 真役職 |", "| --- | --- | --- | --- |");
+    players.forEach((player) => {
+      const values = [
+        player.name,
+        getStatusDisplay(player),
+        player.role ? ROLE_LABELS[player.role] : "COなし",
+        player.trueRole ? ROLE_GUESS_LABELS[player.trueRole] || ROLE_LABELS[player.trueRole] || "" : "",
+      ];
+      lines.push(`| ${values.map(escapeMarkdownTableCell).join(" | ")} |`);
+    });
+  } else {
+    lines.push("", "## 盤面", "", "| 名前 | 状態 | CO | 役職推理 |", "| --- | --- | --- | --- |");
+    players.forEach((player) => {
+      const values = [
+        player.name,
+        getStatusDisplay(player),
+        player.role ? ROLE_LABELS[player.role] : "COなし",
+        formatCombinedInferenceForExport(player),
+      ];
+      lines.push(`| ${values.map(escapeMarkdownTableCell).join(" | ")} |`);
+    });
+  }
 }
 
 function formatCombinedInferenceForExport(player) {
