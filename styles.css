@@ -2819,13 +2819,17 @@ input.invalid {
   }
 }
 
-.role-guess-label.impression-villager,
-.role-guess-label.impression-strong_villager {
-  box-shadow: inset 0 0 0 1px rgba(78, 205, 196, 0.45);
+.role-guess-label.impression-villager {
+  box-shadow: inset 0 0 0 1.5px rgba(78, 205, 196, 0.7);
 }
-.role-guess-label.impression-werewolf,
+.role-guess-label.impression-strong_villager {
+  box-shadow: inset 0 0 0 2.5px #4ecdc4;
+}
+.role-guess-label.impression-werewolf {
+  box-shadow: inset 0 0 0 1.5px rgba(255, 107, 107, 0.7);
+}
 .role-guess-label.impression-strong_werewolf {
-  box-shadow: inset 0 0 0 1px rgba(255, 107, 107, 0.45);
+  box-shadow: inset 0 0 0 2.5px #ff6b6b;
 }
 
 /* History detail panel layout */

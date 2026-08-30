@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.216";
+const APP_VERSION = "1.217";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3417,11 +3417,7 @@ function renderRopeCount() {
 
 function getInferenceDisplayText(player) {
   const roleGuess = getDisplayedRoleGuess(player);
-  const impression = getPlayerImpression(player);
-  if (impression.value === "flat") {
-    return roleGuess.label;
-  }
-  return `${roleGuess.label}・${impression.label}`;
+  return roleGuess.label;
 }
 
 function handlePlayerRowsClick(event) {
