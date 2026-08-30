@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.211";
+const APP_VERSION = "1.212";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -115,6 +115,20 @@ const WOLF_MODE_COVER_ROLES = new Set(["unknown", "villager", "seer", "medium", 
 
 function normalizeCitizenText(value) {
   return String(value || "").replaceAll("村人", "市民");
+}
+
+function getWinnerClass(value) {
+  const winner = normalizeCitizenText(value);
+  if (!winner || winner.includes("未設定")) return "";
+  if (winner.includes("人狼")) return "winner-werewolf";
+  if (winner.includes("市民")) return "winner-villager";
+  return "winner-other";
+}
+
+function formatWinnerLabel(value) {
+  const winner = normalizeCitizenText(value);
+  if (!winner || winner.includes("未設定")) return "勝利陣営未設定";
+  return `🏆 ${winner}${winner.endsWith("勝利") ? "" : " 勝利"}`;
 }
 const BOARD_STATE_FIELDS = [
   "day",
@@ -5805,11 +5819,7 @@ function renderHistoryDetail(history) {
   if (els.historyDetailHeader) {
     const rawWinner = normalizeCitizenText(history.winner) || "";
     const winnerClass = getWinnerClass(rawWinner);
-    const winnerLabel = rawWinner
-      ? rawWinner.endsWith("勝利") || rawWinner.endsWith("陣営")
-        ? `🏆 ${rawWinner} 勝利`
-        : `🏆 ${rawWinner} 勝利`
-      : "勝利陣営未設定";
+    const winnerLabel = formatWinnerLabel(rawWinner);
     els.historyDetailHeader.innerHTML = `
       <div class="history-meta-title">
         <h3>${escapeHtml(getHistoryDisplayName(history))} 第${normalizeGameNumber(history.gameNumber)}試合</h3>
