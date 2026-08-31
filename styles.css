@@ -611,7 +611,7 @@ select:disabled {
 .player-info {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 7px;
   align-items: center;
   min-height: 54px;
@@ -2537,9 +2537,9 @@ input.invalid {
   transform: translate(-50%, 0);
 }
 
-@media (min-width: 680px) {
+@media (min-width: 521px) {
   .app-shell {
-    padding-inline: 18px;
+    padding-inline: 16px;
   }
 
   .setup-panel {
@@ -2547,16 +2547,8 @@ input.invalid {
     align-items: center;
   }
 
-  .player-row {
-    grid-template-columns: minmax(0, 1fr) 76px 150px 92px 46px;
-  }
-
   .participant-row {
-    grid-template-columns: minmax(0, 1fr) 72px 46px;
-  }
-
-  .player-info {
-    grid-template-columns: minmax(180px, 1fr) minmax(240px, 1fr);
+    grid-template-columns: minmax(0, 1fr) 72px 42px;
   }
 
   .seer-grid {
@@ -2564,13 +2556,79 @@ input.invalid {
   }
 
   .order-button {
-    width: 40px;
+    width: 36px;
+  }
+
+  body[data-active-view="reasoning"] .app-shell {
+    max-width: none;
+    padding-inline: 16px;
+  }
+
+  body[data-active-view="reasoning"] .bottom-bar {
+    width: calc(100% - 32px);
+  }
+
+  body[data-active-view="reasoning"] .player-row {
+    grid-template-columns: minmax(0, 1fr) 74px 38px;
+    gap: 6px;
+    padding: 6px 8px;
+    min-height: 54px;
+  }
+
+  body[data-active-view="reasoning"] .player-info {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  body[data-active-view="reasoning"] .player-name {
+    font-size: 0.95rem;
+    max-width: 105px;
+  }
+
+  body[data-active-view="reasoning"] .role-guess-label {
+    width: 96px;
+    min-height: 32px;
+    padding: 5px 8px;
+    font-size: 0.82rem;
+  }
+
+  body[data-active-view="reasoning"] .seer-grid {
+    grid-template-columns: repeat(var(--seer-columns), minmax(90px, 1fr));
+    gap: 4px;
+    padding: 4px 6px;
+    min-height: 36px;
+    overflow-x: auto;
+  }
+
+  body[data-active-view="reasoning"] .seer-result-label {
+    min-height: 30px;
+    padding: 4px 6px;
+    font-size: 0.82rem;
+  }
+
+  body[data-active-view="reasoning"] .status-button {
+    min-height: 38px;
+    font-size: 0.76rem;
+    padding: 4px 6px;
+  }
+
+  body[data-active-view="reasoning"] .order-actions {
+    gap: 3px;
+  }
+
+  body[data-active-view="reasoning"] .order-button {
+    width: 36px;
+    height: 24px;
+    font-size: 0.82rem;
   }
 }
 
-@media (min-width: 680px) {
+@media (min-width: 960px) {
+  .app-shell {
+    padding-inline: 24px;
+  }
+
   body[data-active-view="reasoning"] .app-shell {
-    max-width: none;
     padding-inline: 24px;
   }
 
@@ -2579,16 +2637,50 @@ input.invalid {
   }
 
   body[data-active-view="reasoning"] .player-row {
-    grid-template-columns: minmax(0, 1fr) 76px 180px 92px 46px;
+    grid-template-columns: minmax(0, 1fr) 82px 42px;
+    gap: 8px;
+    padding: 6px 12px;
   }
 
   body[data-active-view="reasoning"] .player-info {
-    grid-template-columns: minmax(250px, 0.32fr) minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  body[data-active-view="reasoning"] .player-name {
+    font-size: 1.05rem;
+    max-width: 140px;
+  }
+
+  body[data-active-view="reasoning"] .role-guess-label {
+    width: 110px;
+    min-height: 36px;
+    padding: 6px 10px;
+    font-size: 0.88rem;
   }
 
   body[data-active-view="reasoning"] .seer-grid {
-    grid-template-columns: repeat(var(--seer-columns), minmax(150px, 1fr));
-    overflow-x: auto;
+    grid-template-columns: repeat(var(--seer-columns), minmax(116px, 1fr));
+    gap: 6px;
+    padding: 6px 8px;
+    min-height: 40px;
+  }
+
+  body[data-active-view="reasoning"] .seer-result-label {
+    min-height: 34px;
+    padding: 6px 10px;
+    font-size: 0.92rem;
+  }
+
+  body[data-active-view="reasoning"] .status-button {
+    min-height: 44px;
+    font-size: 0.82rem;
+  }
+
+  body[data-active-view="reasoning"] .order-button {
+    width: 40px;
+    height: 28px;
+    font-size: 0.95rem;
   }
 }
 
