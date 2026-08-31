@@ -1,5 +1,5 @@
-const CACHE_NAME = "werewolf-reasoning-note-v1223";
-const ASSET_VERSION = "1.223";
+const CACHE_NAME = "werewolf-reasoning-note-v1225";
+const ASSET_VERSION = "1.225";
 const ASSETS = [
   "./",
   "./index.html",
@@ -7,8 +7,9 @@ const ASSETS = [
   `./app.js?v=${ASSET_VERSION}`,
   `./sync-config.js?v=${ASSET_VERSION}`,
   "./manifest.json",
-  "./icons/icon-192.svg",
-  "./icons/icon-512.svg",
+  `./icons/icon-180.png?v=${ASSET_VERSION}`,
+  `./icons/icon-192.png?v=${ASSET_VERSION}`,
+  `./icons/icon-512.png?v=${ASSET_VERSION}`,
 ];
 
 self.addEventListener("install", (event) => {
