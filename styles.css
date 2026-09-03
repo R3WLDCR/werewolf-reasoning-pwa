@@ -611,7 +611,7 @@ select:disabled {
 .player-info {
   min-width: 0;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: 216px minmax(0, 1fr);
   gap: 7px;
   align-items: center;
   min-height: 54px;
@@ -697,10 +697,17 @@ select:disabled {
   display: flex;
   align-items: center;
   gap: 7px;
+  width: 100%;
 }
 
 .player-name-row .player-name {
-  flex: 1 1 auto;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.player-name-row .role-guess-label {
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
 .player-ally-marker {
@@ -2576,13 +2583,12 @@ input.invalid {
   }
 
   body[data-active-view="reasoning"] .player-info {
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: 216px minmax(0, 1fr);
     gap: 6px;
   }
 
   body[data-active-view="reasoning"] .player-name {
     font-size: 0.95rem;
-    max-width: 105px;
   }
 
   body[data-active-view="reasoning"] .role-guess-label {
@@ -2643,13 +2649,12 @@ input.invalid {
   }
 
   body[data-active-view="reasoning"] .player-info {
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: 256px minmax(0, 1fr);
     gap: 10px;
   }
 
   body[data-active-view="reasoning"] .player-name {
     font-size: 1.05rem;
-    max-width: 140px;
   }
 
   body[data-active-view="reasoning"] .role-guess-label {
