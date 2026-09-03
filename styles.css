@@ -979,6 +979,12 @@ button.role-guess-label {
   color: #80e8a8;
 }
 
+.role-madmanHunter {
+  background: linear-gradient(90deg, #4b3d12 0%, #4b3d12 55%, #123f2e 100%);
+  color: #ffe27a;
+  border: 1px solid rgba(128, 232, 168, 0.42);
+}
+
 .role-fox {
   background: #4a243d;
   color: #ffaad8;
@@ -1696,11 +1702,62 @@ button.role-guess-label {
   }
 }
 
-.role-guess-options,
+.role-guess-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .history-role-guess-options {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 7px;
+}
+
+.role-guess-camps-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.role-guess-camp-column {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.role-guess-camp-title {
+  font-size: 0.78rem;
+  font-weight: 900;
+  padding: 2px 4px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 2px;
+}
+
+.villager-camp .role-guess-camp-title {
+  color: #7ab8eb;
+}
+
+.werewolf-camp .role-guess-camp-title {
+  color: #ff8d98;
+}
+
+.role-guess-third-camp {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(159, 176, 173, 0.2);
+}
+
+.role-guess-third-camp .role-guess-camp-title {
+  color: #d9c5ff;
+}
+
+.role-guess-third-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 4px;
 }
 
 .wolf-mode-entry-hint {

@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.225";
+const APP_VERSION = "1.226";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -17,6 +17,7 @@ const ROLE_LABELS = {
   hunter: "ハンター",
   fox: "妖狐",
   teruteru: "てるてる",
+  madmanHunter: "狂人ハンター",
 };
 const ROLE_ORDER = {
   seer: 0,
@@ -113,6 +114,29 @@ const ROLE_GUESS_LABELS = {
   hunter: "ハンター",
   fox: "妖狐",
   teruteru: "てるてる",
+  madmanHunter: "狂人ハンター",
+};
+const ROLE_GUESS_CAMPS = {
+  villager: [
+    { value: "villager", label: "市民" },
+    { value: "seer", label: "預言者" },
+    { value: "medium", label: "霊媒師" },
+    { value: "guard", label: "ボディガード" },
+    { value: "hunter", label: "ハンター" },
+    { value: "confirmedWhite", label: "確定白" },
+  ],
+  werewolf: [
+    { value: "werewolf", label: "人狼" },
+    { value: "madman", label: "裏切り者" },
+    { value: "wolfSide", label: "狼狂" },
+    { value: "madmanHunter", label: "狂人ハンター" },
+  ],
+  third: [
+    { value: "fox", label: "妖狐" },
+    { value: "teruteru", label: "てるてる" },
+    { value: "unknown", label: "不明" },
+    { value: "other", label: "その他" },
+  ],
 };
 const WOLF_MODE_COVER_ROLES = new Set(["unknown", "villager", "seer", "medium", "guard", "hunter"]);
 
@@ -1616,19 +1640,46 @@ function renderRoleGuessDialog(player) {
   renderWolfModeEntryHint(player);
   renderMediumResultShortcut(player);
   renderBlackTargetOptions(player);
-  const options = editingWolfModeMember
-    ? Object.entries(ROLE_GUESS_LABELS).filter(([value]) => WOLF_MODE_COVER_ROLES.has(value))
-    : Object.entries(ROLE_GUESS_LABELS);
-  els.roleGuessCandidateOptions.innerHTML = options
-    .map(
-      ([value, label]) => `
-        <label class="role-guess-option ${getRoleGuessClass(value)}">
-          <input type="radio" name="roleGuessCandidate" value="${value}" ${selectedValue === value ? "checked" : ""} />
-          <span>${label}</span>
-        </label>
-      `,
-    )
-    .join("");
+
+  const filterCamp = (list) =>
+    editingWolfModeMember ? list.filter((item) => WOLF_MODE_COVER_ROLES.has(item.value)) : list;
+
+  const villagerOptions = filterCamp(ROLE_GUESS_CAMPS.villager);
+  const werewolfOptions = filterCamp(ROLE_GUESS_CAMPS.werewolf);
+  const thirdOptions = filterCamp(ROLE_GUESS_CAMPS.third);
+
+  const renderOptionItem = ({ value, label }) => `
+    <label class="role-guess-option ${getRoleGuessClass(value)}">
+      <input type="radio" name="roleGuessCandidate" value="${value}" ${selectedValue === value ? "checked" : ""} />
+      <span>${label}</span>
+    </label>
+  `;
+
+  let html = `
+    <div class="role-guess-camps-container">
+      <div class="role-guess-camp-column villager-camp">
+        <div class="role-guess-camp-title">市民陣営</div>
+        ${villagerOptions.map(renderOptionItem).join("")}
+      </div>
+      <div class="role-guess-camp-column werewolf-camp">
+        <div class="role-guess-camp-title">人狼陣営</div>
+        ${werewolfOptions.map(renderOptionItem).join("")}
+      </div>
+    </div>
+  `;
+
+  if (thirdOptions.length) {
+    html += `
+      <div class="role-guess-third-camp">
+        <div class="role-guess-camp-title">第3陣営・その他</div>
+        <div class="role-guess-third-options">
+          ${thirdOptions.map(renderOptionItem).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  els.roleGuessCandidateOptions.innerHTML = html;
   els.roleGuessCandidateOptions.querySelectorAll('input[type="radio"]').forEach((input) => {
     input.addEventListener("change", handleRoleGuessCandidateChange);
   });
