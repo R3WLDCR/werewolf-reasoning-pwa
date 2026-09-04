@@ -2229,6 +2229,11 @@ button.role-guess-label {
   color: var(--muted);
 }
 
+.vote-name-confirmed-werewolf {
+  color: #ff6b78;
+  font-weight: 900;
+}
+
 .vote-edit-row {
   grid-template-columns: 60px 60px 92px minmax(0, 1fr) minmax(0, 1fr) auto;
   align-items: center;

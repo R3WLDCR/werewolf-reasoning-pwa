@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.227";
+const APP_VERSION = "1.228";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -2720,18 +2720,26 @@ function getVoteDaySummaryHtml(votes, players, day, isSelected) {
   }
   const phaseHtml = sortVotePhaseKeysForSummary(phaseKeys)
     .map((phase) => {
-      const summary = formatVoteSummaryForDay(votes, players, day, phase.type, phase.runoffRound);
+      const summaryHtml = formatVoteSummaryHtmlForDay(votes, players, day, phase.type, phase.runoffRound);
       const voteOrder = getVoteOrderEntriesForDay(votes, players, day, phase.type, phase.runoffRound);
       const decisiveVoteId = getDecisiveVoteIdForPhase(votes, day, phase.type, phase.runoffRound);
       const voteOrderHtml = voteOrder.length
         ? voteOrder
             .map(
-              (entry) => `
+              (entry) => {
+                const voter = players.find((p) => p.id === entry.voterId);
+                const target = players.find((p) => p.id === entry.targetId);
+                const isVoterWolf = isConfirmedWerewolfByMedium(voter);
+                const isTargetWolf = isConfirmedWerewolfByMedium(target);
+                const voterHtml = `<span class="${isVoterWolf ? "vote-name-confirmed-werewolf" : ""}">${escapeHtml(entry.voterName)}</span>`;
+                const targetHtml = `<span class="${isTargetWolf ? "vote-name-confirmed-werewolf" : ""}">${escapeHtml(entry.targetName)}</span>`;
+                return `
                 <div class="vote-order-item ${phase.type === "runoff" ? "no-order" : ""} ${entry.id === decisiveVoteId ? "is-decisive" : ""}">
                   ${phase.type === "runoff" ? "" : `<span class="vote-order-number">${escapeHtml(formatVoteOrderMarker(entry.order))}</span>`}
-                  <span class="vote-order-text">${escapeHtml(entry.voterName)} → ${escapeHtml(entry.targetName)}${entry.id === decisiveVoteId ? '<span class="vote-decisive-badge">決定票</span>' : ""}</span>
+                  <span class="vote-order-text">${voterHtml} → ${targetHtml}${entry.id === decisiveVoteId ? '<span class="vote-decisive-badge">決定票</span>' : ""}</span>
                 </div>
-              `,
+              `;
+              },
             )
             .join("")
         : '<span class="vote-summary-empty">投票順なし</span>';
@@ -2740,7 +2748,7 @@ function getVoteDaySummaryHtml(votes, players, day, isSelected) {
           <div class="vote-phase-title">${escapeHtml(getVotePhaseLabel(phase.type, phase.runoffRound))}</div>
           <div class="vote-summary-section">
             <strong>得票</strong>
-            <span>${summary ? escapeHtml(summary.replace(/^得票: /, "")) : "投票なし"}</span>
+            <span>${summaryHtml ? summaryHtml.replace(/^得票: /, "") : "投票なし"}</span>
           </div>
           <div class="vote-summary-section">
             <strong>${phase.type === "runoff" ? "投票結果" : "投票順"}</strong>
@@ -7293,6 +7301,68 @@ function getDecisiveVoteIdsForDay(votes, day, players) {
   );
 }
 
+function formatVoteSummaryHtmlForDay(votes, players, day, type = "", runoffRound = 0) {
+  if (!type) {
+    const phaseSummaries = getVoteSummaryPhaseKeys(votes, day)
+      .map((phase) => {
+        const summary = formatVoteSummaryHtmlForDay(votes, players, day, phase.type, phase.runoffRound);
+        return summary ? `${escapeHtml(getVotePhaseLabel(phase.type, phase.runoffRound))} ${summary.replace(/^得票: /, "")}` : "";
+      })
+      .filter(Boolean);
+    return phaseSummaries.length ? `得票: ${phaseSummaries.join(" / ")}` : "";
+  }
+  const entries = votes
+    .filter((vote) => {
+      if ((Number(vote.day) || 1) !== day) return false;
+      if (normalizeVoteType(vote.type) !== type) return false;
+      return type !== "runoff" || normalizeRunoffRound(vote.runoffRound) === runoffRound;
+    })
+    .map((vote) => {
+      const voter = players.find((player) => player.id === vote.voterId);
+      const target = vote.targetId === "abstain" ? null : players.find((player) => player.id === vote.targetId);
+      if (!voter || (!target && vote.targetId !== "abstain")) return null;
+      return {
+        order: getVoteOrder(vote),
+        voter,
+        voterName: voter.name,
+        target,
+        targetId: vote.targetId,
+        targetName: vote.targetId === "abstain" ? "棄権" : target.name,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.order - b.order);
+  if (!entries.length) return "";
+
+  const groups = new Map();
+  entries.forEach((entry, index) => {
+    if (!groups.has(entry.targetId)) {
+      groups.set(entry.targetId, {
+        target: entry.target,
+        targetName: entry.targetName,
+        firstIndex: index,
+        voters: [],
+      });
+    }
+    groups.get(entry.targetId).voters.push(entry.voter);
+  });
+
+  const summaries = [...groups.values()]
+    .sort((a, b) => b.voters.length - a.voters.length || a.firstIndex - b.firstIndex)
+    .map((group) => {
+      const isTargetWolf = isConfirmedWerewolfByMedium(group.target);
+      const targetHtml = `<span class="${isTargetWolf ? "vote-name-confirmed-werewolf" : ""}">${escapeHtml(group.targetName)}</span>`;
+      const votersHtml = group.voters
+        .map((voter) => {
+          const isVoterWolf = isConfirmedWerewolfByMedium(voter);
+          return `<span class="${isVoterWolf ? "vote-name-confirmed-werewolf" : ""}">${escapeHtml(voter.name)}</span>`;
+        })
+        .join(", ");
+      return `${targetHtml} ${group.voters.length}票（${votersHtml}）`;
+    });
+  return `得票: ${summaries.join(" / ")}`;
+}
+
 function formatVoteSummaryForDay(votes, players, day, type = "", runoffRound = 0) {
   if (!type) {
     const phaseSummaries = getVoteSummaryPhaseKeys(votes, day)
@@ -7357,6 +7427,8 @@ function getVoteOrderEntriesForDay(votes, players, day, type = "", runoffRound =
       if (!voter || (!target && vote.targetId !== "abstain")) return null;
       return {
         id: vote.id,
+        voterId: vote.voterId,
+        targetId: vote.targetId,
         order: getVoteOrder(vote),
         sourceIndex,
         voterName: voter.name,
@@ -7524,6 +7596,29 @@ function getMeaningfulProgressSignature() {
       colorIndex,
     })),
   });
+}
+
+function isConfirmedWerewolfByMedium(player, gameState = state) {
+  if (!player) return false;
+  if (
+    player.confirmedRoleEvidence?.some(
+      (evidence) => evidence.role === "medium" && evidence.value === "werewolf",
+    )
+  ) {
+    return true;
+  }
+  if (player.mediumConfirmedRoleGuess === "werewolf") {
+    return true;
+  }
+  const roleActions = gameState.roleActions || [];
+  const players = gameState.players || [];
+  return roleActions.some(
+    (action) =>
+      action.targetId === player.id &&
+      action.role === "medium" &&
+      action.result === "werewolf" &&
+      isConfirmedRoleActor(players.find((p) => p.id === action.actorId), "medium"),
+  );
 }
 
 function isConfirmedWerewolf(player) {
