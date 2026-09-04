@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.226";
+const APP_VERSION = "1.227";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -378,6 +378,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "membershipNameInput",
     "membershipOptions",
     "closeMembershipBtn",
+    "deletePlayerBtn",
     "finishGameDialog",
     "finishGameForm",
     "closeFinishGameBtn",
@@ -603,6 +604,7 @@ function bindEvents() {
     if (event.target === els.playerRelationDialog) closePlayerRelationDialog();
   });
   els.closeMembershipBtn.addEventListener("click", closeMembershipDialog);
+  els.deletePlayerBtn.addEventListener("click", deletePlayerFromRoster);
   els.membershipDialog.addEventListener("click", (event) => {
     if (event.target === els.membershipDialog) closeMembershipDialog();
   });
@@ -1402,6 +1404,7 @@ function openMembershipDialog(playerId) {
   membershipPlayerId = playerId;
   els.membershipPlayerName.textContent = player.name;
   els.membershipNameInput.value = player.name;
+  els.deletePlayerBtn.hidden = player.name === PRIORITY_PLAYER_NAME;
   els.membershipOptions.innerHTML = state.tournaments
     .map(
       (tournament) => `
@@ -1443,6 +1446,37 @@ function saveMemberships() {
   closeMembershipDialog();
   renderAndStore();
   toast("名前と所属を保存しました");
+}
+
+function deletePlayerFromRoster() {
+  if (isGameLocked()) return toast("試合進行中・終了後は参加者を削除できません");
+  const player = findPlayer(membershipPlayerId);
+  if (!player) return;
+  if (player.name === PRIORITY_PLAYER_NAME) {
+    return toast("羊飼いKは削除できません");
+  }
+  const confirmed = window.confirm(`「${player.name}」を名簿から削除しますか？\n※この操作は取り消せません。`);
+  if (!confirmed) return;
+
+  const targetName = player.name;
+  state.players = state.players.filter((p) => p.id !== player.id);
+  state.results = state.results.filter((r) => r.seerId !== player.id && r.targetId !== player.id);
+  state.roleActions = state.roleActions.filter((a) => a.actorId !== player.id && a.targetId !== player.id);
+  if (state.playerRelations && Array.isArray(state.playerRelations)) {
+    state.playerRelations = state.playerRelations.filter(
+      (rel) => rel.sourcePlayerId !== player.id && rel.targetPlayerId !== player.id,
+    );
+  }
+  if (state.runoffVoterIds && Array.isArray(state.runoffVoterIds)) {
+    state.runoffVoterIds = state.runoffVoterIds.filter((id) => id !== player.id);
+  }
+  if (state.runoffTargetId === player.id) {
+    state.runoffTargetId = "";
+  }
+
+  closeMembershipDialog();
+  renderAndStore();
+  toast(`「${targetName}」を名簿から削除しました`);
 }
 
 function openImpressionDialog(playerId) {
