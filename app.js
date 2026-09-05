@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.229";
+const APP_VERSION = "1.230";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -56,7 +56,7 @@ const PLAYER_RELATION_LABELS = {
   enemy: "敵対",
 };
 const PLAYER_ALLY_COLORS = ["#39b8c8", "#4a90e2", "#5cb85c", "#e5a93b", "#9b6bcc", "#20b2aa"];
-const PLAYER_ENEMY_COLORS = ["#e53935", "#ff5252", "#d81b60", "#ff5722", "#c62828", "#ad1457"];
+const PLAYER_ENEMY_COLORS = ["#ff3b30", "#ff9500", "#af52de", "#ffd60a", "#ff2d55", "#00c7be", "#5e5ce6", "#30d158"];
 const PLAYER_RELATION_COLORS = PLAYER_ALLY_COLORS;
 const ROLE_ACTION_RESULT_LABELS = {
   medium: {
