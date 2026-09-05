@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.228";
+const APP_VERSION = "1.229";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3748,7 +3748,7 @@ function isAttackNonWolfConfirmed(player) {
 
 function getAutomaticRivalPerspectiveValue(viewer, target, claimants) {
   if (isRivalPerspectiveTargetConfirmedMadman(target)) return "madman";
-  if (hasAttackedWolfSideConfirmedMadman()) return "werewolf";
+  if (hasExternalAttackedWolfSideConfirmedMadman(viewer)) return "werewolf";
   if (isMediumConfirmedWerewolf(target)) return "werewolf";
   if (isMediumConfirmedHuman(target)) return "madman";
 
@@ -4985,6 +4985,15 @@ function hasAttackedWolfSideConfirmedMadman(players = getActivePlayers()) {
   return [...RIVAL_PERSPECTIVE_ROLES].some((role) => {
     const claimants = getRoleClaimants(role, players);
     return claimants.length >= 2 && claimants.some((player) => player.status === "attacked");
+  });
+}
+
+function hasExternalAttackedWolfSideConfirmedMadman(viewer, players = getActivePlayers()) {
+  if (state.selfBiteAllowed) return false;
+  if (players.some((player) => player.attackedWolfSideConfirmedMadman && player.id !== viewer?.id)) return true;
+  return [...RIVAL_PERSPECTIVE_ROLES].some((role) => {
+    const claimants = getRoleClaimants(role, players);
+    return claimants.length >= 2 && claimants.some((player) => player.status === "attacked" && player.id !== viewer?.id);
   });
 }
 
