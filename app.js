@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.230";
+const APP_VERSION = "1.231";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -5761,7 +5761,37 @@ function setRoleGuess(player, role, { confirmed = false } = {}) {
   return true;
 }
 
+function getConfirmedWhiteMediums() {
+  return getRoleClaimants("medium").filter((medium) => !isMediumConfirmedWerewolf(medium));
+}
+
+function isConfirmedWhiteByMediums(player) {
+  if (!player || player.status !== "exiled") return false;
+  const mediums = getConfirmedWhiteMediums();
+  if (mediums.length < 2) return false;
+  if (mediums.some((m) => m.id === player.id)) return false;
+
+  const selfMedium = getSelfPerspectivePlayer();
+  if (selfMedium && (selfMedium.role === "medium" || getRoleGuessDisplay(selfMedium).value === "medium")) {
+    const selfAction = state.roleActions.find(
+      (a) => a.actorId === selfMedium.id && a.role === "medium" && a.targetId === player.id,
+    );
+    if (selfAction?.result === "werewolf") return false;
+  }
+
+  return mediums.every((medium) =>
+    state.roleActions.some(
+      (action) =>
+        action.actorId === medium.id &&
+        action.role === "medium" &&
+        action.targetId === player.id &&
+        action.result === "human",
+    ),
+  );
+}
+
 function shouldBecomeConfirmedWhite(player, seers = getCurrentSeerClaimants()) {
+  if (isConfirmedWhiteByMediums(player)) return true;
   const effectiveSeers = getConfirmedWhiteSeers(seers);
   const selfSeer = getSelfPerspectivePlayer();
   if (player.status !== "alive") return false;
