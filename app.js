@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.231";
+const APP_VERSION = "1.232";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -4027,7 +4027,8 @@ function renderResultControls(target) {
   }
   if (!seers.some((seer) => seer.id === editingSeerId)) editingSeerId = seers[0].id;
   const seer = findPlayer(editingSeerId);
-  els.resultSeerHint.textContent = `${seer ? seer.name : "預言者"}視点の手入力`;
+  const seerPrefix = seers.length > 1 && seer ? `${getRoleClaimLabel(seer)} ` : "";
+  els.resultSeerHint.textContent = `${seerPrefix}${seer ? seer.name : "預言者"}視点の手入力`;
   const override = getSeerColumnOverride(editingSeerId, target.id);
   const existing = state.results.find((result) => result.seerId === editingSeerId && result.targetId === target.id);
   ensureLegacySeerResultOption(override?.value);
@@ -4071,10 +4072,11 @@ function renderMediumPerspectiveResultControl(target) {
     .map((medium) => {
       const existing = getMediumResultActions(medium.id, target.id)[0];
       const value = ["human", "werewolf"].includes(existing?.result) ? existing.result : "";
+      const mediumLabel = mediumClaimants.length > 1 ? getRoleClaimLabel(medium) : ROLE_LABELS.medium;
       return `
         <label class="medium-perspective-result-row">
-          <span>${escapeHtml(medium.name)}${isInactiveStatus(medium.status) ? ` (${STATUS_LABELS[medium.status]})` : ""}</span>
-          <select data-medium-result-actor-id="${escapeHtml(medium.id)}" aria-label="${escapeHtml(medium.name)}の霊媒結果">
+          <span>${escapeHtml(mediumLabel)} ${escapeHtml(medium.name)}${isInactiveStatus(medium.status) ? ` (${STATUS_LABELS[medium.status]})` : ""}</span>
+          <select data-medium-result-actor-id="${escapeHtml(medium.id)}" aria-label="${escapeHtml(mediumLabel)} ${escapeHtml(medium.name)}の霊媒結果">
             <option value="" ${value === "" ? "selected" : ""}>未記録</option>
             <option value="human" ${value === "human" ? "selected" : ""}>市民</option>
             <option value="werewolf" ${value === "werewolf" ? "selected" : ""}>人狼</option>
@@ -4103,7 +4105,10 @@ function renderAdoptedMediumControl() {
   const currentValue = getAdoptedMediumId(seer.id);
   els.adoptedMediumSelect.innerHTML = [
     `<option value="">採用霊媒なし</option>`,
-    ...mediumClaimants.map((medium) => `<option value="${escapeHtml(medium.id)}">${escapeHtml(medium.name)}</option>`),
+    ...mediumClaimants.map((medium) => {
+      const mediumLabel = mediumClaimants.length > 1 ? `${getRoleClaimLabel(medium)} ` : "";
+      return `<option value="${escapeHtml(medium.id)}">${escapeHtml(mediumLabel)}${escapeHtml(medium.name)}</option>`;
+    }),
   ].join("");
   els.adoptedMediumSelect.value = mediumClaimants.some((medium) => medium.id === currentValue) ? currentValue : "";
 }
@@ -4140,9 +4145,20 @@ function getAdoptedMediumResultForSeerTarget(seerId, targetId) {
   return getMediumResultActions(mediumId, targetId).find((action) => ["human", "werewolf"].includes(action.result)) || null;
 }
 
+function getMediumResultLabelPrefix(actorId) {
+  const mediumClaimants = getRoleClaimants("medium");
+  if (mediumClaimants.length <= 1) return "霊媒";
+  const index = mediumClaimants.findIndex((m) => m.id === actorId);
+  if (index >= 0) return `霊媒${getCircledNumber(index + 1)}`;
+  const mediums = getMediums();
+  const fallbackIndex = mediums.findIndex((m) => m.id === actorId);
+  return fallbackIndex >= 0 ? `霊媒${getCircledNumber(fallbackIndex + 1)}` : "霊媒";
+}
+
 function getAdoptedMediumResultLabel(action) {
   if (!action || !Object.hasOwn(RESULT_LABELS, action.result)) return "";
-  return `霊媒 ${RESULT_LABELS[action.result]}`;
+  const prefix = getMediumResultLabelPrefix(action.actorId);
+  return `${prefix} ${RESULT_LABELS[action.result]}`;
 }
 
 function isAdoptedMediumResultContradictingSeer(seerId, targetId, seerValue) {
@@ -4157,14 +4173,15 @@ function getMediumPerspectiveForSeer(player, seer, resultValue = "") {
   if (resultValue === "werewolf") return null;
   if (!hasMultiSeerMediumPerspective()) return null;
   const adoptedMediumId = getAdoptedMediumId(seer.id);
+  const mediumClaimLabel = getRoleClaimLabel(player) || ROLE_LABELS.medium;
   if (!adoptedMediumId) {
     if (isAttackNonWolfConfirmed(player) || resultValue === "human") {
-      return { label: `${ROLE_LABELS.medium}/${ROLE_LABELS.madman}`, className: "role-medium-madman" };
+      return { label: `${mediumClaimLabel}/${ROLE_LABELS.madman}`, className: "role-medium-madman" };
     }
-    return { label: "霊媒師/狼狂", className: "role-medium-wolfSide" };
+    return { label: `${mediumClaimLabel}/${ROLE_LABELS.wolfSide}`, className: "role-medium-wolfSide" };
   }
   if (adoptedMediumId === player.id) {
-    return { label: ROLE_LABELS.medium, className: "role-medium" };
+    return { label: mediumClaimLabel, className: "role-medium" };
   }
   if (isAttackNonWolfConfirmed(player) || resultValue === "human") {
     return { label: ROLE_LABELS.madman, className: "role-madman" };
@@ -4419,7 +4436,7 @@ function getMediumPerspectiveCellsHtml(player, mediums = getMediums()) {
   return mediums
     .map((medium, mediumIndex) => {
       if (player.id === medium.id) {
-        const orderLabel = mediums.length > 1 ? `${ROLE_LABELS.medium}${getCircledNumber(mediumIndex + 1)}` : ROLE_LABELS.medium;
+        const orderLabel = getRoleClaimLabel(medium) || (mediums.length > 1 ? `${ROLE_LABELS.medium}${getCircledNumber(mediumIndex + 1)}` : ROLE_LABELS.medium);
         return `<span class="seer-result-label role-medium" data-medium-id="${escapeHtml(medium.id)}">${escapeHtml(orderLabel)}</span>`;
       }
 
@@ -4439,7 +4456,8 @@ function getMediumPerspectiveCellsHtml(player, mediums = getMediums()) {
         const action = getMediumResultActions(medium.id, player.id).find((a) => ["human", "werewolf"].includes(a.result));
         if (action) {
           const className = action.result === "werewolf" ? "judgement-werewolf" : "judgement-human";
-          const label = `霊媒 ${RESULT_LABELS[action.result]}`;
+          const prefix = getMediumResultLabelPrefix(medium.id);
+          const label = `${prefix} ${RESULT_LABELS[action.result]}`;
           return `<span class="seer-result-label ${className}" data-medium-id="${escapeHtml(medium.id)}">${escapeHtml(label)}</span>`;
         }
         return `<span class="seer-result-label empty" data-medium-id="${escapeHtml(medium.id)}" aria-label="霊媒未記録"></span>`;
@@ -4448,9 +4466,9 @@ function getMediumPerspectiveCellsHtml(player, mediums = getMediums()) {
       if (player.role && player.role !== "medium" && player.role !== "villager") {
         const claimants = getRoleClaimants(player.role);
         if (claimants.length >= 2) {
-          return `<span class="seer-result-label ${getWolfSideAwareRoleClass(player)}" data-medium-id="${escapeHtml(medium.id)}">${escapeHtml(ROLE_LABELS[player.role])}/${ROLE_LABELS.wolfSide}</span>`;
+          return `<span class="seer-result-label ${getWolfSideAwareRoleClass(player)}" data-medium-id="${escapeHtml(medium.id)}">${escapeHtml(getRoleClaimLabel(player))}/${ROLE_LABELS.wolfSide}</span>`;
         }
-        return `<span class="seer-result-label ${getRoleClass(player)}" data-medium-id="${escapeHtml(medium.id)}">${escapeHtml(ROLE_LABELS[player.role])}</span>`;
+        return `<span class="seer-result-label ${getRoleClass(player)}" data-medium-id="${escapeHtml(medium.id)}">${escapeHtml(getRoleClaimLabel(player))}</span>`;
       }
 
       if (isAttackNonWolfConfirmed(player) && (!player.role || player.role === "villager")) {
@@ -4786,9 +4804,9 @@ function shouldDisplayConfirmedWhiteForSeer(player, seerId, value) {
   );
 }
 
-function getRoleClaimLabel(player) {
+function getRoleClaimLabel(player, players = getActivePlayers()) {
   if (!player.role || !Object.hasOwn(ROLE_LABELS, player.role)) return "";
-  const sameRolePlayers = getRoleClaimants(player.role);
+  const sameRolePlayers = getRoleClaimants(player.role, players);
   const suffix = sameRolePlayers.length > 1 ? getCircledNumber(sameRolePlayers.findIndex((item) => item.id === player.id) + 1) : "";
   return `${ROLE_LABELS[player.role]}${suffix}`;
 }
@@ -4811,7 +4829,7 @@ function getSeerOwnPerspectiveDisplay(player, seer) {
     hasMultiSeerMediumPerspective() &&
     !getAdoptedMediumId(seer.id)
   ) {
-    return { label: `${ROLE_LABELS.seer}/${ROLE_LABELS.wolfSide}`, className: "role-seer-wolfSide" };
+    return { label: `${getRoleClaimLabel(player) || ROLE_LABELS.seer}/${ROLE_LABELS.wolfSide}`, className: "role-seer-wolfSide" };
   }
   return { label: getSeerGridRoleLabel(player), className: getWolfSideAwareRoleClass(player) };
 }
@@ -6995,7 +7013,7 @@ function appendBoardMarkdown(lines, players, options = {}) {
       const values = [
         player.name,
         getStatusDisplay(player),
-        player.role ? ROLE_LABELS[player.role] : "COなし",
+        player.role ? getRoleClaimLabel(player, players) : "COなし",
         ...seers.map((seer) => formatMarkdownDivinationResults(results, seer.id, player.id)),
         player.trueRole ? ROLE_GUESS_LABELS[player.trueRole] || ROLE_LABELS[player.trueRole] || "" : "",
       ];
@@ -7008,7 +7026,7 @@ function appendBoardMarkdown(lines, players, options = {}) {
       const values = [
         player.name,
         getStatusDisplay(player),
-        player.role ? ROLE_LABELS[player.role] : "COなし",
+        player.role ? getRoleClaimLabel(player, players) : "COなし",
         formatCombinedInferenceForExport(player),
         ...seers.map((seer) => formatMarkdownDivinationResults(results, seer.id, player.id)),
       ];
@@ -7251,8 +7269,10 @@ function formatRoleActionEvent(action, players) {
   const target = players.find((player) => player.id === action.targetId);
   const resultLabel = ROLE_ACTION_RESULT_LABELS[action.role]?.[action.result] || ROLE_ACTION_RESULT_LABELS[action.role]?.unknown || "不明";
   if (!actor || !target || !ROLE_ACTION_ROLES.has(action.role)) return "";
+  const claimants = getRoleClaimants(action.role, players);
+  const roleLabel = claimants.length > 1 ? getRoleClaimLabel(actor, players) : ROLE_LABELS[action.role];
   const note = action.note ? ` / ${action.note}` : "";
-  return `${ROLE_LABELS[action.role]}: ${formatTimelineActorName(actor)} -> ${target.name}　${resultLabel}${note}`;
+  return `${roleLabel}: ${formatTimelineActorName(actor)} -> ${target.name}　${resultLabel}${note}`;
 }
 
 function formatTrueRoleGroups(players) {
