@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.232";
+const APP_VERSION = "1.233";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -15,6 +15,7 @@ const ROLE_LABELS = {
   werewolf: "人狼",
   other: "その他",
   hunter: "ハンター",
+  nekomata: "猫又",
   fox: "妖狐",
   teruteru: "てるてる",
   madmanHunter: "狂人ハンター",
@@ -30,7 +31,7 @@ const RIVAL_DISPLAY_ROLES = new Set(["medium", "guard", "hunter"]);
 const RIVAL_PERSPECTIVE_ROLES = new Set(["seer", "medium", "guard", "hunter"]);
 const RIVAL_PERSPECTIVE_VALUES = new Set(["wolfSide", "werewolf", "madman"]);
 const SELF_RIVAL_GUESS_ROLES = new Set(["seer", "medium", "guard", "hunter"]);
-const VILLAGER_SIDE_ROLES = new Set(["seer", "medium", "guard", "villager", "hunter"]);
+const VILLAGER_SIDE_ROLES = new Set(["seer", "medium", "guard", "villager", "hunter", "nekomata"]);
 const STATUS_LABELS = {
   alive: "生存",
   exiled: "追放",
@@ -112,6 +113,7 @@ const ROLE_GUESS_LABELS = {
   werewolf: "人狼",
   other: "その他",
   hunter: "ハンター",
+  nekomata: "猫又",
   fox: "妖狐",
   teruteru: "てるてる",
   madmanHunter: "狂人ハンター",
@@ -123,6 +125,7 @@ const ROLE_GUESS_CAMPS = {
     { value: "medium", label: "霊媒師" },
     { value: "guard", label: "ボディガード" },
     { value: "hunter", label: "ハンター" },
+    { value: "nekomata", label: "猫又" },
     { value: "confirmedWhite", label: "確定白" },
   ],
   werewolf: [
@@ -138,7 +141,7 @@ const ROLE_GUESS_CAMPS = {
     { value: "other", label: "その他" },
   ],
 };
-const WOLF_MODE_COVER_ROLES = new Set(["unknown", "villager", "seer", "medium", "guard", "hunter"]);
+const WOLF_MODE_COVER_ROLES = new Set(["unknown", "villager", "seer", "medium", "guard", "hunter", "nekomata"]);
 
 function normalizeCitizenText(value) {
   return String(value || "").replaceAll("村人", "市民");
@@ -7292,7 +7295,7 @@ function formatTrueRoleGroups(players) {
 }
 
 function getTrueRoleGroupOrder(groups) {
-  const preferred = ["seer", "medium", "guard", "hunter", "madman", "werewolf", "fox", "teruteru", "other", "wolfSide", "confirmedWhite"];
+  const preferred = ["seer", "medium", "guard", "hunter", "nekomata", "madman", "werewolf", "fox", "teruteru", "other", "wolfSide", "confirmedWhite"];
   const extras = [...groups.keys()].filter((role) => !preferred.includes(role)).sort();
   return [...preferred, ...extras];
 }

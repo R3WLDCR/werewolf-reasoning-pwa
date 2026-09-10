@@ -980,6 +980,11 @@ button.role-guess-label {
   color: #80e8a8;
 }
 
+.role-nekomata {
+  background: #123f2e;
+  color: #80e8a8;
+}
+
 .role-madmanHunter {
   background: linear-gradient(90deg, #4b3d12 0%, #4b3d12 55%, #123f2e 100%);
   color: #ffe27a;
