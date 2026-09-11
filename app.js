@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.233";
+const APP_VERSION = "1.234";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -16,6 +16,7 @@ const ROLE_LABELS = {
   other: "その他",
   hunter: "ハンター",
   nekomata: "猫又",
+  nekomataGuard: "猫又/ボディガード",
   fox: "妖狐",
   teruteru: "てるてる",
   madmanHunter: "狂人ハンター",
@@ -31,7 +32,7 @@ const RIVAL_DISPLAY_ROLES = new Set(["medium", "guard", "hunter"]);
 const RIVAL_PERSPECTIVE_ROLES = new Set(["seer", "medium", "guard", "hunter"]);
 const RIVAL_PERSPECTIVE_VALUES = new Set(["wolfSide", "werewolf", "madman"]);
 const SELF_RIVAL_GUESS_ROLES = new Set(["seer", "medium", "guard", "hunter"]);
-const VILLAGER_SIDE_ROLES = new Set(["seer", "medium", "guard", "villager", "hunter", "nekomata"]);
+const VILLAGER_SIDE_ROLES = new Set(["seer", "medium", "guard", "villager", "hunter", "nekomata", "nekomataGuard"]);
 const STATUS_LABELS = {
   alive: "生存",
   exiled: "追放",
