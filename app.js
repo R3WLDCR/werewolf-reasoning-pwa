@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.234";
+const APP_VERSION = "1.235";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -4461,7 +4461,9 @@ function getMediumPerspectiveCellsHtml(player, mediums = getMediums()) {
         if (action) {
           const className = action.result === "werewolf" ? "judgement-werewolf" : "judgement-human";
           const prefix = getMediumResultLabelPrefix(medium.id);
-          const label = `${prefix} ${RESULT_LABELS[action.result]}`;
+          const resultLabel = `${prefix} ${RESULT_LABELS[action.result]}`;
+          const roleClaim = getConfirmedResultRoleClaimLabel(player);
+          const label = roleClaim ? `${roleClaim} / ${resultLabel}` : resultLabel;
           return `<span class="seer-result-label ${className}" data-medium-id="${escapeHtml(medium.id)}">${escapeHtml(label)}</span>`;
         }
         return `<span class="seer-result-label empty" data-medium-id="${escapeHtml(medium.id)}" aria-label="霊媒未記録"></span>`;
@@ -4730,12 +4732,19 @@ function getMediumConfirmedWerewolfSeerCellHtml(player, seer, result, value = re
       ? getDivinationResultDisplayLabel(result, player, resultValue)
       : RESULT_LABELS[resultValue]
     : "";
-  const label = resultLabel
+  const confirmedLabel = resultLabel
     ? resultValue === "werewolf"
       ? resultLabel
       : `${resultLabel} / ${ROLE_LABELS.werewolf}`
     : ROLE_LABELS.werewolf;
+  const roleClaim = getConfirmedResultRoleClaimLabel(player);
+  const label = roleClaim ? `${roleClaim} / ${confirmedLabel}` : confirmedLabel;
   return `<span class="seer-result-label judgement-werewolf" data-seer-id="${escapeHtml(seer.id)}">${escapeHtml(label)}</span>`;
+}
+
+function getConfirmedResultRoleClaimLabel(player) {
+  if (!player?.role || ["werewolf", "wolfSide"].includes(player.role)) return "";
+  return getRoleClaimLabel(player);
 }
 
 function getDivinationResultDisplayLabel(result, player, value = result.value) {
