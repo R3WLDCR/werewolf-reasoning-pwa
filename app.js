@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.235";
+const APP_VERSION = "1.236";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -256,6 +256,7 @@ let applyingCloudState = false;
 let activeBoardId = localStorage.getItem(ACTIVE_BOARD_KEY) || "";
 let switchingBoard = false;
 let hadLocalDataAtStartup = Boolean(localStorage.getItem(STORAGE_KEY));
+let lastLocalStoreError = null;
 let syncMeta = restoreSyncMeta();
 const deviceId = getOrCreateDeviceId();
 
@@ -941,13 +942,13 @@ function finishGame() {
     state.pendingExileContinuationPlayerId = "";
     state.activeView = "reasoning";
     selectedHistoryId = state.gameHistories[0].id;
-    if (!store()) throw new Error("Local state could not be saved");
+    if (!store()) throw lastLocalStoreError || new Error("Local state could not be saved");
   } catch (error) {
     console.error("Failed to finish game", error);
     Object.keys(state).forEach((key) => delete state[key]);
     Object.assign(state, stateBeforeFinish);
     selectedHistoryId = selectedHistoryIdBeforeFinish;
-    showFinishGameError(["端末への保存に失敗しました。空き容量を確認して、もう一度お試しください。"]);
+    showFinishGameError([getLocalStoreErrorMessage(error)]);
     return;
   }
   closeFinishGameDialog();
@@ -1184,7 +1185,18 @@ function saveCurrentBoardSnapshot() {
     existing.payload = payload;
     existing.updatedAt = new Date().toISOString();
   }
+  removeInactiveFinishedBoardSnapshots();
   localStorage.setItem(ACTIVE_BOARD_KEY, activeBoardId);
+}
+
+function removeInactiveFinishedBoardSnapshots() {
+  const historyBoardIds = new Set(state.gameHistories.map((history) => history.boardId).filter(Boolean));
+  state.boards = state.boards.filter(
+    (board) =>
+      board.id === activeBoardId ||
+      board.payload?.gameStatus !== "finished" ||
+      !historyBoardIds.has(board.id),
+  );
 }
 
 function synchronizeSharedRosterAcrossBoards() {
@@ -7777,10 +7789,12 @@ function renderAndStore() {
 }
 
 function store({ markDirty = true } = {}) {
+  lastLocalStoreError = null;
   try {
     saveCurrentBoardSnapshot();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(getLocalStoragePayload()));
   } catch (error) {
+    lastLocalStoreError = error;
     console.error("Failed to save local state", error);
     return false;
   }
@@ -7800,6 +7814,23 @@ function store({ markDirty = true } = {}) {
     console.error("Failed to save sync metadata", error);
   }
   return true;
+}
+
+function getLocalStoragePayload() {
+  const payload = getSyncPayload();
+  payload.activeView = state.activeView;
+  payload.rosterFilter = state.rosterFilter;
+  return payload;
+}
+
+function getLocalStoreErrorMessage(error) {
+  const isQuotaError =
+    error?.name === "QuotaExceededError" ||
+    error?.code === 22 ||
+    /quota|storage.*full|容量/i.test(String(error?.message || ""));
+  return isQuotaError
+    ? "端末の保存容量が不足しています。不要な終了履歴を削除して、もう一度お試しください。"
+    : "端末への保存中にエラーが発生しました。画面を閉じず、もう一度お試しください。";
 }
 
 function restore() {
@@ -8299,7 +8330,7 @@ async function applyCloudRecord(record) {
   state.rosterFilter = rosterFilter;
   ensureMatchDefaults();
   saveCurrentBoardSnapshot();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(getLocalStoragePayload()));
   applyingCloudState = false;
   pendingCloudRecord = null;
   hadLocalDataAtStartup = true;
