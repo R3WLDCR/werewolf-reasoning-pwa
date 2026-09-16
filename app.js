@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.237";
+const APP_VERSION = "1.238";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -6139,7 +6139,7 @@ function renderHistoryDetailTimeline(history) {
         html += `
           <div class="history-timeline-day">
             <h4>${escapeHtml(currentDayTitle)}</h4>
-            <ul>${currentDayGroup.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+            <ul>${currentDayGroup.map((item) => (item === "【夜】" ? `<li class="timeline-night-divider">${escapeHtml(item)}</li>` : `<li>${escapeHtml(item)}</li>`)).join("")}</ul>
           </div>
         `;
       }
@@ -6153,7 +6153,7 @@ function renderHistoryDetailTimeline(history) {
     html += `
       <div class="history-timeline-day">
         <h4>${escapeHtml(currentDayTitle)}</h4>
-        <ul>${currentDayGroup.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+        <ul>${currentDayGroup.map((item) => (item === "【夜】" ? `<li class="timeline-night-divider">${escapeHtml(item)}</li>` : `<li>${escapeHtml(item)}</li>`)).join("")}</ul>
       </div>
     `;
   }
@@ -7142,33 +7142,16 @@ function buildHistoryTimeline(history) {
   );
   const lines = [];
   for (let day = 1; day <= maxDay; day += 1) {
-    const events = [formatTimelinePopulation(activePlayers, day)];
+    const dayEvents = [formatTimelinePopulation(activePlayers, day)];
     activePlayers
       .filter((player) => player.status === "attacked" && (Number(player.statusDay) || 1) === day)
-      .forEach((player) => events.push(`襲撃: ${player.name}`));
-    results
-      .filter((result) => getDivinationOrder(result) === day)
-      .sort((a, b) => compareTimelineResults(a, b, history.players))
-      .forEach((result) => {
-        const seer = history.players.find((player) => player.id === result.seerId);
-        const target = history.players.find((player) => player.id === result.targetId);
-        if (seer && target) {
-          events.push(`占い: ${formatTimelineActorName(seer)} -> ${target.name}　${RESULT_LABELS[result.value]}`);
-        }
-      });
-    roleActions
-      .filter((action) => (Number(action.day) || 1) === day)
-      .sort((a, b) => compareTimelineRoleActions(a, b, history.players))
-      .forEach((action) => {
-        const line = formatRoleActionEvent(action, history.players);
-        if (line) events.push(line);
-      });
+      .forEach((player) => dayEvents.push(`襲撃: ${player.name}`));
     claimEvents
       .filter((event) => (Number(event.day) || 1) === day)
       .sort((a, b) => compareTimelineClaimEvents(a, b, history.players))
       .forEach((event) => {
         const line = formatClaimEvent(event, history.players);
-        if (line) events.push(line);
+        if (line) dayEvents.push(line);
       });
     const decisiveVoteIds = getDecisiveVoteIdsForDay(voteHistories, day, activePlayers);
     voteHistories
@@ -7176,13 +7159,45 @@ function buildHistoryTimeline(history) {
       .sort(compareTimelineVotes)
       .forEach((vote) => {
         const line = formatVoteEvent(vote, history.players, decisiveVoteIds.has(vote.id));
-        if (line) events.push(line);
+        if (line) dayEvents.push(line);
       });
     const voteSummary = formatVoteSummaryForDay(voteHistories, history.players, day);
-    if (voteSummary) events.push(voteSummary);
+    if (voteSummary) dayEvents.push(voteSummary);
     activePlayers
       .filter((player) => player.status === "exiled" && (Number(player.statusDay) || 1) === day)
-      .forEach((player) => events.push(`追放: ${player.name}`));
+      .forEach((player) => dayEvents.push(`追放: ${player.name}`));
+
+    const nightEvents = [];
+    roleActions
+      .filter((action) => action.role === "medium" && (Number(action.day) || 1) === day)
+      .sort((a, b) => compareTimelineRoleActions(a, b, history.players))
+      .forEach((action) => {
+        const line = formatRoleActionEvent(action, history.players);
+        if (line) nightEvents.push(line);
+      });
+    results
+      .filter((result) => getDivinationOrder(result) === day)
+      .sort((a, b) => compareTimelineResults(a, b, history.players))
+      .forEach((result) => {
+        const seer = history.players.find((player) => player.id === result.seerId);
+        const target = history.players.find((player) => player.id === result.targetId);
+        if (seer && target) {
+          nightEvents.push(`占い: ${formatTimelineActorName(seer)} -> ${target.name}　${RESULT_LABELS[result.value]}`);
+        }
+      });
+    roleActions
+      .filter((action) => action.role !== "medium" && (Number(action.day) || 1) === day)
+      .sort((a, b) => compareTimelineRoleActions(a, b, history.players))
+      .forEach((action) => {
+        const line = formatRoleActionEvent(action, history.players);
+        if (line) nightEvents.push(line);
+      });
+
+    const events = [...dayEvents];
+    if (nightEvents.length) {
+      events.push("【夜】", ...nightEvents);
+    }
+
     if (events.length) {
       lines.push(`### ${day}日目`);
       events.forEach((event) => lines.push(`- ${event}`));
@@ -7209,33 +7224,16 @@ function buildCurrentTimeline() {
   );
   const lines = [];
   for (let day = 1; day <= maxDay; day += 1) {
-    const events = [formatTimelinePopulation(activePlayers, day)];
+    const dayEvents = [formatTimelinePopulation(activePlayers, day)];
     activePlayers
       .filter((player) => player.status === "attacked" && (Number(player.statusDay) || 1) === day)
-      .forEach((player) => events.push(`襲撃: ${player.name}`));
-    results
-      .filter((result) => getDivinationOrder(result) === day)
-      .sort((a, b) => compareTimelineResults(a, b, state.players))
-      .forEach((result) => {
-        const seer = findPlayer(result.seerId);
-        const target = findPlayer(result.targetId);
-        if (seer && target) {
-          events.push(`占い: ${formatTimelineActorName(seer)} -> ${target.name}　${RESULT_LABELS[result.value]}`);
-        }
-      });
-    roleActions
-      .filter((action) => (Number(action.day) || 1) === day)
-      .sort((a, b) => compareTimelineRoleActions(a, b, state.players))
-      .forEach((action) => {
-        const line = formatRoleActionEvent(action, state.players);
-        if (line) events.push(line);
-      });
+      .forEach((player) => dayEvents.push(`襲撃: ${player.name}`));
     claimEvents
       .filter((event) => (Number(event.day) || 1) === day)
       .sort((a, b) => compareTimelineClaimEvents(a, b, state.players))
       .forEach((event) => {
         const line = formatClaimEvent(event, state.players);
-        if (line) events.push(line);
+        if (line) dayEvents.push(line);
       });
     const decisiveVoteIds = getDecisiveVoteIdsForDay(voteHistories, day, activePlayers);
     voteHistories
@@ -7243,13 +7241,45 @@ function buildCurrentTimeline() {
       .sort(compareTimelineVotes)
       .forEach((vote) => {
         const line = formatVoteEvent(vote, state.players, decisiveVoteIds.has(vote.id));
-        if (line) events.push(line);
+        if (line) dayEvents.push(line);
       });
     const voteSummary = formatVoteSummaryForDay(voteHistories, state.players, day);
-    if (voteSummary) events.push(voteSummary);
+    if (voteSummary) dayEvents.push(voteSummary);
     activePlayers
       .filter((player) => player.status === "exiled" && (Number(player.statusDay) || 1) === day)
-      .forEach((player) => events.push(`追放: ${player.name}`));
+      .forEach((player) => dayEvents.push(`追放: ${player.name}`));
+
+    const nightEvents = [];
+    roleActions
+      .filter((action) => action.role === "medium" && (Number(action.day) || 1) === day)
+      .sort((a, b) => compareTimelineRoleActions(a, b, state.players))
+      .forEach((action) => {
+        const line = formatRoleActionEvent(action, state.players);
+        if (line) nightEvents.push(line);
+      });
+    results
+      .filter((result) => getDivinationOrder(result) === day)
+      .sort((a, b) => compareTimelineResults(a, b, state.players))
+      .forEach((result) => {
+        const seer = findPlayer(result.seerId);
+        const target = findPlayer(result.targetId);
+        if (seer && target) {
+          nightEvents.push(`占い: ${formatTimelineActorName(seer)} -> ${target.name}　${RESULT_LABELS[result.value]}`);
+        }
+      });
+    roleActions
+      .filter((action) => action.role !== "medium" && (Number(action.day) || 1) === day)
+      .sort((a, b) => compareTimelineRoleActions(a, b, state.players))
+      .forEach((action) => {
+        const line = formatRoleActionEvent(action, state.players);
+        if (line) nightEvents.push(line);
+      });
+
+    const events = [...dayEvents];
+    if (nightEvents.length) {
+      events.push("【夜】", ...nightEvents);
+    }
+
     if (events.length) {
       lines.push(`### ${day}日目`);
       events.forEach((event) => lines.push(`- ${event}`));
