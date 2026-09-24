@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.239";
+const APP_VERSION = "1.240";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -16,6 +16,7 @@ const ROLE_LABELS = {
   other: "その他",
   hunter: "ハンター",
   nekomata: "猫又",
+  gidora: "ギドラ",
   nekomataGuard: "猫又/ボディガード",
   fox: "妖狐",
   teruteru: "てるてる",
@@ -32,7 +33,9 @@ const RIVAL_DISPLAY_ROLES = new Set(["medium", "guard", "hunter"]);
 const RIVAL_PERSPECTIVE_ROLES = new Set(["seer", "medium", "guard", "hunter"]);
 const RIVAL_PERSPECTIVE_VALUES = new Set(["wolfSide", "werewolf", "madman"]);
 const SELF_RIVAL_GUESS_ROLES = new Set(["seer", "medium", "guard", "hunter"]);
-const VILLAGER_SIDE_ROLES = new Set(["seer", "medium", "guard", "villager", "hunter", "nekomata", "nekomataGuard"]);
+const GIDORA_CANDIDATE_ROLES = ["seer", "medium", "guard", "hunter", "nekomata"];
+const DEFAULT_GIDORA_ROLES = ["nekomata", "guard"];
+const VILLAGER_SIDE_ROLES = new Set(["seer", "medium", "guard", "villager", "hunter", "nekomata", "gidora", "nekomataGuard"]);
 const STATUS_LABELS = {
   alive: "生存",
   exiled: "追放",
@@ -340,6 +343,8 @@ document.addEventListener("DOMContentLoaded", () => {
     "editPlayerName",
     "closeEditBtn",
     "roleSelect",
+    "gidoraRoleSection",
+    "gidoraRoleOptions",
     "resultSeerHint",
     "resultValueSelect",
     "adoptedMediumSection",
@@ -567,7 +572,18 @@ function bindEvents() {
   els.roleSelect.addEventListener("change", () => {
     editingRoleTouched = true;
     const player = findPlayer(editingPlayerId);
-    if (player) renderRoleActionControls(player, els.roleSelect.value);
+    if (player) {
+      renderGidoraRoleControls(player, els.roleSelect.value);
+      renderRoleActionControls(player, els.roleSelect.value);
+    }
+  });
+  els.gidoraRoleOptions.addEventListener("change", (event) => {
+    if (!event.target.matches('input[name="gidoraRole"]')) return;
+    if (getSelectedGidoraRoles().length > 3) {
+      event.target.checked = false;
+      return toast("ギドラ候補は3個まで選べます");
+    }
+    editingRoleTouched = true;
   });
   els.addRoleActionBtn.addEventListener("click", addRoleActionEditorRow);
   els.editForm.addEventListener("submit", (event) => {
@@ -792,6 +808,7 @@ function addPlayer() {
     id: crypto.randomUUID(),
     name,
     role: "",
+    gidoraRoles: [],
     manualRoleOverride: false,
     participating: tournamentIds.length > 0,
     tournamentIds,
@@ -1362,6 +1379,7 @@ function resetBoardState() {
   state.players = state.players.map((player) => ({
     ...player,
     role: "",
+    gidoraRoles: [],
     manualRoleOverride: false,
     status: "alive",
     statusDay: null,
@@ -2138,6 +2156,7 @@ function openEditDialog(playerId, seerId = "") {
   editingRoleTouched = false;
   els.editPlayerName.textContent = player.name;
   els.roleSelect.value = player.role || "";
+  renderGidoraRoleControls(player);
   els.memoInput.value = player.memo || "";
   renderResultControls(player);
   renderMediumResultControl(player);
@@ -3083,11 +3102,17 @@ function saveEditingPlayer() {
   const progressSignatureBefore = getMeaningfulProgressSignature();
   let continuationNotice = "";
   const previousRole = player.role;
+  const previousGidoraRoles = normalizeGidoraRoles(player.gidoraRoles, previousRole);
   const selectedRole = els.roleSelect.value;
+  const selectedGidoraRoles = selectedRole === "gidora" ? getSelectedGidoraRoles() : [];
+  if (selectedRole === "gidora" && (selectedGidoraRoles.length < 2 || selectedGidoraRoles.length > 3)) {
+    return toast("ギドラ候補を2〜3個選んでください");
+  }
   if (editingRoleTouched && previousRole !== selectedRole) {
     invalidateInferenceForRoleChange(player, previousRole, selectedRole);
   }
   player.role = player.attackedWolfSideConfirmedMadman ? "madman" : selectedRole;
+  player.gidoraRoles = player.role === "gidora" ? selectedGidoraRoles : [];
   player.memo = els.memoInput.value.trim();
   if (editingRoleTouched) player.manualRoleOverride = true;
   if (previousRole !== player.role) {
@@ -3100,7 +3125,9 @@ function saveEditingPlayer() {
   saveMediumPerspectiveResults(player);
   saveDivinationResult({ silent: true });
   saveAdoptedMediumSelection();
-  if (previousRole !== player.role) addClaimEvent(player.id, previousRole, player.role);
+  if (previousRole !== player.role || !areSameStringArrays(previousGidoraRoles, player.gidoraRoles)) {
+    addClaimEvent(player.id, previousRole, player.role, previousGidoraRoles, player.gidoraRoles);
+  }
   if (progressSignatureBefore !== getMeaningfulProgressSignature()) continuationNotice = confirmPendingExileContinuation();
   autoStartGameFromBoardInput();
   closeEditDialog();
@@ -4375,7 +4402,7 @@ function removeInvalidCurrentMediumResults() {
   );
 }
 
-function addClaimEvent(playerId, previousRole, role) {
+function addClaimEvent(playerId, previousRole, role, previousGidoraRoles = [], gidoraRoles = []) {
   const type = !previousRole ? "claim" : !role ? "withdraw" : "change";
   state.claimEvents.push({
     id: crypto.randomUUID(),
@@ -4383,6 +4410,8 @@ function addClaimEvent(playerId, previousRole, role) {
     day: getCurrentLogDay(),
     previousRole,
     role,
+    previousGidoraRoles: normalizeGidoraRoles(previousGidoraRoles, previousRole),
+    gidoraRoles: normalizeGidoraRoles(gidoraRoles, role),
     type,
     createdAt: new Date().toISOString(),
   });
@@ -4832,9 +4861,45 @@ function shouldDisplayConfirmedWhiteForSeer(player, seerId, value) {
 
 function getRoleClaimLabel(player, players = getActivePlayers()) {
   if (!player.role || !Object.hasOwn(ROLE_LABELS, player.role)) return "";
+  if (player.role === "gidora" || player.role === "nekomataGuard") return getGidoraRoleLabel(player);
   const sameRolePlayers = getRoleClaimants(player.role, players);
   const suffix = sameRolePlayers.length > 1 ? getCircledNumber(sameRolePlayers.findIndex((item) => item.id === player.id) + 1) : "";
   return `${ROLE_LABELS[player.role]}${suffix}`;
+}
+
+function normalizeGidoraRoles(values, role = "gidora") {
+  if (role === "nekomataGuard") return [...DEFAULT_GIDORA_ROLES];
+  if (role !== "gidora") return [];
+  const normalized = GIDORA_CANDIDATE_ROLES.filter(
+    (candidate) => Array.isArray(values) && values.includes(candidate),
+  );
+  return normalized.length >= 2 ? normalized.slice(0, 3) : [...DEFAULT_GIDORA_ROLES];
+}
+
+function getGidoraRoleLabel(player) {
+  const roles = normalizeGidoraRoles(player?.gidoraRoles, player?.role);
+  return roles.length ? roles.map((role) => ROLE_LABELS[role]).join("/") : ROLE_LABELS.gidora;
+}
+
+function areSameStringArrays(left, right) {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function getSelectedGidoraRoles() {
+  return GIDORA_CANDIDATE_ROLES.filter(
+    (role) => els.gidoraRoleOptions.querySelector(`input[name="gidoraRole"][value="${role}"]`)?.checked,
+  );
+}
+
+function renderGidoraRoleControls(player, roleOverride = els.roleSelect.value) {
+  const visible = roleOverride === "gidora";
+  els.gidoraRoleSection.hidden = !visible;
+  if (!visible) return;
+  const sourceRole = player?.role === "nekomataGuard" ? "nekomataGuard" : "gidora";
+  const selected = new Set(normalizeGidoraRoles(player?.gidoraRoles, sourceRole));
+  els.gidoraRoleOptions.querySelectorAll('input[name="gidoraRole"]').forEach((input) => {
+    input.checked = selected.has(input.value);
+  });
 }
 
 function getWolfSideAwareRoleLabel(player) {
@@ -6768,7 +6833,7 @@ function addHistoryVoteEditorRow() {
 
 function getHistoryClaimEventEditorRowHtml(event, players) {
   return `
-    <div class="history-role-action-edit" data-claim-event-id="${escapeHtml(event.id)}" data-created-at="${escapeHtml(event.createdAt || "")}">
+    <div class="history-role-action-edit" data-claim-event-id="${escapeHtml(event.id)}" data-created-at="${escapeHtml(event.createdAt || "")}" data-previous-gidora-roles="${escapeHtml((event.previousGidoraRoles || []).join(","))}" data-gidora-roles="${escapeHtml((event.gidoraRoles || []).join(","))}">
       <select data-field="playerId" aria-label="CO者">${getHistoryPlayerOptionsHtml(players, event.playerId)}</select>
       <input data-field="day" type="number" min="1" value="${Number(event.day) || 1}" aria-label="日付" />
       <select data-field="previousRole" aria-label="変更前役職">${getRoleOptionsHtml(event.previousRole)}</select>
@@ -6801,7 +6866,7 @@ function getRoleActionRoleOptionsHtml(selectedRole) {
 function getRoleOptionsHtml(selectedRole) {
   return [
     ["", "なし"],
-    ...Object.entries(ROLE_LABELS),
+    ...Object.entries(ROLE_LABELS).filter(([role]) => role !== "nekomataGuard"),
   ]
     .map(([value, label]) => `<option value="${value}" ${value === selectedRole ? "selected" : ""}>${label}</option>`)
     .join("");
@@ -6905,6 +6970,8 @@ function saveHistoryEdits() {
         day: row.querySelector('[data-field="day"]').value,
         previousRole: row.querySelector('[data-field="previousRole"]').value,
         role: row.querySelector('[data-field="role"]').value,
+        previousGidoraRoles: row.dataset.previousGidoraRoles?.split(",").filter(Boolean) || [],
+        gidoraRoles: row.dataset.gidoraRoles?.split(",").filter(Boolean) || [],
         createdAt: row.dataset.createdAt || new Date().toISOString(),
       }),
     )
@@ -7299,11 +7366,22 @@ function formatClaimEvent(event, players) {
   const player = players.find((item) => item.id === event.playerId);
   if (!player) return "";
   const playerName = formatTimelineActorName(player);
-  if (event.type === "withdraw") return `CO撤回: ${playerName} ${ROLE_LABELS[event.previousRole] || "役職"}`;
+  const previousLabel = getClaimEventRoleLabel(event.previousRole, event.previousGidoraRoles);
+  const roleLabel = getClaimEventRoleLabel(event.role, event.gidoraRoles);
+  if (event.type === "withdraw") return `CO撤回: ${playerName} ${previousLabel}`;
   if (event.type === "change") {
-    return `CO変更: ${playerName} ${ROLE_LABELS[event.previousRole] || "役職"} → ${ROLE_LABELS[event.role] || "役職"}`;
+    return `CO変更: ${playerName} ${previousLabel} → ${roleLabel}`;
   }
-  return `CO: ${playerName} ${ROLE_LABELS[event.role] || "役職"}`;
+  return `CO: ${playerName} ${roleLabel}`;
+}
+
+function getClaimEventRoleLabel(role, gidoraRoles = []) {
+  if (role === "gidora" || role === "nekomataGuard") {
+    return normalizeGidoraRoles(gidoraRoles, role)
+      .map((candidate) => ROLE_LABELS[candidate])
+      .join("/");
+  }
+  return ROLE_LABELS[role] || "役職";
 }
 
 function formatRoleActionEvent(action, players) {
@@ -8584,10 +8662,13 @@ function normalizePlayer(player) {
     player.confirmedResultConflictBroken !== true &&
     player.mediumConflictBroken !== true &&
     player.attackConflictBroken !== true;
+  const legacyGidora = player.role === "nekomataGuard";
   const normalizedRole = attackedWolfSideConfirmedMadman
     ? "madman"
     : onlyLegacyManualMediumBroken && player.role === "wolfSide" && player.manualRoleOverride !== true
       ? "seer"
+    : legacyGidora
+      ? "gidora"
     : Object.hasOwn(ROLE_LABELS, player.role)
       ? player.role
       : "";
@@ -8599,6 +8680,7 @@ function normalizePlayer(player) {
     id: player.id || crypto.randomUUID(),
     name: String(player.name || "名無し"),
     role: normalizedRole,
+    gidoraRoles: normalizeGidoraRoles(player.gidoraRoles, legacyGidora ? "nekomataGuard" : normalizedRole),
     manualRoleOverride: attackedWolfSideConfirmedMadman ? false : player.manualRoleOverride === true,
     participating: player.participating !== false,
     tournamentIds: Array.isArray(player.tournamentIds) ? [...new Set(player.tournamentIds.map(String))] : [],
@@ -8848,15 +8930,25 @@ function normalizeRoleAction(action) {
 
 function normalizeClaimEvent(event) {
   if (!event?.playerId) return null;
-  const previousRole = Object.hasOwn(ROLE_LABELS, event.previousRole) ? event.previousRole : "";
-  const role = Object.hasOwn(ROLE_LABELS, event.role) ? event.role : "";
-  if (previousRole === role || (!previousRole && !role)) return null;
+  const previousRole = event.previousRole === "nekomataGuard" ? "gidora" : Object.hasOwn(ROLE_LABELS, event.previousRole) ? event.previousRole : "";
+  const role = event.role === "nekomataGuard" ? "gidora" : Object.hasOwn(ROLE_LABELS, event.role) ? event.role : "";
+  const previousGidoraRoles = normalizeGidoraRoles(
+    event.previousGidoraRoles,
+    event.previousRole === "nekomataGuard" ? "nekomataGuard" : previousRole,
+  );
+  const gidoraRoles = normalizeGidoraRoles(
+    event.gidoraRoles,
+    event.role === "nekomataGuard" ? "nekomataGuard" : role,
+  );
+  if ((previousRole === role && areSameStringArrays(previousGidoraRoles, gidoraRoles)) || (!previousRole && !role)) return null;
   return {
     id: event.id || crypto.randomUUID(),
     playerId: String(event.playerId),
     day: Number.isFinite(Number(event.day)) ? Math.max(1, Number(event.day)) : 1,
     previousRole,
     role,
+    previousGidoraRoles,
+    gidoraRoles,
     type: !previousRole ? "claim" : !role ? "withdraw" : "change",
     createdAt: String(event.createdAt || ""),
   };

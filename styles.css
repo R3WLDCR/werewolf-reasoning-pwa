@@ -985,10 +985,44 @@ button.role-guess-label {
   color: #80e8a8;
 }
 
+.role-gidora,
 .role-nekomataGuard {
-  background: linear-gradient(90deg, #123f2e 0%, #123f2e 50%, #4a2b12 50%, #4a2b12 100%);
+  background: linear-gradient(90deg, #35214a 0%, #35214a 34%, #4a2b12 34%, #4a2b12 67%, #123f2e 67%);
   color: #ffe0ae;
   border: 1px solid rgba(255, 189, 115, 0.48);
+  white-space: nowrap;
+}
+
+.gidora-role-section {
+  margin: 0;
+  border: 1px solid var(--line);
+}
+
+.gidora-role-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.gidora-role-options label {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #101718;
+  font-size: 0.84rem;
+  white-space: nowrap;
+}
+
+.gidora-role-options input[type="checkbox"] {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  margin: 0;
 }
 
 .role-madmanHunter {

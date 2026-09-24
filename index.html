@@ -9,8 +9,8 @@
     <meta name="apple-mobile-web-app-title" content="人狼推理ノート" />
     <title>人狼推理ノート</title>
     <link rel="manifest" href="./manifest.json" />
-    <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png?v=1.239" />
-    <link rel="stylesheet" href="./styles.css?v=1.239" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png?v=1.240" />
+    <link rel="stylesheet" href="./styles.css?v=1.240" />
   </head>
   <body>
     <div class="app-shell">
@@ -334,11 +334,23 @@
             <option value="other">その他</option>
             <option value="hunter">ハンター</option>
             <option value="nekomata">猫又</option>
-            <option value="nekomataGuard">猫又/ボディガード</option>
+            <option value="gidora">ギドラ</option>
             <option value="fox">妖狐</option>
             <option value="teruteru">てるてる</option>
           </select>
         </label>
+
+        <fieldset id="gidoraRoleSection" class="field-group gidora-role-section" hidden>
+          <legend class="field-title">ギドラ候補（2〜3個）</legend>
+          <div id="gidoraRoleOptions" class="gidora-role-options">
+            <label><input type="checkbox" name="gidoraRole" value="seer" />預言者</label>
+            <label><input type="checkbox" name="gidoraRole" value="medium" />霊媒師</label>
+            <label><input type="checkbox" name="gidoraRole" value="guard" />ボディガード</label>
+            <label><input type="checkbox" name="gidoraRole" value="hunter" />ハンター</label>
+            <label><input type="checkbox" name="gidoraRole" value="nekomata" />猫又</label>
+          </div>
+          <p class="field-hint">候補を2〜3個選択してください</p>
+        </fieldset>
 
         <div class="field-group">
           <div id="resultSeerHint" class="field-title">この人への預言者視点</div>
@@ -716,7 +728,7 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./sync-config.js?v=1.239"></script>
-    <script src="./app.js?v=1.239"></script>
+    <script src="./sync-config.js?v=1.240"></script>
+    <script src="./app.js?v=1.240"></script>
   </body>
 </html>
