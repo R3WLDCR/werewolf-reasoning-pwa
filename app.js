@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.240";
+const APP_VERSION = "1.241";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -81,12 +81,15 @@ const ROLE_ACTION_RESULT_LABELS = {
   },
 };
 const CIRCLED_NUMBERS = ["", "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨"];
+const REMOVED_STANDARD_IMPRESSION_REASON_IDS = new Set([
+  "standard-villager-natural-talk",
+  "standard-villager-honest-reaction",
+  "standard-villager-natural-vote",
+  "standard-villager-natural-view",
+  "standard-werewolf-stiff",
+]);
 const STANDARD_IMPRESSION_REASONS = [
   { id: "standard-villager-light", label: "動きが軽い", side: "villager", custom: false },
-  { id: "standard-villager-natural-talk", label: "発言が自然", side: "villager", custom: false },
-  { id: "standard-villager-honest-reaction", label: "反応が素直", side: "villager", custom: false },
-  { id: "standard-villager-natural-vote", label: "投票が自然", side: "villager", custom: false },
-  { id: "standard-villager-natural-view", label: "視点が自然", side: "villager", custom: false },
   { id: "standard-villager-growing-reasoning", label: "推理が伸びる", side: "villager", custom: false },
   { id: "standard-villager-independent-line", label: "独自路線", side: "villager", custom: false },
   { id: "standard-villager-same-thinking", label: "思考が同じ", side: "villager", custom: false },
@@ -94,8 +97,7 @@ const STANDARD_IMPRESSION_REASONS = [
   { id: "standard-villager-unhesitating-attack", label: "攻撃が躊躇ない", side: "villager", custom: false },
   { id: "standard-villager-convincing-reasoning", label: "推理に納得", side: "villager", custom: false },
   { id: "standard-villager-passion-white", label: "パッション白", side: "villager", custom: false },
-  { id: "standard-werewolf-stiff", label: "動きが固い", side: "werewolf", custom: false },
-  { id: "standard-werewolf-expression", label: "表情", side: "werewolf", custom: false },
+  { id: "standard-werewolf-expression", label: "表情が固い", side: "werewolf", custom: false },
   { id: "standard-werewolf-heavy-talk", label: "発言が重い", side: "werewolf", custom: false },
   { id: "standard-werewolf-defensive", label: "反応が防御的", side: "werewolf", custom: false },
   { id: "standard-werewolf-unnatural-vote", label: "投票が黒い", side: "werewolf", custom: false },
@@ -3893,9 +3895,11 @@ function normalizeImpressionSide(value) {
 
 function normalizeImpressionReason(reason) {
   if (!reason?.id || !String(reason.label || "").trim()) return null;
+  const id = String(reason.id);
+  if (REMOVED_STANDARD_IMPRESSION_REASON_IDS.has(id)) return null;
   return {
-    id: String(reason.id),
-    label: String(reason.label).trim(),
+    id,
+    label: id === "standard-werewolf-expression" ? "表情が固い" : String(reason.label).trim(),
     side: normalizeImpressionSide(reason.side),
     custom: reason.custom === true,
   };
