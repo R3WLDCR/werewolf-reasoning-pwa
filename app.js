@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.241";
+const APP_VERSION = "1.242";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -21,6 +21,23 @@ const ROLE_LABELS = {
   fox: "妖狐",
   teruteru: "てるてる",
   madmanHunter: "狂人ハンター",
+  satan: "サタン",
+  oldWoman: "老婆",
+  halfWerewolf: "半人狼",
+  sister: "シスター",
+  executioner: "処刑人",
+  loneWolf: "一匹狼",
+  hunterA: "ハンターA",
+  hunterB: "ハンターB",
+  musician: "音楽家",
+  wanderer: "風来坊",
+  angel: "天使",
+  devil: "悪魔",
+  alice: "アリス",
+  cheshireCat: "チシャ猫",
+  hangingWitch: "吊り逃れの魔女",
+  phantom: "怪人",
+  mason: "共有者",
 };
 const ROLE_ORDER = {
   seer: 0,
@@ -35,7 +52,30 @@ const RIVAL_PERSPECTIVE_VALUES = new Set(["wolfSide", "werewolf", "madman"]);
 const SELF_RIVAL_GUESS_ROLES = new Set(["seer", "medium", "guard", "hunter"]);
 const GIDORA_CANDIDATE_ROLES = ["seer", "medium", "guard", "hunter", "nekomata"];
 const DEFAULT_GIDORA_ROLES = ["nekomata", "guard"];
-const VILLAGER_SIDE_ROLES = new Set(["seer", "medium", "guard", "villager", "hunter", "nekomata", "gidora", "nekomataGuard"]);
+const ADDITIONAL_VILLAGER_ROLES = ["sister", "executioner", "musician", "wanderer", "mason"];
+const ADDITIONAL_WEREWOLF_ROLES = ["oldWoman", "halfWerewolf", "loneWolf", "alice", "cheshireCat", "phantom"];
+const ADDITIONAL_THIRD_ROLES = ["satan", "hunterB", "angel", "devil", "hangingWitch"];
+const VILLAGER_SIDE_ROLES = new Set([
+  "seer",
+  "medium",
+  "guard",
+  "villager",
+  "hunter",
+  "nekomata",
+  "gidora",
+  "nekomataGuard",
+  ...ADDITIONAL_VILLAGER_ROLES,
+]);
+const KNOWN_OUTSIDER_ROLES = new Set([
+  "werewolf",
+  "wolfSide",
+  "madman",
+  "madmanHunter",
+  "fox",
+  "teruteru",
+  ...ADDITIONAL_WEREWOLF_ROLES,
+  ...ADDITIONAL_THIRD_ROLES,
+]);
 const STATUS_LABELS = {
   alive: "生存",
   exiled: "追放",
@@ -124,6 +164,23 @@ const ROLE_GUESS_LABELS = {
   fox: "妖狐",
   teruteru: "てるてる",
   madmanHunter: "狂人ハンター",
+  satan: "サタン",
+  oldWoman: "老婆",
+  halfWerewolf: "半人狼",
+  sister: "シスター",
+  executioner: "処刑人",
+  loneWolf: "一匹狼",
+  hunterA: "ハンターA",
+  hunterB: "ハンターB",
+  musician: "音楽家",
+  wanderer: "風来坊",
+  angel: "天使",
+  devil: "悪魔",
+  alice: "アリス",
+  cheshireCat: "チシャ猫",
+  hangingWitch: "吊り逃れの魔女",
+  phantom: "怪人",
+  mason: "共有者",
 };
 const ROLE_GUESS_CAMPS = {
   villager: [
@@ -133,6 +190,11 @@ const ROLE_GUESS_CAMPS = {
     { value: "guard", label: "ボディガード" },
     { value: "hunter", label: "ハンター" },
     { value: "nekomata", label: "猫又" },
+    { value: "sister", label: "シスター" },
+    { value: "executioner", label: "処刑人" },
+    { value: "musician", label: "音楽家" },
+    { value: "wanderer", label: "風来坊" },
+    { value: "mason", label: "共有者" },
     { value: "confirmedWhite", label: "確定白" },
   ],
   werewolf: [
@@ -140,15 +202,36 @@ const ROLE_GUESS_CAMPS = {
     { value: "madman", label: "裏切り者" },
     { value: "wolfSide", label: "狼狂" },
     { value: "madmanHunter", label: "狂人ハンター" },
+    { value: "oldWoman", label: "老婆" },
+    { value: "halfWerewolf", label: "半人狼" },
+    { value: "loneWolf", label: "一匹狼" },
+    { value: "alice", label: "アリス" },
+    { value: "cheshireCat", label: "チシャ猫" },
+    { value: "phantom", label: "怪人" },
   ],
   third: [
     { value: "fox", label: "妖狐" },
     { value: "teruteru", label: "てるてる" },
+    { value: "satan", label: "サタン" },
+    { value: "hunterA", label: "ハンターA（市民/第三）" },
+    { value: "hunterB", label: "ハンターB" },
+    { value: "angel", label: "天使" },
+    { value: "devil", label: "悪魔" },
+    { value: "hangingWitch", label: "吊り逃れの魔女" },
     { value: "unknown", label: "不明" },
     { value: "other", label: "その他" },
   ],
 };
-const WOLF_MODE_COVER_ROLES = new Set(["unknown", "villager", "seer", "medium", "guard", "hunter", "nekomata"]);
+const WOLF_MODE_COVER_ROLES = new Set([
+  "unknown",
+  "villager",
+  "seer",
+  "medium",
+  "guard",
+  "hunter",
+  "nekomata",
+  ...ADDITIONAL_VILLAGER_ROLES,
+]);
 
 function normalizeCitizenText(value) {
   return String(value || "").replaceAll("村人", "市民");
@@ -5043,7 +5126,7 @@ function isSpecificOutsiderForSeer(player, seer, adoptedMediumId = getAdoptedMed
   if (override && (override.value === "human" || override.value === "confirmedWhite" || VILLAGER_SIDE_ROLES.has(override.value))) {
     return false;
   }
-  if (override && ["werewolf", "wolfSide", "madman"].includes(override.value)) {
+  if (override && KNOWN_OUTSIDER_ROLES.has(override.value)) {
     return true;
   }
 
@@ -5056,7 +5139,7 @@ function isSpecificOutsiderForSeer(player, seer, adoptedMediumId = getAdoptedMed
     return true;
   }
 
-  if (["werewolf", "wolfSide", "madman"].includes(player.role)) {
+  if (KNOWN_OUTSIDER_ROLES.has(player.role)) {
     return true;
   }
 
@@ -7351,8 +7434,7 @@ function formatTimelinePopulation(players, day) {
   const survivors = players.filter((player) => isPlayerAliveAtTimelineDay(player, day));
   const hasCompleteTrueRoles = players.length > 0 && players.every((player) => Boolean(player.trueRole));
   if (!hasCompleteTrueRoles) return `生存: ${survivors.length}人（うち人外 不明）`;
-  const outsiderRoles = new Set(["werewolf", "madman", "wolfSide", "fox", "teruteru"]);
-  const outsiderCount = survivors.filter((player) => outsiderRoles.has(player.trueRole)).length;
+  const outsiderCount = survivors.filter((player) => KNOWN_OUTSIDER_ROLES.has(player.trueRole)).length;
   return `生存: ${survivors.length}人（うち人外 ${outsiderCount}人）`;
 }
 
@@ -7416,7 +7498,24 @@ function formatTrueRoleGroups(players) {
 }
 
 function getTrueRoleGroupOrder(groups) {
-  const preferred = ["seer", "medium", "guard", "hunter", "nekomata", "madman", "werewolf", "fox", "teruteru", "other", "wolfSide", "confirmedWhite"];
+  const preferred = [
+    "seer",
+    "medium",
+    "guard",
+    "hunter",
+    "nekomata",
+    ...ADDITIONAL_VILLAGER_ROLES,
+    "hunterA",
+    "madman",
+    "werewolf",
+    ...ADDITIONAL_WEREWOLF_ROLES,
+    "fox",
+    "teruteru",
+    ...ADDITIONAL_THIRD_ROLES,
+    "other",
+    "wolfSide",
+    "confirmedWhite",
+  ];
   const extras = [...groups.keys()].filter((role) => !preferred.includes(role)).sort();
   return [...preferred, ...extras];
 }

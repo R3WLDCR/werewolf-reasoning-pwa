@@ -1041,6 +1041,40 @@ button.role-guess-label {
   color: #d9c5ff;
 }
 
+.role-sister,
+.role-executioner,
+.role-musician,
+.role-wanderer,
+.role-mason {
+  background: #173d38;
+  color: #9be8d2;
+}
+
+.role-oldWoman,
+.role-halfWerewolf,
+.role-loneWolf,
+.role-alice,
+.role-cheshireCat,
+.role-phantom {
+  background: #512028;
+  color: #ffadb5;
+}
+
+.role-satan,
+.role-hunterB,
+.role-angel,
+.role-devil,
+.role-hangingWitch {
+  background: #3d2b55;
+  color: #dfc2ff;
+}
+
+.role-hunterA {
+  background: linear-gradient(90deg, #173d38 0%, #173d38 50%, #3d2b55 50%, #3d2b55 100%);
+  color: #d7f5e9;
+  border: 1px solid rgba(205, 175, 255, 0.44);
+}
+
 .role-villager,
 .role-confirmedWhite {
   background: #183755;
