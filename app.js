@@ -6,7 +6,7 @@ const STATE_DB_NAME = "werewolf-reasoning-note";
 const STATE_DB_VERSION = 1;
 const STATE_STORE_NAME = "app-state";
 const STATE_RECORD_KEY = "current";
-const APP_VERSION = "1.245";
+const APP_VERSION = "1.246";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -59,6 +59,13 @@ const DEFAULT_GIDORA_ROLES = ["nekomata", "guard"];
 const ADDITIONAL_VILLAGER_ROLES = ["sister", "executioner", "musician", "wanderer", "mason"];
 const ADDITIONAL_WEREWOLF_ROLES = ["oldWoman", "halfWerewolf", "loneWolf", "alice", "cheshireCat", "phantom"];
 const ADDITIONAL_THIRD_ROLES = ["satan", "hunterB", "angel", "devil", "hangingWitch"];
+const EVENT_SCOPED_ROLE_EVENT_NAME = "亡国の人狼会";
+const EVENT_SCOPED_ROLES = new Set([
+  ...ADDITIONAL_VILLAGER_ROLES,
+  ...ADDITIONAL_WEREWOLF_ROLES,
+  ...ADDITIONAL_THIRD_ROLES,
+  "hunterA",
+]);
 const VILLAGER_SIDE_ROLES = new Set([
   "seer",
   "medium",
@@ -1095,7 +1102,7 @@ function renderFinishTrueRoleFields() {
           <span>${escapeHtml(player.name)}</span>
           <select data-true-role-player-id="${escapeHtml(player.id)}">
             <option value="">役職を選択</option>
-            ${getTrueRoleOptionsHtml(player.primaryRoleGuess)}
+            ${getTrueRoleOptionsHtml(player.primaryRoleGuess, state.eventName)}
           </select>
         </label>
       `,
@@ -1106,9 +1113,15 @@ function renderFinishTrueRoleFields() {
   });
 }
 
-function getTrueRoleOptionsHtml(selectedRole = "") {
+function getTrueRoleOptionsHtml(selectedRole = "", eventName = state.eventName) {
   return Object.entries(ROLE_GUESS_LABELS)
-    .filter(([role]) => role !== "unknown" && role !== "wolfSide" && role !== "confirmedWhite")
+    .filter(
+      ([role]) =>
+        role !== "unknown" &&
+        role !== "wolfSide" &&
+        role !== "confirmedWhite" &&
+        isRoleAvailableForEvent(role, eventName, selectedRole),
+    )
     .map(([role, label]) => `<option value="${role}" ${role === selectedRole ? "selected" : ""}>${label}</option>`)
     .join("");
 }
@@ -1780,7 +1793,11 @@ function renderRoleGuessDialog(player) {
   renderBlackTargetOptions(player);
 
   const filterCamp = (list) =>
-    editingWolfModeMember ? list.filter((item) => WOLF_MODE_COVER_ROLES.has(item.value)) : list;
+    list.filter(
+      (item) =>
+        (!editingWolfModeMember || WOLF_MODE_COVER_ROLES.has(item.value)) &&
+        isRoleAvailableForEvent(item.value, state.eventName, selectedValue),
+    );
 
   const villagerOptions = filterCamp(ROLE_GUESS_CAMPS.villager);
   const werewolfOptions = filterCamp(ROLE_GUESS_CAMPS.werewolf);
@@ -2224,6 +2241,7 @@ function openEditDialog(playerId, seerId = "") {
   editingSeerId = seerId || getSeers()[0]?.id || "";
   editingRoleTouched = false;
   els.editPlayerName.textContent = player.name;
+  els.roleSelect.innerHTML = getRoleOptionsHtml(player.role, state.eventName);
   els.roleSelect.value = player.role || "";
   renderGidoraRoleControls(player);
   els.memoInput.value = player.memo || "";
@@ -6556,11 +6574,11 @@ function renderHistoryEditor(history) {
           <input data-field="name" type="text" value="${escapeHtml(player.name)}" maxlength="40" aria-label="参加者名" />
           <label class="history-participation"><input data-field="participating" type="checkbox" ${player.participating !== false ? "checked" : ""} /><span>参加</span></label>
           <select data-field="role" aria-label="${escapeHtml(player.name)}の役職">
-            ${getRoleOptionsHtml(player.role)}
+            ${getRoleOptionsHtml(player.role, history.eventName)}
           </select>
           <select data-field="trueRole" aria-label="${escapeHtml(player.name)}の真の役職">
             <option value="">真役職未設定</option>
-            ${getTrueRoleOptionsHtml(player.trueRole)}
+            ${getTrueRoleOptionsHtml(player.trueRole, history.eventName)}
           </select>
           <select data-field="status" aria-label="${escapeHtml(player.name)}の状態">
             ${getStatusOptionsHtml(player.status)}
@@ -6574,7 +6592,7 @@ function renderHistoryEditor(history) {
           <div class="history-role-guess-edit">
             <label class="field">
               <span>役職推理候補</span>
-              <div class="history-role-guess-options">${getHistoryRoleGuessOptionsHtml(player)}</div>
+              <div class="history-role-guess-options">${getHistoryRoleGuessOptionsHtml(player, history.eventName)}</div>
             </label>
             <label class="field">
               <span>本命役職</span>
@@ -6616,7 +6634,9 @@ function renderHistoryEditor(history) {
         .join("")
     : '<div class="empty-inline">対抗視点欄の手入力なし</div>';
   els.historyClaimEventEditor.innerHTML = history.claimEvents?.length
-    ? sortClaimEventsForEditDisplay(history.claimEvents).map((event) => getHistoryClaimEventEditorRowHtml(event, activePlayers)).join("")
+    ? sortClaimEventsForEditDisplay(history.claimEvents)
+        .map((event) => getHistoryClaimEventEditorRowHtml(event, activePlayers, history.eventName))
+        .join("")
     : '<div class="empty-inline">CO履歴なし</div>';
   els.historyVoteEditor.innerHTML = history.voteHistories?.length
     ? sortVotesForEditDisplay(history.voteHistories).map((vote) => getVoteEditorRowHtml(vote, activePlayers)).join("")
@@ -6709,9 +6729,10 @@ function getHistoryImpressionOptionsHtml(player) {
     .join("");
 }
 
-function getHistoryRoleGuessOptionsHtml(player) {
+function getHistoryRoleGuessOptionsHtml(player, eventName = "") {
   const selected = getRoleGuessDisplay(player).value;
   return Object.entries(ROLE_GUESS_LABELS)
+    .filter(([value]) => isRoleAvailableForEvent(value, eventName, selected))
     .map(
       ([value, label]) => `
         <label class="history-role-guess-option ${getRoleGuessClass(value)}">
@@ -6870,7 +6891,7 @@ function addHistoryClaimEventEditorRow() {
     createdAt: new Date().toISOString(),
   };
   const wrapper = document.createElement("div");
-  wrapper.innerHTML = getHistoryClaimEventEditorRowHtml(event, players);
+  wrapper.innerHTML = getHistoryClaimEventEditorRowHtml(event, players, history.eventName);
   els.historyClaimEventEditor.appendChild(wrapper.firstElementChild);
   bindHistoryClaimEventDeleteButtons();
 }
@@ -6902,13 +6923,13 @@ function addHistoryVoteEditorRow() {
   bindHistoryVoteDeleteButtons();
 }
 
-function getHistoryClaimEventEditorRowHtml(event, players) {
+function getHistoryClaimEventEditorRowHtml(event, players, eventName = "") {
   return `
     <div class="history-role-action-edit" data-claim-event-id="${escapeHtml(event.id)}" data-created-at="${escapeHtml(event.createdAt || "")}" data-previous-gidora-roles="${escapeHtml((event.previousGidoraRoles || []).join(","))}" data-gidora-roles="${escapeHtml((event.gidoraRoles || []).join(","))}">
       <select data-field="playerId" aria-label="CO者">${getHistoryPlayerOptionsHtml(players, event.playerId)}</select>
       <input data-field="day" type="number" min="1" value="${Number(event.day) || 1}" aria-label="日付" />
-      <select data-field="previousRole" aria-label="変更前役職">${getRoleOptionsHtml(event.previousRole)}</select>
-      <select data-field="role" aria-label="変更後役職">${getRoleOptionsHtml(event.role)}</select>
+      <select data-field="previousRole" aria-label="変更前役職">${getRoleOptionsHtml(event.previousRole, eventName)}</select>
+      <select data-field="role" aria-label="変更後役職">${getRoleOptionsHtml(event.role, eventName)}</select>
       <button class="danger-button" type="button" data-delete-claim-event>削除</button>
     </div>
   `;
@@ -6934,13 +6955,20 @@ function getRoleActionRoleOptionsHtml(selectedRole) {
     .join("");
 }
 
-function getRoleOptionsHtml(selectedRole) {
+function getRoleOptionsHtml(selectedRole, eventName = state.eventName) {
   return [
     ["", "なし"],
-    ...Object.entries(ROLE_LABELS).filter(([role]) => role !== "nekomataGuard"),
+    ...Object.entries(ROLE_LABELS).filter(
+      ([role]) => role !== "nekomataGuard" && isRoleAvailableForEvent(role, eventName, selectedRole),
+    ),
   ]
     .map(([value, label]) => `<option value="${value}" ${value === selectedRole ? "selected" : ""}>${label}</option>`)
     .join("");
+}
+
+function isRoleAvailableForEvent(role, eventName, selectedRole = "") {
+  if (!EVENT_SCOPED_ROLES.has(role)) return true;
+  return normalizeEventName(eventName) === EVENT_SCOPED_ROLE_EVENT_NAME || role === selectedRole;
 }
 
 function getStatusOptionsHtml(selectedStatus) {
