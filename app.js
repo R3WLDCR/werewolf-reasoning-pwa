@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.242";
+const APP_VERSION = "1.243";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -1123,13 +1123,6 @@ function fillRemainingTrueRolesAsVillager() {
   updateFinishGameValidation();
 }
 
-function countSelectedTrueRoles(selects = []) {
-  return selects.reduce((counts, select) => {
-    if (select.value) counts[select.value] = (counts[select.value] || 0) + 1;
-    return counts;
-  }, {});
-}
-
 function getFinishGameValidation() {
   const messages = [];
   const invalidElements = [];
@@ -1151,21 +1144,6 @@ function getFinishGameValidation() {
     messages.push(`真の役職が未選択です（${names.join("、")}）。`);
     invalidElements.push(...unselected);
   }
-
-  const counts = countSelectedTrueRoles(selects);
-  [
-    ["人狼", "werewolf", state.wolfCount],
-    ["裏切り者", "madman", 1],
-    ["ボディガード", "guard", 1],
-    ["預言者", "seer", 1],
-    ["霊媒師", "medium", 1],
-  ].forEach(([label, role, expected]) => {
-    const actual = counts[role] || 0;
-    if (actual !== expected) {
-      messages.push(`${label}は${expected}人必要です（現在${actual}人）。`);
-      if (actual > expected) invalidElements.push(...selects.filter((select) => select.value === role));
-    }
-  });
 
   return { valid: messages.length === 0, messages, invalidElements };
 }
