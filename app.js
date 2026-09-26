@@ -2,7 +2,7 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.243";
+const APP_VERSION = "1.244";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -8016,7 +8016,7 @@ function getLocalStoreErrorMessage(error) {
     error?.code === 22 ||
     /quota|storage.*full|容量/i.test(String(error?.message || ""));
   return isQuotaError
-    ? "端末の保存容量が不足しています。不要な終了履歴を削除して、もう一度お試しください。"
+    ? "このアプリに割り当てられたブラウザ保存領域が上限に達しました。不要な終了履歴を削除して、もう一度お試しください。"
     : "端末への保存中にエラーが発生しました。画面を閉じず、もう一度お試しください。";
 }
 
@@ -8091,6 +8091,16 @@ function applySavedState(saved) {
   migrateLegacyRoster(saved.eventName);
   backfillStatusDays();
   applyConfirmedWhiteUpdates();
+  const activeHistory = state.gameHistories.find((history) => history.boardId === activeBoardId);
+  if (activeHistory && !state.boards.some((board) => board.id === activeBoardId)) {
+    state.boards.push({
+      id: activeBoardId,
+      name: `${getHistoryDisplayName(activeHistory)} 第${normalizeGameNumber(activeHistory.gameNumber)}試合`,
+      customName: "",
+      updatedAt: activeHistory.finishedAt || new Date().toISOString(),
+      payload: createBoardPayloadFromHistory(activeHistory),
+    });
+  }
   if (!state.boards.length) {
     activeBoardId = activeBoardId || crypto.randomUUID();
     state.boards = [
@@ -8112,6 +8122,10 @@ function getSyncPayload() {
   BOARD_STATE_FIELDS.forEach((field) => delete payload[field]);
   delete payload.activeView;
   delete payload.rosterFilter;
+  const historyBoardIds = new Set(payload.gameHistories.map((history) => history.boardId).filter(Boolean));
+  payload.boards = payload.boards.filter(
+    (board) => board.payload?.gameStatus !== "finished" || !historyBoardIds.has(board.id),
+  );
   return payload;
 }
 
