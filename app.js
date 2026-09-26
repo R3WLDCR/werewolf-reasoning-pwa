@@ -2,7 +2,11 @@ const STORAGE_KEY = "werewolf-reasoning-note-v1";
 const SYNC_META_KEY = "werewolf-reasoning-sync-meta-v1";
 const DEVICE_ID_KEY = "werewolf-reasoning-device-id";
 const ACTIVE_BOARD_KEY = "werewolf-reasoning-active-board-v1";
-const APP_VERSION = "1.244";
+const STATE_DB_NAME = "werewolf-reasoning-note";
+const STATE_DB_VERSION = 1;
+const STATE_STORE_NAME = "app-state";
+const STATE_RECORD_KEY = "current";
+const APP_VERSION = "1.245";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -344,12 +348,14 @@ let pendingCloudRecord = null;
 let applyingCloudState = false;
 let activeBoardId = localStorage.getItem(ACTIVE_BOARD_KEY) || "";
 let switchingBoard = false;
-let hadLocalDataAtStartup = Boolean(localStorage.getItem(STORAGE_KEY));
+let hadLocalDataAtStartup = false;
 let lastLocalStoreError = null;
+let stateDatabasePromise = null;
+let stateWriteQueue = Promise.resolve();
 let syncMeta = restoreSyncMeta();
 const deviceId = getOrCreateDeviceId();
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   [
     "gameStatusBadge",
     "startGameBtn",
@@ -571,7 +577,7 @@ document.addEventListener("DOMContentLoaded", () => {
     els[id] = document.getElementById(id);
   });
 
-  restore();
+  await restore();
   els.appVersionText.textContent = `v${APP_VERSION}`;
   ensureMatchDefaults();
   bindEvents();
@@ -1023,7 +1029,7 @@ function closeFinishGameDialog() {
   els.finishGameDialog.close();
 }
 
-function finishGame() {
+async function finishGame() {
   if (!isGameInProgress()) return;
   const validation = updateFinishGameValidation({ focusFirstInvalid: true });
   if (!validation.valid) return;
@@ -1045,7 +1051,7 @@ function finishGame() {
     state.pendingExileContinuationPlayerId = "";
     state.activeView = "reasoning";
     selectedHistoryId = state.gameHistories[0].id;
-    if (!store()) throw lastLocalStoreError || new Error("Local state could not be saved");
+    if (!(await store())) throw lastLocalStoreError || new Error("Local state could not be saved");
   } catch (error) {
     console.error("Failed to finish game", error);
     Object.keys(state).forEach((key) => delete state[key]);
@@ -7972,21 +7978,32 @@ function renderAndStore() {
   removeInvalidCurrentMediumResults();
   applyConfirmedWhiteUpdates();
   render();
-  store();
+  void store();
 }
 
-function store({ markDirty = true } = {}) {
+async function store({ markDirty = true } = {}) {
   lastLocalStoreError = null;
+  let payload;
+  let signature;
   try {
     saveCurrentBoardSnapshot();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(getLocalStoragePayload()));
+    payload = getLocalStoragePayload();
+    signature = getSyncPayloadSignature();
+  } catch (error) {
+    lastLocalStoreError = error;
+    console.error("Failed to prepare local state", error);
+    return false;
+  }
+  const writeOperation = stateWriteQueue.then(() => writeStatePayload(payload));
+  stateWriteQueue = writeOperation.catch(() => undefined);
+  try {
+    await writeOperation;
   } catch (error) {
     lastLocalStoreError = error;
     console.error("Failed to save local state", error);
     return false;
   }
   try {
-    const signature = getSyncPayloadSignature();
     if (markDirty && !applyingCloudState && signature !== syncMeta.lastPayloadSignature) {
       syncMeta.localUpdatedAt = new Date().toISOString();
       syncMeta.dirty = true;
@@ -8001,6 +8018,72 @@ function store({ markDirty = true } = {}) {
     console.error("Failed to save sync metadata", error);
   }
   return true;
+}
+
+function openStateDatabase() {
+  if (!window.indexedDB) return Promise.reject(new Error("IndexedDB is not available"));
+  if (stateDatabasePromise) return stateDatabasePromise;
+  stateDatabasePromise = new Promise((resolve, reject) => {
+    const request = window.indexedDB.open(STATE_DB_NAME, STATE_DB_VERSION);
+    request.onupgradeneeded = () => {
+      const database = request.result;
+      if (!database.objectStoreNames.contains(STATE_STORE_NAME)) database.createObjectStore(STATE_STORE_NAME);
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("IndexedDB could not be opened"));
+    request.onblocked = () => reject(new Error("IndexedDB upgrade was blocked"));
+  }).catch((error) => {
+    stateDatabasePromise = null;
+    throw error;
+  });
+  return stateDatabasePromise;
+}
+
+async function readIndexedDbState() {
+  const database = await openStateDatabase();
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(STATE_STORE_NAME, "readonly");
+    const request = transaction.objectStore(STATE_STORE_NAME).get(STATE_RECORD_KEY);
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error || transaction.error || new Error("IndexedDB read failed"));
+    transaction.onabort = () => reject(transaction.error || new Error("IndexedDB read was aborted"));
+  });
+}
+
+async function writeIndexedDbState(payload) {
+  const database = await openStateDatabase();
+  await new Promise((resolve, reject) => {
+    const transaction = database.transaction(STATE_STORE_NAME, "readwrite");
+    transaction.objectStore(STATE_STORE_NAME).put(payload, STATE_RECORD_KEY);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error || new Error("IndexedDB write failed"));
+    transaction.onabort = () => reject(transaction.error || new Error("IndexedDB write was aborted"));
+  });
+}
+
+async function deleteIndexedDbState() {
+  try {
+    const database = await openStateDatabase();
+    await new Promise((resolve, reject) => {
+      const transaction = database.transaction(STATE_STORE_NAME, "readwrite");
+      transaction.objectStore(STATE_STORE_NAME).delete(STATE_RECORD_KEY);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error || new Error("IndexedDB delete failed"));
+      transaction.onabort = () => reject(transaction.error || new Error("IndexedDB delete was aborted"));
+    });
+  } catch (error) {
+    console.warn("Failed to clear IndexedDB state", error);
+  }
+}
+
+async function writeStatePayload(payload) {
+  try {
+    await writeIndexedDbState(payload);
+    localStorage.removeItem(STORAGE_KEY);
+  } catch (indexedDbError) {
+    console.warn("IndexedDB save failed; using localStorage fallback", indexedDbError);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  }
 }
 
 function getLocalStoragePayload() {
@@ -8020,12 +8103,32 @@ function getLocalStoreErrorMessage(error) {
     : "端末への保存中にエラーが発生しました。画面を閉じず、もう一度お試しください。";
 }
 
-function restore() {
+async function restore() {
+  try {
+    const indexedState = await readIndexedDbState();
+    if (indexedState) {
+      applySavedState(indexedState);
+      hadLocalDataAtStartup = true;
+      localStorage.removeItem(STORAGE_KEY);
+      return;
+    }
+  } catch (error) {
+    console.warn("IndexedDB restore failed; checking localStorage", error);
+  }
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return;
   try {
-    applySavedState(JSON.parse(raw));
-  } catch {
+    const legacyState = JSON.parse(raw);
+    applySavedState(legacyState);
+    hadLocalDataAtStartup = true;
+    try {
+      await writeIndexedDbState(legacyState);
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (error) {
+      console.warn("IndexedDB migration failed; keeping localStorage data", error);
+    }
+  } catch (error) {
+    console.error("Failed to restore local state", error);
     localStorage.removeItem(STORAGE_KEY);
   }
 }
@@ -8348,6 +8451,7 @@ async function logoutAndClearLocalData() {
   if (!syncUser || !confirm("ログアウトして、この端末内の名簿・盤面・履歴を削除しますか？")) return;
   const { error } = await supabaseClient.auth.signOut();
   if (error) return setSyncError(error.message);
+  await deleteIndexedDbState();
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(SYNC_META_KEY);
   resetStateToDefaults();
@@ -8530,8 +8634,10 @@ async function applyCloudRecord(record) {
   state.activeView = activeView;
   state.rosterFilter = rosterFilter;
   ensureMatchDefaults();
-  saveCurrentBoardSnapshot();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(getLocalStoragePayload()));
+  if (!(await store({ markDirty: false }))) {
+    applyingCloudState = false;
+    return setSyncError(getLocalStoreErrorMessage(lastLocalStoreError));
+  }
   applyingCloudState = false;
   pendingCloudRecord = null;
   hadLocalDataAtStartup = true;
