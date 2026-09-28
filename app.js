@@ -6,7 +6,7 @@ const STATE_DB_NAME = "werewolf-reasoning-note";
 const STATE_DB_VERSION = 1;
 const STATE_STORE_NAME = "app-state";
 const STATE_RECORD_KEY = "current";
-const APP_VERSION = "1.248";
+const APP_VERSION = "1.249";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -66,6 +66,24 @@ const EVENT_SCOPED_ROLES = new Set([
   ...ADDITIONAL_THIRD_ROLES,
   "hunterA",
 ]);
+const ROLE_COMPOSITION_CAMPS = [
+  {
+    key: "villager",
+    label: "市民陣営",
+    roles: ["villager", "seer", "medium", "guard", "hunter", "nekomata", ...ADDITIONAL_VILLAGER_ROLES],
+  },
+  {
+    key: "werewolf",
+    label: "人狼陣営",
+    roles: ["werewolf", "madman", "madmanHunter", ...ADDITIONAL_WEREWOLF_ROLES],
+  },
+  {
+    key: "third",
+    label: "第三陣営・その他",
+    roles: ["fox", "teruteru", "satan", "hunterA", "hunterB", "angel", "devil", "hangingWitch", "other"],
+  },
+];
+const ROLE_COMPOSITION_ROLES = new Set(ROLE_COMPOSITION_CAMPS.flatMap((camp) => camp.roles));
 const VILLAGER_SIDE_ROLES = new Set([
   "seer",
   "medium",
@@ -270,6 +288,8 @@ const BOARD_STATE_FIELDS = [
   "gameNumber",
   "selectedTournamentId",
   "wolfCount",
+  "roleComposition",
+  "selectedRoleSetId",
   "selfBiteAllowed",
   "noBiteAllowed",
   "wolfModeActive",
@@ -303,6 +323,8 @@ const state = {
   tournaments: [],
   selectedTournamentId: "",
   wolfCount: 2,
+  roleComposition: {},
+  selectedRoleSetId: "",
   selfBiteAllowed: false,
   noBiteAllowed: false,
   wolfModeActive: false,
@@ -324,6 +346,7 @@ const state = {
   pendingExileContinuationPlayerId: "",
   gameHistories: [],
   customImpressionReasons: [],
+  roleSets: [],
   boards: [],
 };
 
@@ -357,6 +380,8 @@ let activeBoardId = localStorage.getItem(ACTIVE_BOARD_KEY) || "";
 let switchingBoard = false;
 let hadLocalDataAtStartup = false;
 let lastLocalStoreError = null;
+let roleCompositionDraft = {};
+let editingRoleSetId = "";
 let stateDatabasePromise = null;
 let stateWriteQueue = Promise.resolve();
 let syncMeta = restoreSyncMeta();
@@ -400,6 +425,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     "editionNumberInput",
     "gameNumberInput",
     "wolfCountSelect",
+    "roleSetSelect",
+    "editRoleCompositionBtn",
+    "roleCompositionSummary",
+    "roleCompositionDialog",
+    "closeRoleCompositionBtn",
+    "roleSetNameInput",
+    "roleCompositionEditor",
+    "roleCompositionTotal",
+    "fillRoleCompositionVillagersBtn",
+    "roleCompositionError",
+    "applyRoleCompositionBtn",
+    "saveNewRoleSetBtn",
+    "saveRoleSetBtn",
+    "deleteRoleSetBtn",
     "selfBiteAllowedInput",
     "noBiteAllowedInput",
     "wolfCountBadge",
@@ -640,7 +679,32 @@ function bindEvents() {
   els.wolfCountSelect.addEventListener("change", () => {
     if (isGameLocked()) return render();
     state.wolfCount = normalizeWolfCount(els.wolfCountSelect.value);
+    if (getRoleCompositionTotal(state.roleComposition)) {
+      state.roleComposition = { ...state.roleComposition, werewolf: state.wolfCount };
+      state.selectedRoleSetId = "";
+    }
     renderAndStore();
+  });
+  els.roleSetSelect.addEventListener("change", () => applyRoleSet(els.roleSetSelect.value));
+  els.editRoleCompositionBtn.addEventListener("click", openRoleCompositionDialog);
+  els.closeRoleCompositionBtn.addEventListener("click", closeRoleCompositionDialog);
+  els.fillRoleCompositionVillagersBtn.addEventListener("click", fillRoleCompositionVillagers);
+  els.applyRoleCompositionBtn.addEventListener("click", applyRoleCompositionDraft);
+  els.saveNewRoleSetBtn.addEventListener("click", () => saveRoleSetFromDraft({ overwrite: false }));
+  els.saveRoleSetBtn.addEventListener("click", () => saveRoleSetFromDraft({ overwrite: true }));
+  els.deleteRoleSetBtn.addEventListener("click", deleteEditingRoleSet);
+  els.roleCompositionDialog.addEventListener("click", (event) => {
+    if (event.target === els.roleCompositionDialog) closeRoleCompositionDialog();
+  });
+  els.roleCompositionEditor.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-role-composition-role]");
+    if (!button) return;
+    const role = button.dataset.roleCompositionRole;
+    const delta = Number(button.dataset.roleCompositionDelta) || 0;
+    if (!ROLE_COMPOSITION_ROLES.has(role) || !delta) return;
+    roleCompositionDraft[role] = Math.max(0, Math.min(99, (roleCompositionDraft[role] || 0) + delta));
+    if (!roleCompositionDraft[role]) delete roleCompositionDraft[role];
+    renderRoleCompositionEditor();
   });
   els.selfBiteAllowedInput.addEventListener("change", saveAttackRules);
   els.noBiteAllowedInput.addEventListener("change", saveAttackRules);
@@ -875,6 +939,8 @@ function switchTournament(tournamentId, { skipConfirm = false } = {}) {
   state.seasonNumber = null;
   state.editionNumber = null;
   state.gameNumber = 1;
+  state.roleComposition = {};
+  state.selectedRoleSetId = "";
   resetBoardState();
   applySelectedTournamentParticipation();
   state.rosterFilter = "tournament";
@@ -952,6 +1018,10 @@ function startGame() {
   const activeCount = getActivePlayers().length;
   if (!activeCount) return toast("参加者を1人以上選んでください");
   if (!state.wolfCount || state.wolfCount >= activeCount) return toast("人狼数は参加者数より少なくしてください");
+  const compositionTotal = getRoleCompositionTotal(state.roleComposition);
+  if (compositionTotal && compositionTotal !== activeCount) {
+    return toast(`使用役職は参加者${activeCount}人に対して${compositionTotal}人分です`);
+  }
   state.gameStatus = "in_progress";
   state.startedAt = new Date().toISOString();
   state.activeView = "reasoning";
@@ -959,11 +1029,198 @@ function startGame() {
   toast("ゲームを開始しました");
 }
 
+function getAvailableRoleCompositionCamps(eventName = state.eventName, selectedComposition = {}) {
+  return ROLE_COMPOSITION_CAMPS.map((camp) => ({
+    ...camp,
+    roles: camp.roles.filter((role) => isRoleAvailableForEvent(role, eventName, selectedComposition[role] ? role : "")),
+  })).filter((camp) => camp.roles.length);
+}
+
+function getRoleCompositionTotal(composition = {}) {
+  return Object.values(normalizeRoleComposition(composition)).reduce((sum, count) => sum + count, 0);
+}
+
+function getRoleCompositionLabel(composition = state.roleComposition) {
+  const normalized = normalizeRoleComposition(composition);
+  const labels = Object.entries(normalized)
+    .filter(([, count]) => count > 0)
+    .map(([role, count]) => `${ROLE_LABELS[role] || role}${count}`);
+  return labels.length ? labels.join(" / ") : "未設定（人狼数のみ）";
+}
+
+function getVisibleRoleSets() {
+  return state.roleSets.filter(
+    (roleSet) => !roleSet.tournamentId || roleSet.tournamentId === state.selectedTournamentId,
+  );
+}
+
+function openRoleCompositionDialog() {
+  if (isGameLocked()) return toast("使用役職は準備中に変更してください");
+  roleCompositionDraft = normalizeRoleComposition(state.roleComposition);
+  editingRoleSetId = state.selectedRoleSetId;
+  const selectedSet = state.roleSets.find((roleSet) => roleSet.id === editingRoleSetId);
+  els.roleSetNameInput.value = selectedSet?.name || "";
+  renderRoleCompositionEditor();
+  els.roleCompositionDialog.showModal();
+}
+
+function closeRoleCompositionDialog() {
+  if (els.roleCompositionDialog.open) els.roleCompositionDialog.close();
+  roleCompositionDraft = {};
+  editingRoleSetId = "";
+}
+
+function renderRoleCompositionEditor() {
+  const camps = getAvailableRoleCompositionCamps(state.eventName, roleCompositionDraft);
+  els.roleCompositionEditor.innerHTML = camps
+    .map(
+      (camp) => `
+        <section class="role-composition-camp ${camp.key}">
+          <strong>${escapeHtml(camp.label)}</strong>
+          <div class="role-composition-rows">
+            ${camp.roles
+              .map(
+                (role) => `
+                  <div class="role-composition-row">
+                    <span>${escapeHtml(ROLE_LABELS[role] || role)}</span>
+                    <div class="role-count-stepper">
+                      <button type="button" data-role-composition-role="${escapeHtml(role)}" data-role-composition-delta="-1" aria-label="${escapeHtml(ROLE_LABELS[role] || role)}を1人減らす">−</button>
+                      <output>${roleCompositionDraft[role] || 0}</output>
+                      <button type="button" data-role-composition-role="${escapeHtml(role)}" data-role-composition-delta="1" aria-label="${escapeHtml(ROLE_LABELS[role] || role)}を1人増やす">＋</button>
+                    </div>
+                  </div>`,
+              )
+              .join("")}
+          </div>
+        </section>`,
+    )
+    .join("");
+  const activeCount = getActivePlayers().length;
+  const total = getRoleCompositionTotal(roleCompositionDraft);
+  els.roleCompositionTotal.textContent = `${total} / ${activeCount}人`;
+  els.roleCompositionTotal.classList.toggle("mismatch", total !== activeCount);
+  els.fillRoleCompositionVillagersBtn.disabled = total >= activeCount;
+  els.saveRoleSetBtn.hidden = !editingRoleSetId;
+  els.deleteRoleSetBtn.hidden = !editingRoleSetId;
+  els.roleCompositionError.hidden = true;
+}
+
+function fillRoleCompositionVillagers() {
+  const remaining = getActivePlayers().length - getRoleCompositionTotal(roleCompositionDraft);
+  if (remaining <= 0) return;
+  roleCompositionDraft.villager = (roleCompositionDraft.villager || 0) + remaining;
+  renderRoleCompositionEditor();
+}
+
+function validateRoleComposition(composition = roleCompositionDraft) {
+  const normalized = normalizeRoleComposition(composition);
+  const activeCount = getActivePlayers().length;
+  const total = getRoleCompositionTotal(normalized);
+  const messages = [];
+  if (!activeCount) messages.push("参加者を1人以上選んでください");
+  if (total !== activeCount) messages.push(`参加者${activeCount}人に対して、使用役職は${total}人分です`);
+  if (!normalized.werewolf) messages.push("人狼を1人以上設定してください");
+  if ((normalized.werewolf || 0) > 4) messages.push("人狼は4人まで設定できます");
+  if ((normalized.werewolf || 0) >= activeCount && activeCount) messages.push("人狼数は参加者数より少なくしてください");
+  return { valid: messages.length === 0, messages, normalized };
+}
+
+function showRoleCompositionError(messages) {
+  els.roleCompositionError.innerHTML = `<strong>配役を確認してください</strong><ul>${messages
+    .map((message) => `<li>${escapeHtml(message)}</li>`)
+    .join("")}</ul>`;
+  els.roleCompositionError.hidden = false;
+}
+
+function applyRoleCompositionDraft() {
+  const validation = validateRoleComposition();
+  if (!validation.valid) return showRoleCompositionError(validation.messages);
+  state.roleComposition = validation.normalized;
+  state.wolfCount = normalizeWolfCount(validation.normalized.werewolf);
+  const selectedSet = state.roleSets.find((roleSet) => roleSet.id === editingRoleSetId);
+  state.selectedRoleSetId = selectedSet && areRoleCompositionsEqual(selectedSet.composition, validation.normalized)
+    ? selectedSet.id
+    : "";
+  closeRoleCompositionDialog();
+  renderAndStore();
+  toast("使用役職を盤面へ適用しました");
+}
+
+function areRoleCompositionsEqual(left, right) {
+  const normalizedLeft = normalizeRoleComposition(left);
+  const normalizedRight = normalizeRoleComposition(right);
+  return [...ROLE_COMPOSITION_ROLES].every((role) => (normalizedLeft[role] || 0) === (normalizedRight[role] || 0));
+}
+
+function saveRoleSetFromDraft({ overwrite }) {
+  const validation = validateRoleComposition();
+  if (!validation.valid) return showRoleCompositionError(validation.messages);
+  const name = els.roleSetNameInput.value.trim();
+  if (!name) return showRoleCompositionError(["セット名を入力してください"]);
+  const existing = overwrite ? state.roleSets.find((roleSet) => roleSet.id === editingRoleSetId) : null;
+  if (overwrite && !existing) return showRoleCompositionError(["上書きするセットが見つかりません"]);
+  const duplicateName = state.roleSets.some(
+    (roleSet) =>
+      roleSet.id !== existing?.id &&
+      roleSet.tournamentId === state.selectedTournamentId &&
+      roleSet.name.toLocaleLowerCase() === name.toLocaleLowerCase(),
+  );
+  if (duplicateName) return showRoleCompositionError(["同じ名前の配役セットがすでにあります"]);
+  if (existing) {
+    existing.name = name;
+    existing.composition = validation.normalized;
+    existing.tournamentId = state.selectedTournamentId;
+    existing.updatedAt = new Date().toISOString();
+  } else {
+    editingRoleSetId = crypto.randomUUID();
+    state.roleSets.push({
+      id: editingRoleSetId,
+      name,
+      tournamentId: state.selectedTournamentId,
+      composition: validation.normalized,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+  state.roleComposition = validation.normalized;
+  state.wolfCount = normalizeWolfCount(validation.normalized.werewolf);
+  state.selectedRoleSetId = editingRoleSetId;
+  renderRoleCompositionEditor();
+  renderAndStore();
+  toast("配役セットを保存しました");
+}
+
+function deleteEditingRoleSet() {
+  const roleSet = state.roleSets.find((item) => item.id === editingRoleSetId);
+  if (!roleSet || !confirm(`配役セット「${roleSet.name}」を削除しますか？`)) return;
+  state.roleSets = state.roleSets.filter((item) => item.id !== editingRoleSetId);
+  if (state.selectedRoleSetId === editingRoleSetId) state.selectedRoleSetId = "";
+  editingRoleSetId = "";
+  els.roleSetNameInput.value = "";
+  renderRoleCompositionEditor();
+  renderAndStore();
+  toast("配役セットを削除しました");
+}
+
+function applyRoleSet(roleSetId) {
+  if (!roleSetId || isGameLocked()) return render();
+  const roleSet = state.roleSets.find((item) => item.id === roleSetId);
+  if (!roleSet) return render();
+  state.roleComposition = normalizeRoleComposition(roleSet.composition);
+  state.selectedRoleSetId = roleSet.id;
+  if (state.roleComposition.werewolf) state.wolfCount = normalizeWolfCount(state.roleComposition.werewolf);
+  renderAndStore();
+  const total = getRoleCompositionTotal(state.roleComposition);
+  const activeCount = getActivePlayers().length;
+  toast(total === activeCount ? "配役セットを適用しました" : `配役セットは${total}人用です（参加${activeCount}人）`);
+}
+
 function autoStartGameFromBoardInput() {
   if (state.gameStatus !== "preparing" || !hasBoardProgress()) return false;
   if (isWolfMode()) return false;
   const activeCount = getActivePlayers().length;
   if (!activeCount || !state.wolfCount || state.wolfCount >= activeCount) return false;
+  const compositionTotal = getRoleCompositionTotal(state.roleComposition);
+  if (compositionTotal && compositionTotal !== activeCount) return false;
   state.gameStatus = "in_progress";
   state.startedAt = new Date().toISOString();
   return true;
@@ -1003,7 +1260,7 @@ function returnToSetup() {
 function resetBoardForTesting() {
   if (isGameFinished()) return toast("終了済み盤面は次試合へ進んでからリセットしてください");
   closeBoardActionsDialog();
-  if (!confirm("CO・推理・結果・生死・人狼モードを消去し、盤面を初期化しますか？\n\n大会、開催日、試合番号、参加・休憩状態、人狼数は残ります。")) return;
+  if (!confirm("CO・推理・結果・生死・人狼モードを消去し、盤面を初期化しますか？\n\n大会、開催日、試合番号、参加・休憩状態、人狼数・使用役職は残ります。")) return;
   state.gameStatus = "preparing";
   state.startedAt = "";
   resetBoardState();
@@ -1102,7 +1359,7 @@ function renderFinishTrueRoleFields() {
           <span>${escapeHtml(player.name)}</span>
           <select data-true-role-player-id="${escapeHtml(player.id)}">
             <option value="">役職を選択</option>
-            ${getTrueRoleOptionsHtml(player.primaryRoleGuess, state.eventName)}
+            ${getTrueRoleOptionsHtml(player.primaryRoleGuess, state.eventName, state.roleComposition)}
           </select>
         </label>
       `,
@@ -1113,17 +1370,27 @@ function renderFinishTrueRoleFields() {
   });
 }
 
-function getTrueRoleOptionsHtml(selectedRole = "", eventName = state.eventName) {
-  return Object.entries(ROLE_GUESS_LABELS)
+function getTrueRoleOptionsHtml(selectedRole = "", eventName = state.eventName, roleComposition = state.roleComposition) {
+  const entries = Object.entries(ROLE_GUESS_LABELS)
     .filter(
       ([role]) =>
         role !== "unknown" &&
         role !== "wolfSide" &&
         role !== "confirmedWhite" &&
         isRoleAvailableForEvent(role, eventName, selectedRole),
-    )
+    );
+  const configuredRoles = new Set(Object.keys(normalizeRoleComposition(roleComposition)));
+  if (!configuredRoles.size) {
+    return entries
+      .map(([role, label]) => `<option value="${role}" ${role === selectedRole ? "selected" : ""}>${label}</option>`)
+      .join("");
+  }
+  const renderOptions = (items) => items
     .map(([role, label]) => `<option value="${role}" ${role === selectedRole ? "selected" : ""}>${label}</option>`)
     .join("");
+  const configured = entries.filter(([role]) => configuredRoles.has(role));
+  const others = entries.filter(([role]) => !configuredRoles.has(role));
+  return `<optgroup label="今回の使用役職">${renderOptions(configured)}</optgroup><optgroup label="その他の役職">${renderOptions(others)}</optgroup>`;
 }
 
 function getFinishTrueRoles() {
@@ -1213,6 +1480,8 @@ function createGameHistory(winner, trueRoles = new Map()) {
     editionNumber: state.editionNumber,
     gameNumber: state.gameNumber,
     wolfCount: state.wolfCount,
+    roleComposition: structuredClone(state.roleComposition),
+    roleSetName: state.roleSets.find((roleSet) => roleSet.id === state.selectedRoleSetId)?.name || "",
     selfBiteAllowed: state.selfBiteAllowed,
     noBiteAllowed: state.noBiteAllowed,
     wolfModeActive: state.wolfModeActive,
@@ -1396,6 +1665,8 @@ function createBoard(customName, tournamentId) {
     gameNumber: 1,
     selectedTournamentId,
     wolfCount: 2,
+    roleComposition: {},
+    selectedRoleSetId: "",
     selfBiteAllowed: false,
     noBiteAllowed: false,
     wolfModeActive: false,
@@ -3372,6 +3643,7 @@ function render() {
   renderSyncStatus();
   renderBoardSwitcher();
   els.wolfCountSelect.value = String(state.wolfCount);
+  renderRoleCompositionSetup();
   els.playerCountBadge.textContent = `参加${getActivePlayers().length}/${getSelectedTournamentPlayers().length}人`;
   if (state.activeView === "participants") renderParticipantRows();
   if (state.activeView === "reasoning") {
@@ -3379,6 +3651,24 @@ function render() {
     renderRows();
   }
   if (state.activeView === "export") renderHistories();
+}
+
+function renderRoleCompositionSetup() {
+  const visibleSets = getVisibleRoleSets();
+  const selectedExists = visibleSets.some((roleSet) => roleSet.id === state.selectedRoleSetId);
+  els.roleSetSelect.innerHTML = [
+    `<option value="">${visibleSets.length ? "セットを選択" : "保存済みセットなし"}</option>`,
+    ...visibleSets.map(
+      (roleSet) =>
+        `<option value="${escapeHtml(roleSet.id)}" ${roleSet.id === state.selectedRoleSetId ? "selected" : ""}>${escapeHtml(roleSet.name)}</option>`,
+    ),
+  ].join("");
+  if (!selectedExists) els.roleSetSelect.value = "";
+  const total = getRoleCompositionTotal(state.roleComposition);
+  const activeCount = getActivePlayers().length;
+  els.roleCompositionSummary.innerHTML = total
+    ? `<strong>${escapeHtml(getRoleCompositionLabel())}</strong><span class="${total === activeCount ? "" : "mismatch"}">${total} / ${activeCount}人</span>`
+    : `<strong>未設定</strong><span>人狼数だけで開始できます</span>`;
 }
 
 function setReasoningPerspective(perspective) {
@@ -3497,6 +3787,8 @@ function renderGameLifecycle() {
     els.playerNameInput,
     els.addPlayerForm.querySelector('button[type="submit"]'),
     els.wolfCountSelect,
+    els.roleSetSelect,
+    els.editRoleCompositionBtn,
     els.selfBiteAllowedInput,
     els.noBiteAllowedInput,
   ].forEach((element) => {
@@ -4651,7 +4943,7 @@ function countOutsiderExposureWithGroupGuarantees(specificOutsiderIds, claimantI
 
 function isFullOutsiderExposureForMedium(medium) {
   if (!medium) return false;
-  const maxOutsiders = (Number(state.wolfCount) || 0) + (Number(state.madmanCount) || (Number(state.wolfCount) ? 1 : 0));
+  const maxOutsiders = getTotalOutsiderCount();
   if (maxOutsiders <= 0) return false;
   return getOutsiderExposureCountForMedium(medium) >= maxOutsiders;
 }
@@ -5076,6 +5368,13 @@ function isFullOutsiderExposureForSeer(seer) {
 }
 
 function getTotalOutsiderCount() {
+  const composition = normalizeRoleComposition(state.roleComposition);
+  if (getRoleCompositionTotal(composition)) {
+    return Object.entries(composition).reduce(
+      (total, [role, count]) => total + (KNOWN_OUTSIDER_ROLES.has(role) ? count : 0),
+      0,
+    );
+  }
   return Math.max(0, Number(state.wolfCount) || 0) + 1;
 }
 
@@ -5224,7 +5523,7 @@ function reconcileRemainingWolfSidesAfterMadmanConfirmation() {
 function reconcileFullOutsiderRoleGuessVillagers() {
   const players = getActivePlayers();
   const outsiderRoles = new Set(["werewolf", "wolfSide", "madman"]);
-  const requiredOutsiders = (Number(state.wolfCount) || 0) + 1;
+  const requiredOutsiders = getTotalOutsiderCount();
 
   const seers = getCurrentSeerClaimants().filter((s) => !isBrokenSeer(s));
   const hasUnresolvedMultiSeer = seers.length >= 2;
@@ -6374,6 +6673,8 @@ function createBoardPayloadFromHistory(history) {
     gameNumber: history.gameNumber,
     selectedTournamentId: history.selectedTournamentId,
     wolfCount: history.wolfCount,
+    roleComposition: structuredClone(history.roleComposition || {}),
+    selectedRoleSetId: "",
     selfBiteAllowed: history.selfBiteAllowed === true,
     noBiteAllowed: history.noBiteAllowed === true,
     wolfModeActive: history.wolfModeActive === true,
@@ -6578,7 +6879,7 @@ function renderHistoryEditor(history) {
           </select>
           <select data-field="trueRole" aria-label="${escapeHtml(player.name)}の真の役職">
             <option value="">真役職未設定</option>
-            ${getTrueRoleOptionsHtml(player.trueRole, history.eventName)}
+            ${getTrueRoleOptionsHtml(player.trueRole, history.eventName, history.roleComposition)}
           </select>
           <select data-field="status" aria-label="${escapeHtml(player.name)}の状態">
             ${getStatusOptionsHtml(player.status)}
@@ -7169,6 +7470,7 @@ function downloadTextFile(filename, text, type) {
 
 function buildExportText() {
   const lines = [`# ${getMatchSummary()}`, "", `- 状態: ${getGameStatusLabel(state.gameStatus)}`, `- 人狼: ${state.wolfCount}人`, `- 残り縄: ${getRemainingRopeCount()}`];
+  if (getRoleCompositionTotal(state.roleComposition)) lines.push(`- 使用役職: ${getRoleCompositionLabel(state.roleComposition)}`);
   appendBoardMarkdown(lines, getActivePlayers(), { results: state.results, seers: getSeers() });
   lines.push("", "## 時系列");
   lines.push(...buildCurrentTimeline());
@@ -7182,6 +7484,9 @@ function buildHistoryText(history) {
     `- 🏆 勝利: ${normalizeCitizenText(history.winner) || "未設定"}`,
     `- 人狼: ${history.wolfCount}人`,
   ];
+  if (getRoleCompositionTotal(history.roleComposition)) {
+    lines.push(`- 使用役職: ${getRoleCompositionLabel(history.roleComposition)}`);
+  }
   const activePlayers = getHistoryActivePlayers(history);
   appendBoardMarkdown(lines, activePlayers, {
     isHistory: true,
@@ -8177,6 +8482,8 @@ function applySavedState(saved) {
   state.tournaments = Array.isArray(saved.tournaments) ? saved.tournaments.map(normalizeTournament).filter(Boolean) : [];
   state.selectedTournamentId = String(saved.selectedTournamentId || "");
   state.wolfCount = normalizeWolfCount(saved.wolfCount);
+  state.roleComposition = normalizeRoleComposition(saved.roleComposition);
+  state.selectedRoleSetId = String(saved.selectedRoleSetId || "");
   state.selfBiteAllowed = saved.selfBiteAllowed === true;
   state.noBiteAllowed = saved.noBiteAllowed === true;
   state.players = Array.isArray(saved.players) ? saved.players.map(normalizePlayer) : [];
@@ -8214,6 +8521,7 @@ function applySavedState(saved) {
   state.customImpressionReasons = Array.isArray(saved.customImpressionReasons)
     ? saved.customImpressionReasons.map(normalizeImpressionReason).filter((reason) => reason?.custom)
     : [];
+  state.roleSets = Array.isArray(saved.roleSets) ? saved.roleSets.map(normalizeRoleSet).filter(Boolean) : [];
   state.gameStatus = ["in_progress", "finished"].includes(saved.gameStatus) ? saved.gameStatus : "preparing";
   state.winner = state.gameStatus === "finished" ? normalizeCitizenText(saved.winner || "") : "";
   state.startedAt = state.gameStatus !== "preparing" ? String(saved.startedAt || "") : "";
@@ -8510,6 +8818,8 @@ function resetStateToDefaults() {
     tournaments: [],
     selectedTournamentId: "",
     wolfCount: 2,
+    roleComposition: {},
+    selectedRoleSetId: "",
     selfBiteAllowed: false,
     noBiteAllowed: false,
     wolfModeActive: false,
@@ -8531,6 +8841,7 @@ function resetStateToDefaults() {
     pendingExileContinuationPlayerId: "",
     gameHistories: [],
     customImpressionReasons: [],
+    roleSets: [],
     boards: [],
   });
   activeBoardId = "";
@@ -8738,6 +9049,10 @@ function ensureMatchDefaults() {
   state.seasonNumber = normalizeOptionalSequenceNumber(state.seasonNumber);
   state.editionNumber = normalizeOptionalSequenceNumber(state.editionNumber);
   state.gameNumber = normalizeGameNumber(state.gameNumber);
+  state.roleComposition = normalizeRoleComposition(state.roleComposition);
+  state.selectedRoleSetId = state.roleSets.some((roleSet) => roleSet.id === state.selectedRoleSetId)
+    ? state.selectedRoleSetId
+    : "";
   state.selfBiteAllowed = state.selfBiteAllowed === true;
   state.noBiteAllowed = state.noBiteAllowed === true;
   state.playerRelations = normalizePlayerRelations(state.playerRelations, state.players);
@@ -8803,6 +9118,29 @@ function backfillRoleClaimOrders(players) {
 function normalizeWolfCount(value) {
   const count = Number(value);
   return Number.isFinite(count) ? Math.min(4, Math.max(1, Math.trunc(count))) : 2;
+}
+
+function normalizeRoleComposition(composition) {
+  if (!composition || typeof composition !== "object" || Array.isArray(composition)) return {};
+  return Object.fromEntries(
+    Object.entries(composition)
+      .filter(([role]) => ROLE_COMPOSITION_ROLES.has(role))
+      .map(([role, count]) => [role, Math.max(0, Math.min(99, Math.trunc(Number(count) || 0)))])
+      .filter(([, count]) => count > 0),
+  );
+}
+
+function normalizeRoleSet(roleSet) {
+  if (!roleSet?.id || !String(roleSet.name || "").trim()) return null;
+  const composition = normalizeRoleComposition(roleSet.composition);
+  if (!getRoleCompositionTotal(composition)) return null;
+  return {
+    id: String(roleSet.id),
+    name: String(roleSet.name).trim().slice(0, 40),
+    tournamentId: String(roleSet.tournamentId || ""),
+    composition,
+    updatedAt: String(roleSet.updatedAt || ""),
+  };
 }
 
 function normalizeReasoningPerspective(value) {
@@ -9254,6 +9592,8 @@ function normalizeGameHistory(history) {
     editionNumber: normalizeOptionalSequenceNumber(history.editionNumber),
     gameNumber: normalizeGameNumber(history.gameNumber),
     wolfCount: normalizeWolfCount(history.wolfCount),
+    roleComposition: normalizeRoleComposition(history.roleComposition),
+    roleSetName: String(history.roleSetName || "").trim().slice(0, 40),
     selfBiteAllowed: history.selfBiteAllowed === true,
     noBiteAllowed: history.noBiteAllowed === true,
     wolfModeActive: history.wolfModeActive === true || history.players.some((player) => player.wolfTeammate === true),
@@ -9299,6 +9639,8 @@ function normalizeBoard(board) {
   payload.gameNumber = normalizeGameNumber(payload.gameNumber);
   payload.selectedTournamentId = String(payload.selectedTournamentId || "");
   payload.wolfCount = normalizeWolfCount(payload.wolfCount);
+  payload.roleComposition = normalizeRoleComposition(payload.roleComposition);
+  payload.selectedRoleSetId = String(payload.selectedRoleSetId || "");
   payload.selfBiteAllowed = payload.selfBiteAllowed === true;
   payload.noBiteAllowed = payload.noBiteAllowed === true;
   payload.wolfModeActive = payload.wolfModeActive === true;

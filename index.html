@@ -9,8 +9,8 @@
     <meta name="apple-mobile-web-app-title" content="人狼推理ノート" />
     <title>人狼推理ノート</title>
     <link rel="manifest" href="./manifest.json" />
-    <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png?v=1.248" />
-    <link rel="stylesheet" href="./styles.css?v=1.248" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png?v=1.249" />
+    <link rel="stylesheet" href="./styles.css?v=1.249" />
   </head>
   <body>
     <div class="app-shell">
@@ -115,6 +115,16 @@
                 <span>噛みなしあり</span>
               </label>
             </fieldset>
+            <div class="role-composition-field">
+              <div class="field-title">使用役職</div>
+              <div class="role-set-controls">
+                <select id="roleSetSelect" aria-label="保存した配役セット">
+                  <option value="">セットを選択</option>
+                </select>
+                <button id="editRoleCompositionBtn" class="secondary-button" type="button">配役を編集</button>
+              </div>
+              <div id="roleCompositionSummary" class="role-composition-summary">未設定</div>
+            </div>
           </section>
 
           <section class="setup-panel" aria-label="参加者登録">
@@ -494,7 +504,7 @@
           </button>
           <button id="initializeBoardBtn" class="board-action-choice danger" type="button">
             <strong>盤面を初期化</strong>
-            <span>CO・推理・結果・生死・人狼モードを消去し、準備中へ戻します。</span>
+            <span>CO・推理・結果・生死・人狼モードを消去し、使用役職を残して準備中へ戻します。</span>
           </button>
         </div>
       </form>
@@ -522,6 +532,35 @@
             <select id="newBoardTournamentSelect"></select>
           </label>
           <button id="createBoardBtn" class="primary-button wide" type="button">盤面を作成</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="roleCompositionDialog" class="role-composition-dialog">
+      <form method="dialog">
+        <div class="sheet-handle" aria-hidden="true"></div>
+        <div class="sheet-heading">
+          <div>
+            <p class="kicker">Role Setup</p>
+            <h2>使用役職</h2>
+          </div>
+          <button id="closeRoleCompositionBtn" class="round-button" type="button" aria-label="閉じる">×</button>
+        </div>
+        <label class="field">
+          <span>セット名</span>
+          <input id="roleSetNameInput" type="text" maxlength="40" placeholder="例: 13人標準配役" />
+        </label>
+        <div id="roleCompositionEditor" class="role-composition-editor"></div>
+        <div class="role-composition-total">
+          <span id="roleCompositionTotal">0 / 0人</span>
+          <button id="fillRoleCompositionVillagersBtn" class="secondary-button" type="button">残りを市民にする</button>
+        </div>
+        <div id="roleCompositionError" class="finish-game-error" role="alert" hidden></div>
+        <div class="role-composition-actions">
+          <button id="applyRoleCompositionBtn" class="primary-button" type="button">この盤面に適用</button>
+          <button id="saveNewRoleSetBtn" class="secondary-button" type="button">新規セット保存</button>
+          <button id="saveRoleSetBtn" class="secondary-button" type="button">セットを上書き</button>
+          <button id="deleteRoleSetBtn" class="danger-button" type="button">セットを削除</button>
         </div>
       </form>
     </dialog>
@@ -728,7 +767,7 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./sync-config.js?v=1.248"></script>
-    <script src="./app.js?v=1.248"></script>
+    <script src="./sync-config.js?v=1.249"></script>
+    <script src="./app.js?v=1.249"></script>
   </body>
 </html>

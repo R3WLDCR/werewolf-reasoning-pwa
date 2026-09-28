@@ -417,6 +417,47 @@ textarea:focus {
   padding-inline: 10px;
 }
 
+.role-composition-field {
+  display: grid;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.role-set-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.role-composition-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 46px;
+  padding: 9px 11px;
+  border: 1px solid rgba(159, 176, 173, 0.18);
+  border-radius: 7px;
+  background: #0e1415;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.role-composition-summary strong {
+  color: var(--ink);
+}
+
+.role-composition-summary span {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.role-composition-summary .mismatch,
+.role-composition-total .mismatch {
+  color: #ff9ca5;
+}
+
 .roster-filter {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -1594,6 +1635,16 @@ button.role-guess-label {
   background: transparent;
 }
 
+.role-composition-dialog {
+  width: min(760px, 100%);
+  max-width: 100%;
+  margin: auto auto 0;
+  border: 0;
+  border-radius: 8px 8px 0 0;
+  padding: 0;
+  background: transparent;
+}
+
 .membership-dialog::backdrop,
 .status-dialog::backdrop,
 .board-manager-dialog::backdrop,
@@ -1605,6 +1656,10 @@ button.role-guess-label {
 .vote-dialog::backdrop,
 .player-relation-dialog::backdrop,
 .rival-perspective-dialog::backdrop {
+  background: rgba(22, 35, 38, 0.42);
+}
+
+.role-composition-dialog::backdrop {
   background: rgba(22, 35, 38, 0.42);
 }
 
@@ -1626,6 +1681,109 @@ button.role-guess-label {
   padding: 10px 14px calc(18px + env(safe-area-inset-bottom));
   border-radius: 8px 8px 0 0;
   background: var(--panel);
+}
+
+.role-composition-dialog form {
+  display: grid;
+  gap: 13px;
+  max-height: min(92dvh, 820px);
+  overflow: auto;
+  padding: 10px 14px calc(18px + env(safe-area-inset-bottom));
+  border-radius: 8px 8px 0 0;
+  background: var(--panel);
+}
+
+.role-composition-editor {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.role-composition-camp {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(159, 176, 173, 0.18);
+  border-radius: 7px;
+  background: #0e1415;
+}
+
+.role-composition-camp.villager { border-top-color: #4a90e2; }
+.role-composition-camp.werewolf { border-top-color: #b94b57; }
+.role-composition-camp.third { border-top-color: #9b6bcc; }
+
+.role-composition-rows {
+  display: grid;
+  gap: 6px;
+}
+
+.role-composition-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+}
+
+.role-composition-row > span {
+  overflow-wrap: anywhere;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.role-count-stepper {
+  display: grid;
+  grid-template-columns: 34px 34px 34px;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+
+.role-count-stepper button {
+  min-height: 34px;
+  background: #263637;
+  color: var(--ink);
+  font-size: 1.05rem;
+  font-weight: 900;
+}
+
+.role-count-stepper output {
+  text-align: center;
+  font-weight: 900;
+}
+
+.role-composition-total,
+.role-composition-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.role-composition-total span {
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.role-composition-actions > * {
+  flex: 1 1 0;
+}
+
+@media (max-width: 620px) {
+  .role-composition-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .role-composition-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .role-composition-actions .danger-button {
+    grid-column: 1 / -1;
+  }
 }
 
 .impression-dialog form {
