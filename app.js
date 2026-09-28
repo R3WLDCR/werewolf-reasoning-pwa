@@ -6,7 +6,7 @@ const STATE_DB_NAME = "werewolf-reasoning-note";
 const STATE_DB_VERSION = 1;
 const STATE_STORE_NAME = "app-state";
 const STATE_RECORD_KEY = "current";
-const APP_VERSION = "1.246";
+const APP_VERSION = "1.247";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -7296,7 +7296,7 @@ function buildHistoryTimeline(history) {
   const activePlayers = getHistoryActivePlayers(history);
   const results = history.results;
   const roleActions = history.roleActions || [];
-  const claimEvents = history.claimEvents || [];
+  const claimEvents = getTimelineClaimEvents(history.claimEvents);
   const voteHistories = history.voteHistories || [];
   const maxDay = Math.max(
     0,
@@ -7371,7 +7371,7 @@ function buildCurrentTimeline() {
   const activePlayers = getActivePlayers();
   const results = state.results;
   const roleActions = state.roleActions;
-  const claimEvents = state.claimEvents;
+  const claimEvents = getTimelineClaimEvents(state.claimEvents);
   const voteHistories = state.voteHistories;
   const maxDay = Math.max(
     0,
@@ -7466,11 +7466,15 @@ function formatClaimEvent(event, players) {
   const playerName = formatTimelineActorName(player);
   const previousLabel = getClaimEventRoleLabel(event.previousRole, event.previousGidoraRoles);
   const roleLabel = getClaimEventRoleLabel(event.role, event.gidoraRoles);
-  if (event.type === "withdraw") return `CO撤回: ${playerName} ${previousLabel}`;
+  if (event.type === "withdraw") return "";
   if (event.type === "change") {
     return `CO変更: ${playerName} ${previousLabel} → ${roleLabel}`;
   }
   return `CO: ${playerName} ${roleLabel}`;
+}
+
+function getTimelineClaimEvents(claimEvents) {
+  return (Array.isArray(claimEvents) ? claimEvents : []).filter((event) => event.type !== "withdraw");
 }
 
 function getClaimEventRoleLabel(role, gidoraRoles = []) {
