@@ -575,7 +575,7 @@ select:disabled {
 
 .participant-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 64px 40px;
+  grid-template-columns: minmax(0, 1fr) 124px 40px;
   gap: 6px;
   align-items: center;
   min-height: 58px;
@@ -687,23 +687,37 @@ select:disabled {
   white-space: nowrap;
 }
 
-.participation-button {
-  min-height: 38px;
-  border-radius: 999px;
-  padding: 0 9px;
-  font-size: 0.84rem;
+.participation-choice {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+  min-width: 0;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #0b1011;
+}
+
+.participation-option {
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 5px;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.78rem;
   font-weight: 900;
   white-space: nowrap;
 }
 
-.participation-button.active {
+.participation-option.active[data-participating="true"] {
   background: #123f2e;
   color: #8ff0b5;
 }
 
-.participation-button.resting {
-  background: #283233;
-  color: var(--inactive);
+.participation-option.active[data-participating="false"] {
+  background: #343c3d;
+  color: #f1f4f3;
 }
 
 .membership-count {
@@ -2855,7 +2869,7 @@ input.invalid {
   }
 
   .participant-row {
-    grid-template-columns: minmax(0, 1fr) 72px 42px;
+    grid-template-columns: minmax(0, 1fr) 124px 42px;
   }
 
   .seer-grid {

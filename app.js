@@ -6,7 +6,7 @@ const STATE_DB_NAME = "werewolf-reasoning-note";
 const STATE_DB_VERSION = 1;
 const STATE_STORE_NAME = "app-state";
 const STATE_RECORD_KEY = "current";
-const APP_VERSION = "1.249";
+const APP_VERSION = "1.250";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -3902,23 +3902,28 @@ function renderParticipantRows() {
     row.addEventListener("dragleave", handlePlayerDragLeave);
     row.addEventListener("drop", handlePlayerDrop);
     row.addEventListener("dragend", handlePlayerDragEnd);
-    const participationButton =
+    const participationControl =
       state.rosterFilter === "tournament"
-        ? `<button class="participation-button ${isParticipating(player) ? "active" : "resting"}" type="button" ${isGameLocked() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}の参加状態を変更">${isParticipating(player) ? "参加" : "休憩"}</button>`
+        ? `<span class="participation-choice" role="group" aria-label="${escapeHtml(player.name)}の参加状態">
+            <button class="participation-option ${isParticipating(player) ? "active" : ""}" type="button" data-participating="true" ${isGameLocked() ? "disabled" : ""}>参加</button>
+            <button class="participation-option ${isParticipating(player) ? "" : "active"}" type="button" data-participating="false" ${isGameLocked() ? "disabled" : ""}>不参加</button>
+          </span>`
         : '<span class="membership-count"></span>';
     row.innerHTML = `
       <button class="participant-info" type="button">
         <span class="player-name">${escapeHtml(player.name)}</span>
         <span class="participant-name-edit-label">名前変更</span>
       </button>
-      ${participationButton}
+      ${participationControl}
       <span class="order-actions" aria-label="${escapeHtml(player.name)}の並び替え">
         <button class="order-button" type="button" data-direction="-1" ${index === 0 || isGameLocked() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を上へ">↑</button>
         <button class="order-button" type="button" data-direction="1" ${index === players.length - 1 || isGameLocked() ? "disabled" : ""} aria-label="${escapeHtml(player.name)}を下へ">↓</button>
       </span>
     `;
     row.querySelector(".participant-info").addEventListener("click", () => openMembershipDialog(player.id));
-    row.querySelector(".participation-button")?.addEventListener("click", () => toggleParticipation(player.id));
+    row.querySelectorAll(".participation-option").forEach((button) => {
+      button.addEventListener("click", () => setParticipation(player.id, button.dataset.participating === "true"));
+    });
     row.querySelectorAll(".order-button").forEach((button) => {
       button.addEventListener("click", () => moveRosterPlayer(players, player.id, Number(button.dataset.direction)));
     });
@@ -4292,11 +4297,13 @@ function movePlayer(playerId, direction) {
   renderAndStore();
 }
 
-function toggleParticipation(playerId) {
-  if (isGameLocked()) return toast("進行中・終了済みは参加・休憩を変更できません");
+function setParticipation(playerId, participating) {
+  if (isGameLocked()) return toast("進行中・終了済みは参加・不参加を変更できません");
   const player = findPlayer(playerId);
   if (!player) return;
-  player.participating = !isParticipating(player);
+  const nextParticipating = participating !== false;
+  if (isParticipating(player) === nextParticipating) return;
+  player.participating = nextParticipating;
   if (state.selectedTournamentId && isPlayerInSelectedTournament(player)) {
     player.participationByTournament[state.selectedTournamentId] = player.participating;
   }
