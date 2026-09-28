@@ -6,7 +6,7 @@ const STATE_DB_NAME = "werewolf-reasoning-note";
 const STATE_DB_VERSION = 1;
 const STATE_STORE_NAME = "app-state";
 const STATE_RECORD_KEY = "current";
-const APP_VERSION = "1.247";
+const APP_VERSION = "1.248";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -7312,6 +7312,13 @@ function buildHistoryTimeline(history) {
     activePlayers
       .filter((player) => player.status === "attacked" && (Number(player.statusDay) || 1) === day)
       .forEach((player) => events.push(`襲撃: ${player.name}`));
+    claimEvents
+      .filter((event) => (Number(event.day) || 1) === day)
+      .sort((a, b) => compareTimelineClaimEvents(a, b, history.players))
+      .forEach((event) => {
+        const line = formatClaimEvent(event, history.players);
+        if (line) events.push(line);
+      });
     roleActions
       .filter((action) => action.role === "medium" && getTimelineRoleActionDay(action, history.players) === day)
       .sort((a, b) => compareTimelineRoleActions(a, b, history.players))
@@ -7334,13 +7341,6 @@ function buildHistoryTimeline(history) {
       .sort((a, b) => compareTimelineRoleActions(a, b, history.players))
       .forEach((action) => {
         const line = formatRoleActionEvent(action, history.players);
-        if (line) events.push(line);
-      });
-    claimEvents
-      .filter((event) => (Number(event.day) || 1) === day)
-      .sort((a, b) => compareTimelineClaimEvents(a, b, history.players))
-      .forEach((event) => {
-        const line = formatClaimEvent(event, history.players);
         if (line) events.push(line);
       });
     const decisiveVoteIds = getDecisiveVoteIdsForDay(voteHistories, day, activePlayers);
@@ -7387,6 +7387,13 @@ function buildCurrentTimeline() {
     activePlayers
       .filter((player) => player.status === "attacked" && (Number(player.statusDay) || 1) === day)
       .forEach((player) => events.push(`襲撃: ${player.name}`));
+    claimEvents
+      .filter((event) => (Number(event.day) || 1) === day)
+      .sort((a, b) => compareTimelineClaimEvents(a, b, state.players))
+      .forEach((event) => {
+        const line = formatClaimEvent(event, state.players);
+        if (line) events.push(line);
+      });
     roleActions
       .filter((action) => action.role === "medium" && getTimelineRoleActionDay(action, state.players) === day)
       .sort((a, b) => compareTimelineRoleActions(a, b, state.players))
@@ -7409,13 +7416,6 @@ function buildCurrentTimeline() {
       .sort((a, b) => compareTimelineRoleActions(a, b, state.players))
       .forEach((action) => {
         const line = formatRoleActionEvent(action, state.players);
-        if (line) events.push(line);
-      });
-    claimEvents
-      .filter((event) => (Number(event.day) || 1) === day)
-      .sort((a, b) => compareTimelineClaimEvents(a, b, state.players))
-      .forEach((event) => {
-        const line = formatClaimEvent(event, state.players);
         if (line) events.push(line);
       });
     const decisiveVoteIds = getDecisiveVoteIdsForDay(voteHistories, day, activePlayers);
