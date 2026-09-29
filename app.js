@@ -6,7 +6,7 @@ const STATE_DB_NAME = "werewolf-reasoning-note";
 const STATE_DB_VERSION = 1;
 const STATE_STORE_NAME = "app-state";
 const STATE_RECORD_KEY = "current";
-const APP_VERSION = "1.250";
+const APP_VERSION = "1.251";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -84,6 +84,7 @@ const ROLE_COMPOSITION_CAMPS = [
   },
 ];
 const ROLE_COMPOSITION_ROLES = new Set(ROLE_COMPOSITION_CAMPS.flatMap((camp) => camp.roles));
+const ROLE_GUESS_HELPER_VALUES = new Set(["unknown", "confirmedWhite", "wolfSide"]);
 const VILLAGER_SIDE_ROLES = new Set([
   "seer",
   "medium",
@@ -2067,6 +2068,7 @@ function renderRoleGuessDialog(player) {
     list.filter(
       (item) =>
         (!editingWolfModeMember || WOLF_MODE_COVER_ROLES.has(item.value)) &&
+        isRoleGuessAvailableForComposition(item.value) &&
         isRoleAvailableForEvent(item.value, state.eventName, selectedValue),
     );
 
@@ -9135,6 +9137,11 @@ function normalizeRoleComposition(composition) {
       .map(([role, count]) => [role, Math.max(0, Math.min(99, Math.trunc(Number(count) || 0)))])
       .filter(([, count]) => count > 0),
   );
+}
+
+function isRoleGuessAvailableForComposition(role, composition = state.roleComposition) {
+  const configuredRoles = new Set(Object.keys(normalizeRoleComposition(composition)));
+  return !configuredRoles.size || ROLE_GUESS_HELPER_VALUES.has(role) || configuredRoles.has(role);
 }
 
 function normalizeRoleSet(roleSet) {
