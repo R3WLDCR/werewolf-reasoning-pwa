@@ -1,5 +1,5 @@
-const CACHE_NAME = "werewolf-reasoning-note-v1251";
-const ASSET_VERSION = "1.251";
+const CACHE_NAME = "werewolf-reasoning-note-v1252";
+const ASSET_VERSION = "1.252";
 const ASSETS = [
   "./",
   "./index.html",

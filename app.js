@@ -6,7 +6,7 @@ const STATE_DB_NAME = "werewolf-reasoning-note";
 const STATE_DB_VERSION = 1;
 const STATE_STORE_NAME = "app-state";
 const STATE_RECORD_KEY = "current";
-const APP_VERSION = "1.251";
+const APP_VERSION = "1.252";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -50,10 +50,10 @@ const ROLE_ORDER = {
   hunter: 3,
 };
 const PRIORITY_PLAYER_NAME = "羊飼いK";
-const RIVAL_DISPLAY_ROLES = new Set(["medium", "guard", "hunter"]);
-const RIVAL_PERSPECTIVE_ROLES = new Set(["seer", "medium", "guard", "hunter"]);
+const RIVAL_DISPLAY_ROLES = new Set(["medium", "guard", "hunter", "nekomata"]);
+const RIVAL_PERSPECTIVE_ROLES = new Set(["seer", "medium", "guard", "hunter", "nekomata"]);
 const RIVAL_PERSPECTIVE_VALUES = new Set(["wolfSide", "werewolf", "madman"]);
-const SELF_RIVAL_GUESS_ROLES = new Set(["seer", "medium", "guard", "hunter"]);
+const SELF_RIVAL_GUESS_ROLES = new Set(["seer", "medium", "guard", "hunter", "nekomata"]);
 const GIDORA_CANDIDATE_ROLES = ["seer", "medium", "guard", "hunter", "nekomata"];
 const DEFAULT_GIDORA_ROLES = ["nekomata", "guard"];
 const ADDITIONAL_VILLAGER_ROLES = ["sister", "executioner", "musician", "wanderer", "mason"];
@@ -2007,7 +2007,7 @@ function openRivalPerspectiveDialog(role, viewerId, targetId) {
   if (isGameFinished()) return toast("終了済み盤面は編集できません");
   const viewer = findPlayer(viewerId);
   const target = findPlayer(targetId);
-  if (!RIVAL_PERSPECTIVE_ROLES.has(role) || !viewer || !target || viewer.id === target.id) return;
+  if (!isRivalPerspectiveRoleEnabled(role) || !viewer || !target || viewer.id === target.id) return;
   rivalPerspectiveRole = role;
   rivalPerspectiveViewerId = viewerId;
   rivalPerspectiveTargetId = targetId;
@@ -4131,7 +4131,7 @@ function getPlayerImpression(player) {
 }
 
 function getRivalRoleCellsHtml(player, players = getActivePlayers()) {
-  if (!RIVAL_DISPLAY_ROLES.has(player.role)) return "";
+  if (!RIVAL_DISPLAY_ROLES.has(player.role) || !isRivalPerspectiveRoleEnabled(player.role, players)) return "";
   const claimants = getRoleClaimants(player.role, players);
   if (claimants.length < 2) return "";
   return claimants
@@ -4166,6 +4166,12 @@ function getRivalPerspectiveOverride(role, viewerId, targetId, overrides = state
 
 function getRivalPerspectiveOverrideKey(role, viewerId, targetId) {
   return `${role}:${viewerId}:${targetId}`;
+}
+
+function isRivalPerspectiveRoleEnabled(role, players = getActivePlayers(), composition = state.roleComposition) {
+  if (!RIVAL_PERSPECTIVE_ROLES.has(role)) return false;
+  if (role !== "nekomata") return true;
+  return normalizeRoleComposition(composition).nekomata === 1 && getRoleClaimants("nekomata", players).length >= 1;
 }
 
 function isRivalPerspectiveTargetConfirmedMadman(target) {
@@ -4903,7 +4909,7 @@ function getMediumPerspectiveCellsHtml(player, mediums = getMediums()) {
 
       if (player.role && player.role !== "medium" && player.role !== "villager") {
         const claimants = getRoleClaimants(player.role);
-        if (claimants.length >= 2) {
+        if (claimants.length >= 2 && (player.role !== "nekomata" || isRivalPerspectiveRoleEnabled("nekomata"))) {
           return `<span class="seer-result-label ${getWolfSideAwareRoleClass(player)}" data-medium-id="${escapeHtml(medium.id)}">${escapeHtml(getRoleClaimLabel(player))}/${ROLE_LABELS.wolfSide}</span>`;
         }
         return `<span class="seer-result-label ${getRoleClass(player)}" data-medium-id="${escapeHtml(medium.id)}">${escapeHtml(getRoleClaimLabel(player))}</span>`;
@@ -4935,7 +4941,9 @@ function getOutsiderExposureCountForMedium(medium) {
     .filter((player) => isRivalPerspectiveTargetConfirmedMadman(player))
     .forEach((player) => specificOutsiderIds.add(player.id));
 
-  const claimantIdGroups = ["medium", "seer", "guard", "hunter"].map((role) =>
+  const claimantRoles = ["medium", "seer", "guard", "hunter"];
+  if (isRivalPerspectiveRoleEnabled("nekomata")) claimantRoles.push("nekomata");
+  const claimantIdGroups = claimantRoles.map((role) =>
     getRoleClaimants(role).map((claimant) => claimant.id),
   );
   return countOutsiderExposureWithGroupGuarantees(specificOutsiderIds, claimantIdGroups);
@@ -5298,7 +5306,11 @@ function getWolfSideAwareRoleLabel(player) {
 
 function getSeerGridRoleLabel(player) {
   if (player.role === "werewolf") return "";
-  if (RIVAL_DISPLAY_ROLES.has(player.role) && getRoleClaimants(player.role).length >= 2) return "";
+  if (
+    RIVAL_DISPLAY_ROLES.has(player.role) &&
+    isRivalPerspectiveRoleEnabled(player.role) &&
+    getRoleClaimants(player.role).length >= 2
+  ) return "";
   return getWolfSideAwareRoleLabel(player);
 }
 
@@ -5391,6 +5403,7 @@ function getOutsiderExposureCountForSeer(seer) {
   if (!seer) return 0;
   const activePlayers = getActivePlayers();
   const multiCoRoles = ["medium", "guard", "hunter"];
+  if (isRivalPerspectiveRoleEnabled("nekomata", activePlayers)) multiCoRoles.push("nekomata");
   const otherSeerIds = new Set(getSeers().filter((claimant) => claimant.id !== seer.id).map((claimant) => claimant.id));
   const adoptedMediumId = getAdoptedMediumId(seer.id);
 
@@ -5488,7 +5501,7 @@ function applyConfirmedWhiteUpdates() {
 function hasAttackedWolfSideConfirmedMadman(players = getActivePlayers()) {
   if (state.selfBiteAllowed) return false;
   if (players.some((player) => player.attackedWolfSideConfirmedMadman)) return true;
-  return [...RIVAL_PERSPECTIVE_ROLES].some((role) => {
+  return [...RIVAL_PERSPECTIVE_ROLES].filter((role) => isRivalPerspectiveRoleEnabled(role, players)).some((role) => {
     const claimants = getRoleClaimants(role, players);
     return claimants.length >= 2 && claimants.some((player) => player.status === "attacked");
   });
@@ -5497,7 +5510,7 @@ function hasAttackedWolfSideConfirmedMadman(players = getActivePlayers()) {
 function hasExternalAttackedWolfSideConfirmedMadman(viewer, players = getActivePlayers()) {
   if (state.selfBiteAllowed) return false;
   if (players.some((player) => player.attackedWolfSideConfirmedMadman && player.id !== viewer?.id)) return true;
-  return [...RIVAL_PERSPECTIVE_ROLES].some((role) => {
+  return [...RIVAL_PERSPECTIVE_ROLES].filter((role) => isRivalPerspectiveRoleEnabled(role, players)).some((role) => {
     const claimants = getRoleClaimants(role, players);
     return claimants.length >= 2 && claimants.some((player) => player.status === "attacked" && player.id !== viewer?.id);
   });
@@ -5542,6 +5555,7 @@ function reconcileFullOutsiderRoleGuessVillagers() {
 
   if (!hasUnresolvedMultiSeer && !isSelfSeer) {
     const multiCoRoles = ["seer", "medium", "guard", "hunter"];
+    if (isRivalPerspectiveRoleEnabled("nekomata", players)) multiCoRoles.push("nekomata");
     let groupOutsiderCount = 0;
     const processedPlayerIds = new Set();
 
@@ -5586,7 +5600,7 @@ function reconcileFullOutsiderRoleGuessVillagers() {
 
 function reconcileSingleClaimRoleGuesses() {
   SELF_RIVAL_GUESS_ROLES.forEach((role) => {
-    const claimants = getRoleClaimants(role);
+    const claimants = isRivalPerspectiveRoleEnabled(role) ? getRoleClaimants(role) : [];
     getActivePlayers().forEach((player) => {
       const current = player.autoSingleClaimRoleGuess;
       const shouldApply = claimants.length === 1 && claimants[0].id === player.id && player.role === role;
@@ -6219,7 +6233,10 @@ function isConfirmedRoleActor(player, role) {
 function applySelfPerspectiveRivalRoleGuesses() {
   const selfPlayer = getSelfPerspectivePlayer();
   const selfRole = selfPlayer ? getRoleGuessDisplay(selfPlayer).value : "";
-  const roleClaimants = SELF_RIVAL_GUESS_ROLES.has(selfRole) ? getRoleClaimants(selfRole) : [];
+  const roleClaimants =
+    SELF_RIVAL_GUESS_ROLES.has(selfRole) && isRivalPerspectiveRoleEnabled(selfRole)
+      ? getRoleClaimants(selfRole)
+      : [];
   const rivals = roleClaimants.filter((player) => player.id !== selfPlayer?.id);
   const rivalIds = new Set(rivals.map((player) => player.id));
   const mediumHumanRival =
