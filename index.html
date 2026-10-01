@@ -9,8 +9,8 @@
     <meta name="apple-mobile-web-app-title" content="人狼推理ノート" />
     <title>人狼推理ノート</title>
     <link rel="manifest" href="./manifest.json" />
-    <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png?v=1.252" />
-    <link rel="stylesheet" href="./styles.css?v=1.252" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png?v=1.253" />
+    <link rel="stylesheet" href="./styles.css?v=1.253" />
   </head>
   <body>
     <div class="app-shell">
@@ -362,9 +362,10 @@
           <p class="field-hint">候補を2〜3個選択してください</p>
         </fieldset>
 
-        <div class="field-group">
+        <div id="seerPerspectiveSection" class="field-group">
           <div id="resultSeerHint" class="field-title">この人への預言者視点</div>
-          <div class="result-grid">
+          <div id="seerPerspectiveResultList" class="seer-perspective-result-list"></div>
+          <div id="singleSeerResultGrid" class="result-grid">
             <select id="resultValueSelect" aria-label="結果">
               <option value="">未記録</option>
               <option value="human">市民</option>
@@ -761,13 +762,14 @@
           </select>
         </label>
         <button class="primary-button wide" type="submit">保存</button>
+        <button id="rivalToEditPlayerBtn" class="secondary-button wide" type="button" style="margin-top: 8px;">プレイヤー編集（占い結果入力）</button>
       </form>
     </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./sync-config.js?v=1.252"></script>
-    <script src="./app.js?v=1.252"></script>
+    <script src="./sync-config.js?v=1.253"></script>
+    <script src="./app.js?v=1.253"></script>
   </body>
 </html>

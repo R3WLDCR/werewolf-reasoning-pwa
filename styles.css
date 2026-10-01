@@ -975,7 +975,10 @@ button.role-guess-label {
   background: transparent;
 }
 
-.seer-result-label[data-rival-role] {
+.seer-result-label[data-rival-role],
+.seer-result-label[data-seer-id],
+.seer-result-label[data-medium-id],
+.seer-result-label[data-player-id] {
   cursor: pointer;
 }
 
@@ -2708,6 +2711,33 @@ button.role-guess-label {
 
 .adopted-medium-field {
   margin-top: 8px;
+}
+
+.seer-perspective-result-list {
+  display: grid;
+  gap: 8px;
+}
+
+.seer-perspective-result-card {
+  display: grid;
+  gap: 4px;
+}
+
+.seer-perspective-result-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 0.8fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.seer-perspective-result-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 900;
 }
 
 .medium-perspective-result-list {
