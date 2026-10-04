@@ -6,7 +6,7 @@ const STATE_DB_NAME = "werewolf-reasoning-note";
 const STATE_DB_VERSION = 1;
 const STATE_STORE_NAME = "app-state";
 const STATE_RECORD_KEY = "current";
-const APP_VERSION = "1.261";
+const APP_VERSION = "1.262";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -169,17 +169,17 @@ const STANDARD_IMPRESSION_REASONS = [
   { id: "standard-villager-voted-werewolf", label: "人狼に投票", side: "villager", custom: false },
   { id: "standard-villager-passion-white", label: "パッション白", side: "villager", custom: false },
   { id: "standard-werewolf-unnatural-view", label: "違和感、不自然", side: "werewolf", custom: false },
-  { id: "standard-werewolf-expression", label: "表情が固い", side: "werewolf", custom: false },
-  { id: "standard-werewolf-heavy-talk", label: "発言が重い", side: "werewolf", custom: false },
+  { id: "standard-werewolf-scale-mismatch", label: "スケールが合わない", side: "werewolf", custom: false },
+  { id: "standard-werewolf-controlling-lynch", label: "吊り先をコントロール、作ろうとしている", side: "werewolf", custom: false },
+  { id: "standard-werewolf-stalled-reasoning", label: "推理が伸びない", side: "werewolf", custom: false },
+  { id: "standard-werewolf-noncommittal", label: "どっちつかず", side: "werewolf", custom: false },
+  { id: "standard-werewolf-designated-claim", label: "指定でCO", side: "werewolf", custom: false },
   { id: "standard-werewolf-defensive", label: "反応が防御的", side: "werewolf", custom: false },
   { id: "standard-werewolf-unnatural-vote", label: "投票が黒い", side: "werewolf", custom: false },
   { id: "standard-werewolf-following", label: "便乗が多い", side: "werewolf", custom: false },
-  { id: "standard-werewolf-stalled-reasoning", label: "推理が伸びない", side: "werewolf", custom: false },
+  { id: "standard-werewolf-expression", label: "表情が固い", side: "werewolf", custom: false },
+  { id: "standard-werewolf-heavy-talk", label: "発言が重い", side: "werewolf", custom: false },
   { id: "standard-werewolf-not-listening", label: "話を聞いてない", side: "werewolf", custom: false },
-  { id: "standard-werewolf-designated-claim", label: "指定でCO", side: "werewolf", custom: false },
-  { id: "standard-werewolf-noncommittal", label: "どっちつかず", side: "werewolf", custom: false },
-  { id: "standard-werewolf-scale-mismatch", label: "スケールが合わない", side: "werewolf", custom: false },
-  { id: "standard-werewolf-controlling-lynch", label: "吊り先をコントロールしようとしている", side: "werewolf", custom: false },
 ];
 const ROLE_GUESS_LABELS = {
   unknown: "不明",
@@ -4594,10 +4594,14 @@ function normalizeImpressionReason(reason) {
       custom: false,
     };
   }
-  if (reason.custom && String(reason.label || "").trim() === "吊り先をコントロールしようとしている") {
+  if (
+    reason.custom &&
+    (String(reason.label || "").trim() === "吊り先をコントロール、作ろうとしている" ||
+      String(reason.label || "").trim() === "吊り先をコントロールしようとしている")
+  ) {
     return {
       id: "standard-werewolf-controlling-lynch",
-      label: "吊り先をコントロールしようとしている",
+      label: "吊り先をコントロール、作ろうとしている",
       side: "werewolf",
       custom: false,
     };
