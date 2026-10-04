@@ -6,7 +6,7 @@ const STATE_DB_NAME = "werewolf-reasoning-note";
 const STATE_DB_VERSION = 1;
 const STATE_STORE_NAME = "app-state";
 const STATE_RECORD_KEY = "current";
-const APP_VERSION = "1.256";
+const APP_VERSION = "1.257";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -166,6 +166,7 @@ const STANDARD_IMPRESSION_REASONS = [
   { id: "standard-villager-thinking-change", label: "思考の変化", side: "villager", custom: false },
   { id: "standard-villager-unhesitating-attack", label: "攻撃が躊躇ない", side: "villager", custom: false },
   { id: "standard-villager-convincing-reasoning", label: "推理に納得", side: "villager", custom: false },
+  { id: "standard-villager-voted-werewolf", label: "人狼に投票", side: "villager", custom: false },
   { id: "standard-villager-passion-white", label: "パッション白", side: "villager", custom: false },
   { id: "standard-werewolf-expression", label: "表情が固い", side: "werewolf", custom: false },
   { id: "standard-werewolf-heavy-talk", label: "発言が重い", side: "werewolf", custom: false },
@@ -4533,12 +4534,30 @@ function normalizeImpressionSide(value) {
 }
 
 function normalizeImpressionReason(reason) {
-  if (!reason?.id || !String(reason.label || "").trim()) return null;
+  if (!reason?.id) return null;
   const id = String(reason.id);
   if (REMOVED_STANDARD_IMPRESSION_REASON_IDS.has(id)) return null;
+  if (reason.custom && String(reason.label || "").trim() === "人狼に投票") {
+    return {
+      id: "standard-villager-voted-werewolf",
+      label: "人狼に投票",
+      side: "villager",
+      custom: false,
+    };
+  }
+  const standardDef = STANDARD_IMPRESSION_REASONS.find((item) => item.id === id);
+  if (standardDef) {
+    return {
+      id: standardDef.id,
+      label: standardDef.label,
+      side: standardDef.side,
+      custom: false,
+    };
+  }
+  if (!String(reason.label || "").trim()) return null;
   return {
     id,
-    label: id === "standard-werewolf-expression" ? "表情が固い" : String(reason.label).trim(),
+    label: String(reason.label).trim(),
     side: normalizeImpressionSide(reason.side),
     custom: reason.custom === true,
   };
@@ -9683,6 +9702,14 @@ function getHistoryDisplayName(history) {
   return formatEventSeriesName(history?.eventName, history?.seasonNumber, history?.editionNumber);
 }
 
+function dedupeImpressionReasons(reasons) {
+  const byId = new Map();
+  (Array.isArray(reasons) ? reasons : []).forEach((reason) => {
+    if (reason?.id && !byId.has(reason.id)) byId.set(reason.id, reason);
+  });
+  return [...byId.values()];
+}
+
 function normalizePlayer(player) {
   const status = player.status === "dead" ? "attacked" : player.status;
   const attackedWolfSideConfirmedMadman = player.attackedWolfSideConfirmedMadman === true;
@@ -9723,7 +9750,7 @@ function normalizePlayer(player) {
       : null,
     memo: String(player.memo || ""),
     impressionReasons: Array.isArray(player.impressionReasons)
-      ? player.impressionReasons.map(normalizeImpressionReason).filter(Boolean)
+      ? dedupeImpressionReasons(player.impressionReasons.map(normalizeImpressionReason).filter(Boolean))
       : [],
     roleGuessCandidates: attackedWolfSideConfirmedMadman
       ? ["madman"]
