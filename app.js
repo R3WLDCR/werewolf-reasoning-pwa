@@ -6,7 +6,7 @@ const STATE_DB_NAME = "werewolf-reasoning-note";
 const STATE_DB_VERSION = 1;
 const STATE_STORE_NAME = "app-state";
 const STATE_RECORD_KEY = "current";
-const APP_VERSION = "1.255";
+const APP_VERSION = "1.256";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -743,7 +743,7 @@ function bindEvents() {
     editingRoleTouched = true;
     const player = findPlayer(editingPlayerId);
     if (player) {
-      renderGidoraRoleControls(player, els.roleSelect.value);
+      renderGidoraRoleControls(player, els.roleSelect.value, state.roleComposition);
       renderRoleActionControls(player, els.roleSelect.value);
     }
   });
@@ -2562,9 +2562,9 @@ function openEditDialog(playerId, seerId = "") {
   editingSeerId = seerId || getSeers()[0]?.id || "";
   editingRoleTouched = false;
   els.editPlayerName.textContent = player.name;
-  els.roleSelect.innerHTML = getRoleOptionsHtml(player.role, state.eventName);
+  els.roleSelect.innerHTML = getRoleOptionsHtml(player.role, state.eventName, state.roleComposition);
   els.roleSelect.value = player.role || "";
-  renderGidoraRoleControls(player);
+  renderGidoraRoleControls(player, els.roleSelect.value, state.roleComposition);
   els.memoInput.value = player.memo || "";
   renderResultControls(player);
   renderMediumResultControl(player);
@@ -5644,13 +5644,20 @@ function getRoleClaimLabel(player, players = getActivePlayers()) {
   return `${ROLE_LABELS[player.role]}${suffix}`;
 }
 
-function normalizeGidoraRoles(values, role = "gidora") {
+function getDefaultGidoraRoles(composition = state.roleComposition) {
+  const configuredRoles = new Set(Object.keys(normalizeRoleComposition(composition)));
+  if (!configuredRoles.size) return [...DEFAULT_GIDORA_ROLES];
+  const available = GIDORA_CANDIDATE_ROLES.filter((role) => configuredRoles.has(role));
+  return available.length >= 2 ? available.slice(0, 2) : [...DEFAULT_GIDORA_ROLES];
+}
+
+function normalizeGidoraRoles(values, role = "gidora", composition = state.roleComposition) {
   if (role === "nekomataGuard") return [...DEFAULT_GIDORA_ROLES];
   if (role !== "gidora") return [];
   const normalized = GIDORA_CANDIDATE_ROLES.filter(
     (candidate) => Array.isArray(values) && values.includes(candidate),
   );
-  return normalized.length >= 2 ? normalized.slice(0, 3) : [...DEFAULT_GIDORA_ROLES];
+  return normalized.length >= 2 ? normalized.slice(0, 3) : getDefaultGidoraRoles(composition);
 }
 
 function getGidoraRoleLabel(player) {
@@ -5663,18 +5670,24 @@ function areSameStringArrays(left, right) {
 }
 
 function getSelectedGidoraRoles() {
-  return GIDORA_CANDIDATE_ROLES.filter(
-    (role) => els.gidoraRoleOptions.querySelector(`input[name="gidoraRole"][value="${role}"]`)?.checked,
-  );
+  return GIDORA_CANDIDATE_ROLES.filter((role) => {
+    const input = els.gidoraRoleOptions.querySelector(`input[name="gidoraRole"][value="${role}"]`);
+    return Boolean(input?.checked && !input.closest("label")?.hidden);
+  });
 }
 
-function renderGidoraRoleControls(player, roleOverride = els.roleSelect.value) {
+function renderGidoraRoleControls(player, roleOverride = els.roleSelect.value, roleComposition = state.roleComposition) {
   const visible = roleOverride === "gidora";
   els.gidoraRoleSection.hidden = !visible;
   if (!visible) return;
+  const configuredRoles = new Set(Object.keys(normalizeRoleComposition(roleComposition)));
   const sourceRole = player?.role === "nekomataGuard" ? "nekomataGuard" : "gidora";
-  const selected = new Set(normalizeGidoraRoles(player?.gidoraRoles, sourceRole));
-  els.gidoraRoleOptions.querySelectorAll('input[name="gidoraRole"]').forEach((input) => {
+  const selected = new Set(normalizeGidoraRoles(player?.gidoraRoles, sourceRole, roleComposition));
+  els.gidoraRoleOptions.querySelectorAll("label").forEach((label) => {
+    const input = label.querySelector('input[name="gidoraRole"]');
+    if (!input) return;
+    const available = !configuredRoles.size || configuredRoles.has(input.value) || selected.has(input.value);
+    label.hidden = !available;
     input.checked = selected.has(input.value);
   });
 }
@@ -7284,7 +7297,7 @@ function renderHistoryEditor(history) {
           <input data-field="name" type="text" value="${escapeHtml(player.name)}" maxlength="40" aria-label="参加者名" />
           <label class="history-participation"><input data-field="participating" type="checkbox" ${player.participating !== false ? "checked" : ""} /><span>参加</span></label>
           <select data-field="role" aria-label="${escapeHtml(player.name)}の役職">
-            ${getRoleOptionsHtml(player.role, history.eventName)}
+            ${getRoleOptionsHtml(player.role, history.eventName, history.roleComposition)}
           </select>
           <select data-field="trueRole" aria-label="${escapeHtml(player.name)}の真の役職">
             <option value="">真役職未設定</option>
@@ -7345,7 +7358,7 @@ function renderHistoryEditor(history) {
     : '<div class="empty-inline">対抗視点欄の手入力なし</div>';
   els.historyClaimEventEditor.innerHTML = history.claimEvents?.length
     ? sortClaimEventsForEditDisplay(history.claimEvents)
-        .map((event) => getHistoryClaimEventEditorRowHtml(event, activePlayers, history.eventName))
+        .map((event) => getHistoryClaimEventEditorRowHtml(event, activePlayers, history.eventName, history.roleComposition))
         .join("")
     : '<div class="empty-inline">CO履歴なし</div>';
   els.historyVoteEditor.innerHTML = history.voteHistories?.length
@@ -7601,7 +7614,7 @@ function addHistoryClaimEventEditorRow() {
     createdAt: new Date().toISOString(),
   };
   const wrapper = document.createElement("div");
-  wrapper.innerHTML = getHistoryClaimEventEditorRowHtml(event, players, history.eventName);
+  wrapper.innerHTML = getHistoryClaimEventEditorRowHtml(event, players, history.eventName, history.roleComposition);
   els.historyClaimEventEditor.appendChild(wrapper.firstElementChild);
   bindHistoryClaimEventDeleteButtons();
 }
@@ -7633,13 +7646,13 @@ function addHistoryVoteEditorRow() {
   bindHistoryVoteDeleteButtons();
 }
 
-function getHistoryClaimEventEditorRowHtml(event, players, eventName = "") {
+function getHistoryClaimEventEditorRowHtml(event, players, eventName = "", roleComposition = state.roleComposition) {
   return `
     <div class="history-role-action-edit" data-claim-event-id="${escapeHtml(event.id)}" data-created-at="${escapeHtml(event.createdAt || "")}" data-previous-gidora-roles="${escapeHtml((event.previousGidoraRoles || []).join(","))}" data-gidora-roles="${escapeHtml((event.gidoraRoles || []).join(","))}">
       <select data-field="playerId" aria-label="CO者">${getHistoryPlayerOptionsHtml(players, event.playerId)}</select>
       <input data-field="day" type="number" min="1" value="${Number(event.day) || 1}" aria-label="日付" />
-      <select data-field="previousRole" aria-label="変更前役職">${getRoleOptionsHtml(event.previousRole, eventName)}</select>
-      <select data-field="role" aria-label="変更後役職">${getRoleOptionsHtml(event.role, eventName)}</select>
+      <select data-field="previousRole" aria-label="変更前役職">${getRoleOptionsHtml(event.previousRole, eventName, roleComposition)}</select>
+      <select data-field="role" aria-label="変更後役職">${getRoleOptionsHtml(event.role, eventName, roleComposition)}</select>
       <button class="danger-button" type="button" data-delete-claim-event>削除</button>
     </div>
   `;
@@ -7665,11 +7678,14 @@ function getRoleActionRoleOptionsHtml(selectedRole) {
     .join("");
 }
 
-function getRoleOptionsHtml(selectedRole, eventName = state.eventName) {
+function getRoleOptionsHtml(selectedRole = "", eventName = state.eventName, roleComposition = state.roleComposition) {
   return [
     ["", "なし"],
     ...Object.entries(ROLE_LABELS).filter(
-      ([role]) => role !== "nekomataGuard" && isRoleAvailableForEvent(role, eventName, selectedRole),
+      ([role]) =>
+        role !== "nekomataGuard" &&
+        isRoleAvailableForComposition(role, roleComposition, selectedRole) &&
+        isRoleAvailableForEvent(role, eventName, selectedRole),
     ),
   ]
     .map(([value, label]) => `<option value="${value}" ${value === selectedRole ? "selected" : ""}>${label}</option>`)
@@ -9553,6 +9569,16 @@ function normalizeRoleComposition(composition) {
       .map(([role, count]) => [role, Math.max(0, Math.min(99, Math.trunc(Number(count) || 0)))])
       .filter(([, count]) => count > 0),
   );
+}
+
+function isRoleAvailableForComposition(role, composition = state.roleComposition, selectedRole = "") {
+  if (role === "" || role === selectedRole) return true;
+  const configuredRoles = new Set(Object.keys(normalizeRoleComposition(composition)));
+  if (!configuredRoles.size) return true;
+  if (role === "gidora") {
+    return GIDORA_CANDIDATE_ROLES.filter((candidate) => configuredRoles.has(candidate)).length >= 2;
+  }
+  return configuredRoles.has(role);
 }
 
 function isRoleGuessAvailableForComposition(role, composition = state.roleComposition) {
