@@ -6,7 +6,7 @@ const STATE_DB_NAME = "werewolf-reasoning-note";
 const STATE_DB_VERSION = 1;
 const STATE_STORE_NAME = "app-state";
 const STATE_RECORD_KEY = "current";
-const APP_VERSION = "1.258";
+const APP_VERSION = "1.259";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -4355,7 +4355,8 @@ function getAttackedHunterShooter(player, gameState = state) {
     (action) =>
       action.role === "hunter" &&
       action.targetId === player.id &&
-      action.result !== "notActivated",
+      action.result !== "notActivated" &&
+      Boolean(action.hunterShotPreviousStatus),
   );
   if (!hunterActions.length) return null;
   return (
@@ -4383,19 +4384,18 @@ function syncHunterShotTargets(hunter = null) {
     actions.forEach((action) => {
       const target = findPlayer(action.targetId);
       if (!target || target.id === h.id) return;
-      const wasInactive = isInactiveStatus(target.status);
-      if (target.status !== "attacked" || Number(target.statusDay) !== Number(h.statusDay)) {
-        target.status = "attacked";
-        target.statusDay = Number(h.statusDay);
-        if (target.attackedAutoVillager) {
-          target.attackedAutoVillager = false;
-          target.role = "";
-        }
-        changed = true;
-        if (!wasInactive) {
-          movePlayerToInactiveTop(target.id);
-        }
+      if (isInactiveStatus(target.status)) return;
+      action.hunterShotPreviousStatus = target.status;
+      action.hunterShotPreviousStatusDay = target.statusDay;
+      action.hunterShotAppliedDay = Number(h.statusDay);
+      target.status = "attacked";
+      target.statusDay = Number(h.statusDay);
+      if (target.attackedAutoVillager) {
+        target.attackedAutoVillager = false;
+        target.role = "";
       }
+      changed = true;
+      movePlayerToInactiveTop(target.id);
     });
   });
   if (changed) {
@@ -4410,19 +4410,47 @@ function restoreHunterShotTargets(hunter) {
   );
   let changed = false;
   actions.forEach((action) => {
-    const target = findPlayer(action.targetId);
-    if (target && target.status === "attacked") {
-      const otherHunter = getAttackedHunterShooter(target);
-      if (!otherHunter) {
-        target.status = "alive";
-        target.statusDay = null;
-        changed = true;
-      }
-    }
+    changed = restoreHunterShotAction(action) || changed;
   });
   if (changed) {
     reorderPlayersForBoard();
   }
+}
+
+function restoreHunterShotAction(action) {
+  if (!action?.hunterShotPreviousStatus) return false;
+  const target = findPlayer(action.targetId);
+  if (!target) return false;
+  const remainingActions = state.roleActions.filter(
+    (other) =>
+      other.id !== action.id &&
+      other.role === "hunter" &&
+      other.targetId === action.targetId &&
+      other.result !== "notActivated" &&
+      findPlayer(other.actorId)?.status === "attacked",
+  );
+  if (remainingActions.length) {
+    const successor = remainingActions.find((other) => !other.hunterShotPreviousStatus);
+    if (successor) {
+      successor.hunterShotPreviousStatus = action.hunterShotPreviousStatus;
+      successor.hunterShotPreviousStatusDay = action.hunterShotPreviousStatusDay;
+      successor.hunterShotAppliedDay = action.hunterShotAppliedDay;
+    }
+    return false;
+  }
+  if (
+    target.status !== "attacked" ||
+    Number(target.statusDay) !== Number(action.hunterShotAppliedDay)
+  ) {
+    return false;
+  }
+  target.status = Object.hasOwn(STATUS_LABELS, action.hunterShotPreviousStatus)
+    ? action.hunterShotPreviousStatus
+    : "alive";
+  target.statusDay = Number.isFinite(Number(action.hunterShotPreviousStatusDay))
+    ? Number(action.hunterShotPreviousStatusDay)
+    : null;
+  return true;
 }
 
 function isAttackNonWolfConfirmed(player) {
@@ -5131,18 +5159,28 @@ function saveRoleActionResults(player) {
   const previousActions = state.roleActions.filter((action) => action.actorId === player.id && action.role === player.role);
   state.roleActions = state.roleActions.filter((action) => action.actorId !== player.id || action.role !== player.role);
   if (!ROLE_ACTION_ROLES.has(player.role)) return;
+  const previousActionsById = new Map(previousActions.map((action) => [action.id, action]));
   const actions = Array.from(els.roleActionList.querySelectorAll("[data-role-action-id]"))
-    .map((row) =>
-      normalizeRoleAction({
-        id: row.dataset.roleActionId.startsWith("new-") ? crypto.randomUUID() : row.dataset.roleActionId,
+    .map((row) => {
+      const id = row.dataset.roleActionId.startsWith("new-") ? crypto.randomUUID() : row.dataset.roleActionId;
+      const previous = previousActionsById.get(id);
+      const targetId = row.querySelector('[data-field="targetId"]').value;
+      const result = row.querySelector('[data-field="result"]').value;
+      const preservesShotApplication =
+        previous?.targetId === targetId && previous.result !== "notActivated" && result !== "notActivated";
+      return normalizeRoleAction({
+        id,
         actorId: player.id,
         role: player.role,
         day: row.querySelector('[data-field="day"]').value,
-        targetId: row.querySelector('[data-field="targetId"]').value,
-        result: row.querySelector('[data-field="result"]').value,
+        targetId,
+        result,
         note: row.querySelector('[data-field="note"]').value,
-      }),
-    )
+        hunterShotPreviousStatus: preservesShotApplication ? previous?.hunterShotPreviousStatus : "",
+        hunterShotPreviousStatusDay: preservesShotApplication ? previous?.hunterShotPreviousStatusDay : null,
+        hunterShotAppliedDay: preservesShotApplication ? previous?.hunterShotAppliedDay : null,
+      });
+    })
     .filter(Boolean)
     .filter(
       (action) =>
@@ -5160,15 +5198,11 @@ function saveRoleActionResults(player) {
     const removedTargetIds = previousShotTargets.filter((id) => !nextShotTargets.includes(id));
     let restoredAny = false;
     removedTargetIds.forEach((targetId) => {
-      const target = findPlayer(targetId);
-      if (target && target.status === "attacked") {
-        const otherHunter = getAttackedHunterShooter(target);
-        if (!otherHunter) {
-          target.status = "alive";
-          target.statusDay = null;
-          restoredAny = true;
-        }
-      }
+      previousActions
+        .filter((action) => action.targetId === targetId && action.result !== "notActivated")
+        .forEach((action) => {
+          restoredAny = restoreHunterShotAction(action) || restoredAny;
+        });
     });
     if (restoredAny) {
       reorderPlayersForBoard();
@@ -9984,7 +10018,7 @@ function normalizeRoleAction(action) {
   if (!action || !action.actorId || !action.targetId || !ROLE_ACTION_ROLES.has(action.role)) return null;
   const resultLabels = ROLE_ACTION_RESULT_LABELS[action.role];
   const result = Object.hasOwn(resultLabels, action.result) ? action.result : "unknown";
-  return {
+  const normalized = {
     id: action.id || crypto.randomUUID(),
     actorId: String(action.actorId),
     role: action.role,
@@ -9993,6 +10027,16 @@ function normalizeRoleAction(action) {
     result,
     note: String(action.note || "").trim().slice(0, 60),
   };
+  if (action.role === "hunter" && Object.hasOwn(STATUS_LABELS, action.hunterShotPreviousStatus)) {
+    normalized.hunterShotPreviousStatus = action.hunterShotPreviousStatus;
+    normalized.hunterShotPreviousStatusDay = Number.isFinite(Number(action.hunterShotPreviousStatusDay))
+      ? Number(action.hunterShotPreviousStatusDay)
+      : null;
+    normalized.hunterShotAppliedDay = Number.isFinite(Number(action.hunterShotAppliedDay))
+      ? Math.max(1, Number(action.hunterShotAppliedDay))
+      : normalized.day;
+  }
+  return normalized;
 }
 
 function normalizeClaimEvent(event) {
