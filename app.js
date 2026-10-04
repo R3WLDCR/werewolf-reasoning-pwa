@@ -6,7 +6,7 @@ const STATE_DB_NAME = "werewolf-reasoning-note";
 const STATE_DB_VERSION = 1;
 const STATE_STORE_NAME = "app-state";
 const STATE_RECORD_KEY = "current";
-const APP_VERSION = "1.254";
+const APP_VERSION = "1.255";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -432,6 +432,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     "roleCompositionDialog",
     "closeRoleCompositionBtn",
     "roleSetNameInput",
+    "roleCompositionSelfBiteInput",
+    "roleCompositionNoBiteInput",
     "roleCompositionEditor",
     "roleCompositionTotal",
     "fillRoleCompositionVillagersBtn",
@@ -1073,6 +1075,11 @@ function openRoleCompositionDialog() {
   editingRoleSetId = state.selectedRoleSetId;
   const selectedSet = state.roleSets.find((roleSet) => roleSet.id === editingRoleSetId);
   els.roleSetNameInput.value = selectedSet?.name || "";
+  els.roleCompositionSelfBiteInput.checked = selectedSet ? selectedSet.selfBiteAllowed === true : state.selfBiteAllowed;
+  els.roleCompositionNoBiteInput.checked = selectedSet ? selectedSet.noBiteAllowed === true : state.noBiteAllowed;
+  const attackRecorded = hasRecordedAttack();
+  els.roleCompositionSelfBiteInput.disabled = attackRecorded;
+  els.roleCompositionNoBiteInput.disabled = attackRecorded;
   renderRoleCompositionEditor();
   els.roleCompositionDialog.showModal();
 }
@@ -1150,8 +1157,12 @@ function applyRoleCompositionDraft() {
   if (!validation.valid) return showRoleCompositionError(validation.messages);
   state.roleComposition = validation.normalized;
   state.wolfCount = normalizeWolfCount(validation.normalized.werewolf);
+  if (!hasRecordedAttack()) {
+    state.selfBiteAllowed = els.roleCompositionSelfBiteInput.checked;
+    state.noBiteAllowed = els.roleCompositionNoBiteInput.checked;
+  }
   const selectedSet = state.roleSets.find((roleSet) => roleSet.id === editingRoleSetId);
-  state.selectedRoleSetId = selectedSet && areRoleCompositionsEqual(selectedSet.composition, validation.normalized)
+  state.selectedRoleSetId = selectedSet && areRoleSetsEqual(selectedSet, validation.normalized, state.selfBiteAllowed, state.noBiteAllowed)
     ? selectedSet.id
     : "";
   closeRoleCompositionDialog();
@@ -1163,6 +1174,15 @@ function areRoleCompositionsEqual(left, right) {
   const normalizedLeft = normalizeRoleComposition(left);
   const normalizedRight = normalizeRoleComposition(right);
   return [...ROLE_COMPOSITION_ROLES].every((role) => (normalizedLeft[role] || 0) === (normalizedRight[role] || 0));
+}
+
+function areRoleSetsEqual(roleSet, composition, selfBiteAllowed, noBiteAllowed) {
+  if (!roleSet) return false;
+  return (
+    areRoleCompositionsEqual(roleSet.composition, composition) &&
+    (roleSet.selfBiteAllowed === true) === (selfBiteAllowed === true) &&
+    (roleSet.noBiteAllowed === true) === (noBiteAllowed === true)
+  );
 }
 
 function saveRoleSetFromDraft({ overwrite }) {
@@ -1179,10 +1199,14 @@ function saveRoleSetFromDraft({ overwrite }) {
       roleSet.name.toLocaleLowerCase() === name.toLocaleLowerCase(),
   );
   if (duplicateName) return showRoleCompositionError(["同じ名前の配役セットがすでにあります"]);
+  const selfBiteAllowed = els.roleCompositionSelfBiteInput.checked;
+  const noBiteAllowed = els.roleCompositionNoBiteInput.checked;
   if (existing) {
     existing.name = name;
     existing.composition = validation.normalized;
     existing.tournamentId = state.selectedTournamentId;
+    existing.selfBiteAllowed = selfBiteAllowed;
+    existing.noBiteAllowed = noBiteAllowed;
     existing.updatedAt = new Date().toISOString();
   } else {
     editingRoleSetId = crypto.randomUUID();
@@ -1191,11 +1215,17 @@ function saveRoleSetFromDraft({ overwrite }) {
       name,
       tournamentId: state.selectedTournamentId,
       composition: validation.normalized,
+      selfBiteAllowed,
+      noBiteAllowed,
       updatedAt: new Date().toISOString(),
     });
   }
   state.roleComposition = validation.normalized;
   state.wolfCount = normalizeWolfCount(validation.normalized.werewolf);
+  if (!hasRecordedAttack()) {
+    state.selfBiteAllowed = selfBiteAllowed;
+    state.noBiteAllowed = noBiteAllowed;
+  }
   state.selectedRoleSetId = editingRoleSetId;
   renderRoleCompositionEditor();
   renderAndStore();
@@ -1209,6 +1239,8 @@ function deleteEditingRoleSet() {
   if (state.selectedRoleSetId === editingRoleSetId) state.selectedRoleSetId = "";
   editingRoleSetId = "";
   els.roleSetNameInput.value = "";
+  els.roleCompositionSelfBiteInput.checked = state.selfBiteAllowed;
+  els.roleCompositionNoBiteInput.checked = state.noBiteAllowed;
   renderRoleCompositionEditor();
   renderAndStore();
   toast("配役セットを削除しました");
@@ -1220,6 +1252,10 @@ function applyRoleSet(roleSetId) {
   if (!roleSet) return render();
   state.roleComposition = normalizeRoleComposition(roleSet.composition);
   state.selectedRoleSetId = roleSet.id;
+  if (!hasRecordedAttack()) {
+    state.selfBiteAllowed = roleSet.selfBiteAllowed === true;
+    state.noBiteAllowed = roleSet.noBiteAllowed === true;
+  }
   if (state.roleComposition.werewolf) state.wolfCount = normalizeWolfCount(state.roleComposition.werewolf);
   renderAndStore();
   const total = getRoleCompositionTotal(state.roleComposition);
@@ -3854,6 +3890,10 @@ function saveAttackRules() {
   }
   state.selfBiteAllowed = els.selfBiteAllowedInput.checked;
   state.noBiteAllowed = els.noBiteAllowedInput.checked;
+  const selectedSet = state.roleSets.find((roleSet) => roleSet.id === state.selectedRoleSetId);
+  if (selectedSet && !areRoleSetsEqual(selectedSet, state.roleComposition, state.selfBiteAllowed, state.noBiteAllowed)) {
+    state.selectedRoleSetId = "";
+  }
   renderAndStore();
 }
 
@@ -9425,11 +9465,13 @@ function ensureMatchDefaults() {
   state.editionNumber = normalizeOptionalSequenceNumber(state.editionNumber);
   state.gameNumber = normalizeGameNumber(state.gameNumber);
   state.roleComposition = normalizeRoleComposition(state.roleComposition);
-  state.selectedRoleSetId = state.roleSets.some((roleSet) => roleSet.id === state.selectedRoleSetId)
-    ? state.selectedRoleSetId
-    : "";
   state.selfBiteAllowed = state.selfBiteAllowed === true;
   state.noBiteAllowed = state.noBiteAllowed === true;
+  const selectedRoleSet = state.roleSets.find((roleSet) => roleSet.id === state.selectedRoleSetId);
+  state.selectedRoleSetId =
+    selectedRoleSet && areRoleSetsEqual(selectedRoleSet, state.roleComposition, state.selfBiteAllowed, state.noBiteAllowed)
+      ? selectedRoleSet.id
+      : "";
   state.playerRelations = normalizePlayerRelations(state.playerRelations, state.players);
   state.winner = state.gameStatus === "finished" ? normalizeCitizenText(state.winner || "") : "";
   state.activeView = normalizeActiveView(state.activeView);
@@ -9527,6 +9569,8 @@ function normalizeRoleSet(roleSet) {
     name: String(roleSet.name).trim().slice(0, 40),
     tournamentId: String(roleSet.tournamentId || ""),
     composition,
+    selfBiteAllowed: roleSet.selfBiteAllowed === true,
+    noBiteAllowed: roleSet.noBiteAllowed === true,
     updatedAt: String(roleSet.updatedAt || ""),
   };
 }

@@ -9,8 +9,8 @@
     <meta name="apple-mobile-web-app-title" content="人狼推理ノート" />
     <title>人狼推理ノート</title>
     <link rel="manifest" href="./manifest.json" />
-    <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png?v=1.254" />
-    <link rel="stylesheet" href="./styles.css?v=1.254" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png?v=1.255" />
+    <link rel="stylesheet" href="./styles.css?v=1.255" />
   </head>
   <body>
     <div class="app-shell">
@@ -552,6 +552,17 @@
           <span>セット名</span>
           <input id="roleSetNameInput" type="text" maxlength="40" placeholder="例: 13人標準配役" />
         </label>
+        <fieldset class="attack-rule-field">
+          <legend>襲撃ルール</legend>
+          <label class="attack-rule-toggle">
+            <input id="roleCompositionSelfBiteInput" type="checkbox" />
+            <span>自噛みあり</span>
+          </label>
+          <label class="attack-rule-toggle">
+            <input id="roleCompositionNoBiteInput" type="checkbox" />
+            <span>噛みなしあり</span>
+          </label>
+        </fieldset>
         <div id="roleCompositionEditor" class="role-composition-editor"></div>
         <div class="role-composition-total">
           <span id="roleCompositionTotal">0 / 0人</span>
@@ -770,7 +781,7 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./sync-config.js?v=1.254"></script>
-    <script src="./app.js?v=1.254"></script>
+    <script src="./sync-config.js?v=1.255"></script>
+    <script src="./app.js?v=1.255"></script>
   </body>
 </html>
