@@ -6,7 +6,7 @@ const STATE_DB_NAME = "werewolf-reasoning-note";
 const STATE_DB_VERSION = 1;
 const STATE_STORE_NAME = "app-state";
 const STATE_RECORD_KEY = "current";
-const APP_VERSION = "1.260";
+const APP_VERSION = "1.261";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -179,6 +179,7 @@ const STANDARD_IMPRESSION_REASONS = [
   { id: "standard-werewolf-designated-claim", label: "指定でCO", side: "werewolf", custom: false },
   { id: "standard-werewolf-noncommittal", label: "どっちつかず", side: "werewolf", custom: false },
   { id: "standard-werewolf-scale-mismatch", label: "スケールが合わない", side: "werewolf", custom: false },
+  { id: "standard-werewolf-controlling-lynch", label: "吊り先をコントロールしようとしている", side: "werewolf", custom: false },
 ];
 const ROLE_GUESS_LABELS = {
   unknown: "不明",
@@ -4589,6 +4590,14 @@ function normalizeImpressionReason(reason) {
     return {
       id: "standard-werewolf-scale-mismatch",
       label: "スケールが合わない",
+      side: "werewolf",
+      custom: false,
+    };
+  }
+  if (reason.custom && String(reason.label || "").trim() === "吊り先をコントロールしようとしている") {
+    return {
+      id: "standard-werewolf-controlling-lynch",
+      label: "吊り先をコントロールしようとしている",
       side: "werewolf",
       custom: false,
     };
