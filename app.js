@@ -6,7 +6,7 @@ const STATE_DB_NAME = "werewolf-reasoning-note";
 const STATE_DB_VERSION = 1;
 const STATE_STORE_NAME = "app-state";
 const STATE_RECORD_KEY = "current";
-const APP_VERSION = "1.257";
+const APP_VERSION = "1.258";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -172,7 +172,7 @@ const STANDARD_IMPRESSION_REASONS = [
   { id: "standard-werewolf-heavy-talk", label: "発言が重い", side: "werewolf", custom: false },
   { id: "standard-werewolf-defensive", label: "反応が防御的", side: "werewolf", custom: false },
   { id: "standard-werewolf-unnatural-vote", label: "投票が黒い", side: "werewolf", custom: false },
-  { id: "standard-werewolf-unnatural-view", label: "不自然", side: "werewolf", custom: false },
+  { id: "standard-werewolf-unnatural-view", label: "違和感、不自然", side: "werewolf", custom: false },
   { id: "standard-werewolf-following", label: "便乗が多い", side: "werewolf", custom: false },
   { id: "standard-werewolf-stalled-reasoning", label: "推理が伸びない", side: "werewolf", custom: false },
   { id: "standard-werewolf-not-listening", label: "話を聞いてない", side: "werewolf", custom: false },
@@ -4542,6 +4542,17 @@ function normalizeImpressionReason(reason) {
       id: "standard-villager-voted-werewolf",
       label: "人狼に投票",
       side: "villager",
+      custom: false,
+    };
+  }
+  if (
+    reason.custom &&
+    (String(reason.label || "").trim() === "違和感、不自然" || String(reason.label || "").trim() === "不自然")
+  ) {
+    return {
+      id: "standard-werewolf-unnatural-view",
+      label: "違和感、不自然",
+      side: "werewolf",
       custom: false,
     };
   }
