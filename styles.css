@@ -1099,6 +1099,10 @@ button.role-guess-label {
   color: #d9c5ff;
 }
 
+.role-queen,
+.role-baker,
+.role-dictator,
+.role-annoyingHunter,
 .role-sister,
 .role-executioner,
 .role-musician,
@@ -1139,7 +1143,8 @@ button.role-guess-label {
   color: #a9d7ff;
 }
 
-.role-madman {
+.role-madman,
+.role-whisperingMadman {
   background: #4b3d12;
   color: #ffe27a;
 }
