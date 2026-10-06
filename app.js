@@ -6,7 +6,7 @@ const STATE_DB_NAME = "werewolf-reasoning-note";
 const STATE_DB_VERSION = 1;
 const STATE_STORE_NAME = "app-state";
 const STATE_RECORD_KEY = "current";
-const APP_VERSION = "1.262";
+const APP_VERSION = "1.263";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -428,7 +428,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     "seasonNumberInput",
     "editionNumberInput",
     "gameNumberInput",
-    "wolfCountSelect",
     "roleSetSelect",
     "editRoleCompositionBtn",
     "roleCompositionSummary",
@@ -686,15 +685,6 @@ function bindEvents() {
   els.addPlayerForm.addEventListener("submit", (event) => {
     event.preventDefault();
     addPlayer();
-  });
-  els.wolfCountSelect.addEventListener("change", () => {
-    if (isGameLocked()) return render();
-    state.wolfCount = normalizeWolfCount(els.wolfCountSelect.value);
-    if (getRoleCompositionTotal(state.roleComposition)) {
-      state.roleComposition = { ...state.roleComposition, werewolf: state.wolfCount };
-      state.selectedRoleSetId = "";
-    }
-    renderAndStore();
   });
   els.roleSetSelect.addEventListener("change", () => applyRoleSet(els.roleSetSelect.value));
   els.editRoleCompositionBtn.addEventListener("click", openRoleCompositionDialog);
@@ -1063,7 +1053,7 @@ function getRoleCompositionLabel(composition = state.roleComposition) {
   const labels = Object.entries(normalized)
     .filter(([, count]) => count > 0)
     .map(([role, count]) => `${ROLE_LABELS[role] || role}${count}`);
-  return labels.length ? labels.join(" / ") : "未設定（人狼数のみ）";
+  return labels.length ? labels.join(" / ") : "未設定";
 }
 
 function getVisibleRoleSets() {
@@ -1075,6 +1065,9 @@ function getVisibleRoleSets() {
 function openRoleCompositionDialog() {
   if (isGameLocked()) return toast("使用役職は準備中に変更してください");
   roleCompositionDraft = normalizeRoleComposition(state.roleComposition);
+  if (!getRoleCompositionTotal(roleCompositionDraft) && !roleCompositionDraft.werewolf && state.wolfCount) {
+    roleCompositionDraft.werewolf = normalizeWolfCount(state.wolfCount);
+  }
   editingRoleSetId = state.selectedRoleSetId;
   const selectedSet = state.roleSets.find((roleSet) => roleSet.id === editingRoleSetId);
   els.roleSetNameInput.value = selectedSet?.name || "";
@@ -3780,7 +3773,6 @@ function render() {
   renderGameLifecycle();
   renderSyncStatus();
   renderBoardSwitcher();
-  els.wolfCountSelect.value = String(state.wolfCount);
   renderRoleCompositionSetup();
   els.playerCountBadge.textContent = `参加${getActivePlayers().length}/${getSelectedTournamentPlayers().length}人`;
   if (state.activeView === "participants") renderParticipantRows();
@@ -3806,7 +3798,7 @@ function renderRoleCompositionSetup() {
   const activeCount = getActivePlayers().length;
   els.roleCompositionSummary.innerHTML = total
     ? `<strong>${escapeHtml(getRoleCompositionLabel())}</strong><span class="${total === activeCount ? "" : "mismatch"}">${total} / ${activeCount}人</span>`
-    : `<strong>未設定</strong><span>人狼数だけで開始できます</span>`;
+    : `<strong>未設定</strong><span>配役を編集から設定できます</span>`;
 }
 
 function setReasoningPerspective(perspective) {
@@ -3928,7 +3920,6 @@ function renderGameLifecycle() {
     els.gameNumberInput,
     els.playerNameInput,
     els.addPlayerForm.querySelector('button[type="submit"]'),
-    els.wolfCountSelect,
     els.roleSetSelect,
     els.editRoleCompositionBtn,
     els.selfBiteAllowedInput,
@@ -9000,6 +8991,9 @@ function applySavedState(saved) {
   state.selectedTournamentId = String(saved.selectedTournamentId || "");
   state.wolfCount = normalizeWolfCount(saved.wolfCount);
   state.roleComposition = normalizeRoleComposition(saved.roleComposition);
+  if (state.roleComposition?.werewolf) {
+    state.wolfCount = normalizeWolfCount(state.roleComposition.werewolf);
+  }
   state.selectedRoleSetId = String(saved.selectedRoleSetId || "");
   state.selfBiteAllowed = saved.selfBiteAllowed === true;
   state.noBiteAllowed = saved.noBiteAllowed === true;

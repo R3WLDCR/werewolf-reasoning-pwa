@@ -9,8 +9,8 @@
     <meta name="apple-mobile-web-app-title" content="人狼推理ノート" />
     <title>人狼推理ノート</title>
     <link rel="manifest" href="./manifest.json" />
-    <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png?v=1.262" />
-    <link rel="stylesheet" href="./styles.css?v=1.262" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png?v=1.263" />
+    <link rel="stylesheet" href="./styles.css?v=1.263" />
   </head>
   <body>
     <div class="app-shell">
@@ -93,15 +93,6 @@
                 <option value="10">第10試合</option>
                 <option value="11">第11試合</option>
                 <option value="12">第12試合</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>人狼数</span>
-              <select id="wolfCountSelect" aria-label="人狼数">
-                <option value="1">1人</option>
-                <option value="2">2人</option>
-                <option value="3">3人</option>
-                <option value="4">4人</option>
               </select>
             </label>
             <fieldset class="attack-rule-field">
@@ -502,7 +493,7 @@
         <div class="board-action-choices">
           <button id="changeSettingsBtn" class="board-action-choice" type="button">
             <strong>設定を変更</strong>
-            <span>CO・推理・結果・生死を残したまま、参加者や人狼数を変更します。</span>
+            <span>CO・推理・結果・生死を残したまま、参加者や配役を変更します。</span>
           </button>
           <button id="initializeBoardBtn" class="board-action-choice danger" type="button">
             <strong>盤面を初期化</strong>
@@ -781,7 +772,7 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./sync-config.js?v=1.262"></script>
-    <script src="./app.js?v=1.262"></script>
+    <script src="./sync-config.js?v=1.263"></script>
+    <script src="./app.js?v=1.263"></script>
   </body>
 </html>
