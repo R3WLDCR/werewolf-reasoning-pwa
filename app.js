@@ -6,7 +6,7 @@ const STATE_DB_NAME = "werewolf-reasoning-note";
 const STATE_DB_VERSION = 1;
 const STATE_STORE_NAME = "app-state";
 const STATE_RECORD_KEY = "current";
-const APP_VERSION = "1.263";
+const APP_VERSION = "1.264";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -444,8 +444,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     "saveNewRoleSetBtn",
     "saveRoleSetBtn",
     "deleteRoleSetBtn",
-    "selfBiteAllowedInput",
-    "noBiteAllowedInput",
     "wolfCountBadge",
     "attackRuleBadge",
     "addPlayerForm",
@@ -707,8 +705,6 @@ function bindEvents() {
     if (!roleCompositionDraft[role]) delete roleCompositionDraft[role];
     renderRoleCompositionEditor();
   });
-  els.selfBiteAllowedInput.addEventListener("change", saveAttackRules);
-  els.noBiteAllowedInput.addEventListener("change", saveAttackRules);
   els.startGameBtn.addEventListener("click", startGame);
   els.boardActionsBtn.addEventListener("click", openBoardActionsDialog);
   els.closeBoardActionsBtn.addEventListener("click", closeBoardActionsDialog);
@@ -3862,8 +3858,6 @@ function renderMatchMeta() {
   els.seasonNumberInput.value = state.seasonNumber || "";
   els.editionNumberInput.value = state.editionNumber || "";
   els.gameNumberInput.value = String(state.gameNumber);
-  els.selfBiteAllowedInput.checked = state.selfBiteAllowed;
-  els.noBiteAllowedInput.checked = state.noBiteAllowed;
   const attackRules = [
     state.selfBiteAllowed ? "自噛みあり" : "",
     state.noBiteAllowed ? "噛みなしあり" : "",
@@ -3876,20 +3870,6 @@ function renderMatchMeta() {
 
 function hasRecordedAttack() {
   return getActivePlayers().some((player) => player.status === "attacked");
-}
-
-function saveAttackRules() {
-  if (isGameLocked() || hasRecordedAttack()) {
-    render();
-    return toast("襲撃ルールはゲーム開始前に設定してください");
-  }
-  state.selfBiteAllowed = els.selfBiteAllowedInput.checked;
-  state.noBiteAllowed = els.noBiteAllowedInput.checked;
-  const selectedSet = state.roleSets.find((roleSet) => roleSet.id === state.selectedRoleSetId);
-  if (selectedSet && !areRoleSetsEqual(selectedSet, state.roleComposition, state.selfBiteAllowed, state.noBiteAllowed)) {
-    state.selectedRoleSetId = "";
-  }
-  renderAndStore();
 }
 
 function renderGameLifecycle() {
@@ -3922,10 +3902,8 @@ function renderGameLifecycle() {
     els.addPlayerForm.querySelector('button[type="submit"]'),
     els.roleSetSelect,
     els.editRoleCompositionBtn,
-    els.selfBiteAllowedInput,
-    els.noBiteAllowedInput,
   ].forEach((element) => {
-    element.disabled = inProgress || finished || ([els.selfBiteAllowedInput, els.noBiteAllowedInput].includes(element) && hasRecordedAttack());
+    element.disabled = inProgress || finished;
   });
   document.querySelectorAll("[data-roster-filter]").forEach((button) => {
     button.disabled = inProgress || finished;
