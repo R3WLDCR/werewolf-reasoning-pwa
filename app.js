@@ -6,7 +6,7 @@ const STATE_DB_NAME = "werewolf-reasoning-note";
 const STATE_DB_VERSION = 1;
 const STATE_STORE_NAME = "app-state";
 const STATE_RECORD_KEY = "current";
-const APP_VERSION = "1.265";
+const APP_VERSION = "1.266";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -416,6 +416,7 @@ let rivalPerspectiveTargetId = "";
 let voteHistoryEditVisible = false;
 let selectedRunoffTargetId = "";
 let selectedRunoffVoterIds = new Set();
+let lastVoteTargetId = "";
 let toastTimer = null;
 let syncTimer = null;
 let supabaseClient = null;
@@ -808,8 +809,9 @@ function bindEvents() {
   els.closeVoteBtn.addEventListener("click", closeVoteDialog);
   els.addVoteBtn.addEventListener("click", addVoteFromDialog);
   els.voteDayInput.addEventListener("input", updateVoteVoterOptions);
-  els.voteVoterSelect.addEventListener("change", updateVoteTargetOptionsForSelectedVoter);
+  els.voteVoterSelect.addEventListener("change", () => updateVoteTargetOptionsForSelectedVoter());
   els.voteTargetSelect.addEventListener("change", () => {
+    lastVoteTargetId = els.voteTargetSelect.value;
     selectedRunoffTargetId = els.voteTargetSelect.value;
     updateVoteVoterOptions();
   });
@@ -2829,6 +2831,7 @@ function openVoteDialog() {
   voteHistoryEditVisible = false;
   selectedRunoffTargetId = "";
   selectedRunoffVoterIds = new Set();
+  lastVoteTargetId = "";
   els.voteDayInput.value = getDefaultVoteDialogDay();
   els.voteTargetSelect.innerHTML = getVoteTargetOptionsHtml(players);
   renderVoteHistoryList();
@@ -2845,6 +2848,7 @@ function addVoteFromDialog() {
   state.voteHistories = readVoteRows(els.voteHistoryList);
   const day = Number(els.voteDayInput.value) || 1;
   const context = getVoteInputContext(day, state.voteHistories);
+  const submittedTargetId = els.voteTargetSelect.value;
   const vote = normalizeVoteHistory({
     id: crypto.randomUUID(),
     day,
@@ -2857,6 +2861,7 @@ function addVoteFromDialog() {
   });
   if (!vote) return toast("投票者と投票先を選んでください");
   if (vote.voterId === vote.targetId) return toast("自分には投票できません");
+  lastVoteTargetId = submittedTargetId;
   state.voteHistories.push(vote);
   const addedMirrorVotes = addRunoffMirrorVotes(vote, context, state.voteHistories);
   const autoExileMessage = applyAutoExileFromCompletedVotes(day, state.voteHistories);
@@ -2986,7 +2991,7 @@ function updateVoteVoterOptions() {
   const players = getActivePlayers();
   const day = Number(els.voteDayInput.value) || 1;
   const previousValue = els.voteVoterSelect.value;
-  const previousTargetValue = els.voteTargetSelect.value;
+  const previousTargetValue = lastVoteTargetId || els.voteTargetSelect.value;
   const context = getVoteInputContext(day, currentVotes);
   const availablePlayers = context.voterPlayers;
   const availableTargets = context.targetPlayers;
@@ -3015,23 +3020,26 @@ function updateVoteVoterOptions() {
   if (availablePlayers.some((player) => player.id === previousValue)) {
     els.voteVoterSelect.value = previousValue;
   }
-  updateVoteTargetOptionsForSelectedVoter();
+  updateVoteTargetOptionsForSelectedVoter(previousTargetValue);
   els.addVoteBtn.disabled = availablePlayers.length === 0;
   updateVoteModeNotice(context);
   renderRunoffQuickPanel(context);
   updateVoteSummaryPanel();
 }
 
-function updateVoteTargetOptionsForSelectedVoter() {
+function updateVoteTargetOptionsForSelectedVoter(preferredTargetId = "") {
   const currentVotes = readVoteRows(els.voteHistoryList);
   const players = getActivePlayers();
   const day = Number(els.voteDayInput.value) || 1;
   const context = getVoteInputContext(day, currentVotes);
-  const previousTargetValue = els.voteTargetSelect.value;
+  const previousTargetValue = preferredTargetId || lastVoteTargetId || els.voteTargetSelect.value;
   const targets = getVoteTargetsForVoter(context.targetPlayers, els.voteVoterSelect.value);
   els.voteTargetSelect.innerHTML = getVoteTargetOptionsHtml(targets, previousTargetValue, context.type !== "runoff");
   if (context.type === "runoff" && selectedRunoffTargetId && targets.some((player) => player.id === selectedRunoffTargetId)) {
     els.voteTargetSelect.value = selectedRunoffTargetId;
+  }
+  if (context.type !== "runoff" && els.voteTargetSelect.value) {
+    lastVoteTargetId = els.voteTargetSelect.value;
   }
 }
 
