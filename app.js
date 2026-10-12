@@ -6,7 +6,7 @@ const STATE_DB_NAME = "werewolf-reasoning-note";
 const STATE_DB_VERSION = 1;
 const STATE_STORE_NAME = "app-state";
 const STATE_RECORD_KEY = "current";
-const APP_VERSION = "1.266";
+const APP_VERSION = "1.267";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -6914,9 +6914,17 @@ function getSeers() {
     ...state.seerColumnOverrides.map((override) => override.seerId),
   ]);
   return getActivePlayers()
-    .filter((player) => player.role === "seer" || seerIds.has(player.id))
+    .filter((player) => player.role === "seer" || (seerIds.has(player.id) && !hasSlidAwayFromSeer(player)))
     .slice()
     .sort((a, b) => getSeerColumnPriority(a) - getSeerColumnPriority(b) || getRoleClaimOrder(a) - getRoleClaimOrder(b));
+}
+
+function hasSlidAwayFromSeer(player) {
+  const latestClaim = state.claimEvents
+    .filter((event) => event.playerId === player.id)
+    .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")))
+    .at(-1);
+  return Boolean(latestClaim && latestClaim.role !== "seer");
 }
 
 function getSeerColumnPriority(player) {
