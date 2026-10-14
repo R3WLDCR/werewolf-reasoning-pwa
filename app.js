@@ -6,7 +6,7 @@ const STATE_DB_NAME = "werewolf-reasoning-note";
 const STATE_DB_VERSION = 1;
 const STATE_STORE_NAME = "app-state";
 const STATE_RECORD_KEY = "current";
-const APP_VERSION = "1.267";
+const APP_VERSION = "1.268";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   seer: "預言者",
@@ -477,6 +477,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     "roleCompositionDialog",
     "closeRoleCompositionBtn",
     "roleSetNameInput",
+    "roleSetTournamentInput",
     "roleCompositionSelfBiteInput",
     "roleCompositionNoBiteInput",
     "roleCompositionEditor",
@@ -1102,6 +1103,11 @@ function getVisibleRoleSets() {
   );
 }
 
+function getRoleSetLabel(roleSet) {
+  const tournament = state.tournaments.find((item) => item.id === roleSet.tournamentId);
+  return `${tournament?.name || (roleSet.tournamentId ? "大会未登録" : "共通")} / ${roleSet.name}`;
+}
+
 function openRoleCompositionDialog() {
   if (isGameLocked()) return toast("使用役職は準備中に変更してください");
   roleCompositionDraft = normalizeRoleComposition(state.roleComposition);
@@ -1110,6 +1116,7 @@ function openRoleCompositionDialog() {
   }
   editingRoleSetId = state.selectedRoleSetId;
   const selectedSet = state.roleSets.find((roleSet) => roleSet.id === editingRoleSetId);
+  els.roleSetTournamentInput.value = getSelectedTournament()?.name || state.eventName || "共通";
   els.roleSetNameInput.value = selectedSet?.name || "";
   els.roleCompositionSelfBiteInput.checked = selectedSet ? selectedSet.selfBiteAllowed === true : state.selfBiteAllowed;
   els.roleCompositionNoBiteInput.checked = selectedSet ? selectedSet.noBiteAllowed === true : state.noBiteAllowed;
@@ -1225,7 +1232,7 @@ function saveRoleSetFromDraft({ overwrite }) {
   const validation = validateRoleComposition();
   if (!validation.valid) return showRoleCompositionError(validation.messages);
   const name = els.roleSetNameInput.value.trim();
-  if (!name) return showRoleCompositionError(["セット名を入力してください"]);
+  if (!name) return showRoleCompositionError(["レギュ名を入力してください"]);
   const existing = overwrite ? state.roleSets.find((roleSet) => roleSet.id === editingRoleSetId) : null;
   if (overwrite && !existing) return showRoleCompositionError(["上書きするセットが見つかりません"]);
   const duplicateName = state.roleSets.some(
@@ -1234,7 +1241,7 @@ function saveRoleSetFromDraft({ overwrite }) {
       roleSet.tournamentId === state.selectedTournamentId &&
       roleSet.name.toLocaleLowerCase() === name.toLocaleLowerCase(),
   );
-  if (duplicateName) return showRoleCompositionError(["同じ名前の配役セットがすでにあります"]);
+  if (duplicateName) return showRoleCompositionError(["この大会には同じレギュ名の配役セットがすでにあります"]);
   const selfBiteAllowed = els.roleCompositionSelfBiteInput.checked;
   const noBiteAllowed = els.roleCompositionNoBiteInput.checked;
   if (existing) {
@@ -1270,7 +1277,7 @@ function saveRoleSetFromDraft({ overwrite }) {
 
 function deleteEditingRoleSet() {
   const roleSet = state.roleSets.find((item) => item.id === editingRoleSetId);
-  if (!roleSet || !confirm(`配役セット「${roleSet.name}」を削除しますか？`)) return;
+  if (!roleSet || !confirm(`配役セット「${getRoleSetLabel(roleSet)}」を削除しますか？`)) return;
   state.roleSets = state.roleSets.filter((item) => item.id !== editingRoleSetId);
   if (state.selectedRoleSetId === editingRoleSetId) state.selectedRoleSetId = "";
   editingRoleSetId = "";
@@ -3833,10 +3840,10 @@ function renderRoleCompositionSetup() {
   const visibleSets = getVisibleRoleSets();
   const selectedExists = visibleSets.some((roleSet) => roleSet.id === state.selectedRoleSetId);
   els.roleSetSelect.innerHTML = [
-    `<option value="">${visibleSets.length ? "セットを選択" : "保存済みセットなし"}</option>`,
+    `<option value="">${visibleSets.length ? "レギュを選択" : "保存済みレギュなし"}</option>`,
     ...visibleSets.map(
       (roleSet) =>
-        `<option value="${escapeHtml(roleSet.id)}" ${roleSet.id === state.selectedRoleSetId ? "selected" : ""}>${escapeHtml(roleSet.name)}</option>`,
+        `<option value="${escapeHtml(roleSet.id)}" ${roleSet.id === state.selectedRoleSetId ? "selected" : ""}>${escapeHtml(getRoleSetLabel(roleSet))}</option>`,
     ),
   ].join("");
   if (!selectedExists) els.roleSetSelect.value = "";

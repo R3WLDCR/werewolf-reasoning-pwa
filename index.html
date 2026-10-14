@@ -9,8 +9,8 @@
     <meta name="apple-mobile-web-app-title" content="人狼推理ノート" />
     <title>人狼推理ノート</title>
     <link rel="manifest" href="./manifest.json" />
-    <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png?v=1.267" />
-    <link rel="stylesheet" href="./styles.css?v=1.267" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png?v=1.268" />
+    <link rel="stylesheet" href="./styles.css?v=1.268" />
   </head>
   <body>
     <div class="app-shell">
@@ -98,8 +98,8 @@
             <div class="role-composition-field">
               <div class="field-title">使用役職</div>
               <div class="role-set-controls">
-                <select id="roleSetSelect" aria-label="保存した配役セット">
-                  <option value="">セットを選択</option>
+                <select id="roleSetSelect" aria-label="大会別の配役レギュ">
+                  <option value="">レギュを選択</option>
                 </select>
                 <button id="editRoleCompositionBtn" class="secondary-button" type="button">配役を編集</button>
               </div>
@@ -534,8 +534,12 @@
           <button id="closeRoleCompositionBtn" class="round-button" type="button" aria-label="閉じる">×</button>
         </div>
         <label class="field">
-          <span>セット名</span>
-          <input id="roleSetNameInput" type="text" maxlength="40" placeholder="例: 13人標準配役" />
+          <span>大会名</span>
+          <input id="roleSetTournamentInput" type="text" readonly />
+        </label>
+        <label class="field">
+          <span>レギュ名</span>
+          <input id="roleSetNameInput" type="text" maxlength="40" placeholder="例: 13人レギュ、9A" />
         </label>
         <fieldset class="attack-rule-field">
           <legend>襲撃ルール</legend>
@@ -766,7 +770,7 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./sync-config.js?v=1.267"></script>
-    <script src="./app.js?v=1.267"></script>
+    <script src="./sync-config.js?v=1.268"></script>
+    <script src="./app.js?v=1.268"></script>
   </body>
 </html>
