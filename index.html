@@ -9,8 +9,8 @@
     <meta name="apple-mobile-web-app-title" content="人狼推理ノート" />
     <title>人狼推理ノート</title>
     <link rel="manifest" href="./manifest.json" />
-    <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png?v=1.269" />
-    <link rel="stylesheet" href="./styles.css?v=1.269" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png?v=1.270" />
+    <link rel="stylesheet" href="./styles.css?v=1.270" />
   </head>
   <body>
     <div class="app-shell">
@@ -51,6 +51,7 @@
                 <select id="tournamentSelect" aria-label="大会を選択"></select>
                 <button id="addTournamentBtn" class="secondary-button" type="button">追加</button>
                 <button id="renameTournamentBtn" class="secondary-button" type="button">名称変更</button>
+                <button id="deleteTournamentBtn" class="danger-button" type="button">削除</button>
               </div>
             </div>
             <label class="field">
@@ -538,10 +539,13 @@
           <span>大会名</span>
           <input id="roleSetTournamentInput" type="text" readonly />
         </label>
-        <label class="field">
-          <span>レギュ名</span>
-          <input id="roleSetNameInput" type="text" maxlength="40" placeholder="例: 13人レギュ、9A" />
-        </label>
+        <div class="field">
+          <label for="roleSetNameInput">レギュ名</label>
+          <div class="regulation-name-controls">
+            <input id="roleSetNameInput" type="text" maxlength="40" placeholder="例: 13人レギュ、9A" />
+            <button id="renameRoleSetBtn" class="secondary-button" type="button">名前を保存</button>
+          </div>
+        </div>
         <p id="roleSetNote" class="regulation-note" hidden></p>
         <fieldset class="attack-rule-field">
           <legend>襲撃ルール</legend>
@@ -772,8 +776,8 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./sync-config.js?v=1.269"></script>
-    <script src="./bou-koku-regulations.js?v=1.269"></script>
-    <script src="./app.js?v=1.269"></script>
+    <script src="./sync-config.js?v=1.270"></script>
+    <script src="./bou-koku-regulations.js?v=1.270"></script>
+    <script src="./app.js?v=1.270"></script>
   </body>
 </html>

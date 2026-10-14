@@ -6,7 +6,7 @@ const STATE_DB_NAME = "werewolf-reasoning-note";
 const STATE_DB_VERSION = 1;
 const STATE_STORE_NAME = "app-state";
 const STATE_RECORD_KEY = "current";
-const APP_VERSION = "1.269";
+const APP_VERSION = "1.270";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   ...Object.fromEntries(Object.entries(BOUKOKU_ROLE_DEFINITIONS).map(([role, definition]) => [role, definition.label])),
@@ -401,6 +401,8 @@ const state = {
   gameHistories: [],
   customImpressionReasons: [],
   roleSets: [],
+  builtinRoleSetOverrides: [],
+  bouKokuCatalogInitialized: false,
   boards: [],
 };
 
@@ -469,6 +471,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     "tournamentSelect",
     "addTournamentBtn",
     "renameTournamentBtn",
+    "deleteTournamentBtn",
     "boardCustomNameInput",
     "eventDateInput",
     "dateInputWrap",
@@ -485,6 +488,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     "roleCompositionDialog",
     "closeRoleCompositionBtn",
     "roleSetNameInput",
+    "renameRoleSetBtn",
     "roleSetTournamentInput",
     "roleSetNote",
     "roleSetSetupNote",
@@ -710,6 +714,7 @@ function bindEvents() {
   els.tournamentSelect.addEventListener("change", () => switchTournament(els.tournamentSelect.value));
   els.addTournamentBtn.addEventListener("click", addTournament);
   els.renameTournamentBtn.addEventListener("click", renameSelectedTournament);
+  els.deleteTournamentBtn.addEventListener("click", deleteSelectedTournament);
   els.boardCustomNameInput.addEventListener("change", saveBoardCustomName);
   els.eventDateInput.addEventListener("change", () => {
     if (isGameLocked()) return render();
@@ -746,6 +751,7 @@ function bindEvents() {
   els.saveNewRoleSetBtn.addEventListener("click", () => saveRoleSetFromDraft({ overwrite: false }));
   els.saveRoleSetBtn.addEventListener("click", () => saveRoleSetFromDraft({ overwrite: true }));
   els.deleteRoleSetBtn.addEventListener("click", deleteEditingRoleSet);
+  els.renameRoleSetBtn.addEventListener("click", renameEditingRoleSet);
   els.roleCompositionDialog.addEventListener("click", (event) => {
     if (event.target === els.roleCompositionDialog) closeRoleCompositionDialog();
   });
@@ -974,14 +980,43 @@ function renameSelectedTournament() {
   if (!tournament) return;
   const name = prompt("大会名を変更", tournament.name);
   if (!name?.trim()) return;
+  if (getSelectableTournaments().some((item) => item.id !== tournament.id && item.name.toLocaleLowerCase() === name.trim().toLocaleLowerCase())) {
+    return toast("同じ名前の大会がすでにあります");
+  }
+  if (tournament.name === EVENT_SCOPED_ROLE_EVENT_NAME) tournament.roleCatalog = "bou-koku";
   tournament.name = name.trim();
   state.eventName = tournament.name;
+  state.boards.forEach((board) => {
+    if (board.payload?.selectedTournamentId === tournament.id) board.payload.eventName = tournament.name;
+  });
   renderAndStore();
   toast("大会名を変更しました");
 }
 
+function getSelectableTournaments() {
+  return state.tournaments.filter((tournament) => !tournament.deleted);
+}
+
+function deleteSelectedTournament() {
+  if (isGameLocked()) return toast("大会の削除は準備中に行ってください");
+  const tournament = getSelectedTournament();
+  if (!tournament || tournament.deleted) return;
+  if (!confirm(`大会「${tournament.name}」を一覧から削除しますか？\n名簿・盤面・終了履歴は残します。別大会の準備盤面へ移動します。`)) return;
+  saveCurrentBoardSnapshot();
+  tournament.deleted = true;
+  let nextTournament = getSelectableTournaments()[0];
+  if (!nextTournament) {
+    nextTournament = { id: crypto.randomUUID(), name: "未設定" };
+    state.tournaments.push(nextTournament);
+  }
+  createBoard("", nextTournament.id);
+  state.activeView = "participants";
+  renderAndStore();
+  toast("大会を一覧から削除しました。盤面と履歴は残っています");
+}
+
 function switchTournament(tournamentId, { skipConfirm = false } = {}) {
-  if (!state.tournaments.some((tournament) => tournament.id === tournamentId)) return;
+  if (!getSelectableTournaments().some((tournament) => tournament.id === tournamentId)) return;
   if (tournamentId === state.selectedTournamentId) return;
   if (isGameLocked()) {
     render();
@@ -1107,9 +1142,9 @@ function getRoleCompositionLabel(composition = state.roleComposition) {
   return labels.length ? labels.join(" / ") : "未設定";
 }
 
-function getAllRoleSets() {
-  const presets = state.tournaments
-    .filter((tournament) => tournament.name === EVENT_SCOPED_ROLE_EVENT_NAME)
+function getBuiltinRoleSets() {
+  return state.tournaments
+    .filter((tournament) => tournament.roleCatalog === "bou-koku" || tournament.name === EVENT_SCOPED_ROLE_EVENT_NAME)
     .flatMap((tournament) => BOUKOKU_REGULATIONS.map((preset) => ({
       id: `bou-koku-20260926-${tournament.id}-${preset.code}`,
       name: preset.code,
@@ -1121,7 +1156,14 @@ function getAllRoleSets() {
       wolfCount: preset.wolfCount,
       builtin: true,
     })))
-    .filter((preset) => !state.roleSets.some((saved) => saved.tournamentId === preset.tournamentId && saved.name === preset.name));
+    .map((preset) => ({ ...preset, ...state.builtinRoleSetOverrides.find((override) => override.id === preset.id) }))
+    .filter((preset) => !preset.deleted);
+}
+
+function getAllRoleSets() {
+  const presets = getBuiltinRoleSets().filter(
+    (preset) => !state.roleSets.some((saved) => saved.tournamentId === preset.tournamentId && saved.name.toLocaleLowerCase() === preset.name.toLocaleLowerCase()),
+  );
   return [...state.roleSets, ...presets];
 }
 
@@ -1199,7 +1241,8 @@ function renderRoleCompositionEditor() {
   els.fillRoleCompositionVillagersBtn.disabled = total >= activeCount;
   const editableSet = findRoleSet(editingRoleSetId);
   els.saveRoleSetBtn.hidden = !editingRoleSetId || editableSet?.builtin;
-  els.deleteRoleSetBtn.hidden = !editingRoleSetId || editableSet?.builtin;
+  els.deleteRoleSetBtn.hidden = !editingRoleSetId;
+  els.renameRoleSetBtn.hidden = !editingRoleSetId;
   els.roleCompositionError.hidden = true;
 }
 
@@ -1315,13 +1358,48 @@ function saveRoleSetFromDraft({ overwrite }) {
   toast("配役セットを保存しました");
 }
 
+function setBuiltinRoleSetOverride(id, changes) {
+  const existing = state.builtinRoleSetOverrides.find((override) => override.id === id);
+  if (existing) Object.assign(existing, changes);
+  else state.builtinRoleSetOverrides.push({ id, ...changes });
+}
+
+function renameEditingRoleSet() {
+  if (isGameLocked()) return toast("レギュ名の変更は準備中に行ってください");
+  const roleSet = findRoleSet(editingRoleSetId);
+  if (!roleSet) return;
+  const name = els.roleSetNameInput.value.trim().slice(0, 40);
+  if (!name) return showRoleCompositionError(["レギュ名を入力してください"]);
+  if (getAllRoleSets().some((item) => item.id !== roleSet.id && item.tournamentId === roleSet.tournamentId && item.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {
+    return showRoleCompositionError(["この大会には同じレギュ名がすでにあります"]);
+  }
+  if (roleSet.builtin) setBuiltinRoleSetOverride(roleSet.id, { name });
+  else {
+    roleSet.name = name;
+    roleSet.updatedAt = new Date().toISOString();
+  }
+  renderRoleCompositionEditor();
+  renderAndStore();
+  toast("レギュ名を変更しました");
+}
+
 function deleteEditingRoleSet() {
-  const roleSet = state.roleSets.find((item) => item.id === editingRoleSetId);
+  if (isGameLocked()) return toast("レギュの削除は準備中に行ってください");
+  const roleSet = findRoleSet(editingRoleSetId);
   if (!roleSet || !confirm(`配役セット「${getRoleSetLabel(roleSet)}」を削除しますか？`)) return;
-  state.roleSets = state.roleSets.filter((item) => item.id !== editingRoleSetId);
+  if (roleSet.builtin) setBuiltinRoleSetOverride(roleSet.id, { deleted: true });
+  else {
+    state.roleSets = state.roleSets.filter((item) => item.id !== editingRoleSetId);
+    getBuiltinRoleSets().filter((preset) => preset.tournamentId === roleSet.tournamentId && preset.name.toLocaleLowerCase() === roleSet.name.toLocaleLowerCase())
+      .forEach((preset) => setBuiltinRoleSetOverride(preset.id, { deleted: true }));
+  }
+  state.boards.forEach((board) => {
+    if (board.payload?.selectedRoleSetId === roleSet.id) board.payload.selectedRoleSetId = "";
+  });
   if (state.selectedRoleSetId === editingRoleSetId) state.selectedRoleSetId = "";
   editingRoleSetId = "";
   els.roleSetNameInput.value = "";
+  els.roleSetNote.hidden = true;
   els.roleCompositionSelfBiteInput.checked = state.selfBiteAllowed;
   els.roleCompositionNoBiteInput.checked = state.noBiteAllowed;
   renderRoleCompositionEditor();
@@ -1770,7 +1848,7 @@ function closeAllDialogs() {
 
 function createBoard(customName, tournamentId) {
   saveCurrentBoardSnapshot();
-  const selectedTournamentId = state.tournaments.some((tournament) => tournament.id === tournamentId)
+  const selectedTournamentId = getSelectableTournaments().some((tournament) => tournament.id === tournamentId)
     ? tournamentId
     : state.selectedTournamentId;
   const players = state.players.map((player) => {
@@ -1925,7 +2003,7 @@ function openMembershipDialog(playerId) {
   els.membershipPlayerName.textContent = player.name;
   els.membershipNameInput.value = player.name;
   els.deletePlayerBtn.hidden = player.name === PRIORITY_PLAYER_NAME;
-  els.membershipOptions.innerHTML = state.tournaments
+  els.membershipOptions.innerHTML = getSelectableTournaments()
     .map(
       (tournament) => `
         <label class="membership-option">
@@ -1956,7 +2034,8 @@ function saveMemberships() {
   const selectedIds = Array.from(els.membershipOptions.querySelectorAll('input[type="checkbox"]:checked')).map(
     (input) => input.value,
   );
-  player.tournamentIds = selectedIds;
+  const deletedIds = player.tournamentIds.filter((id) => state.tournaments.some((tournament) => tournament.id === id && tournament.deleted));
+  player.tournamentIds = [...new Set([...selectedIds, ...deletedIds])];
   selectedIds.forEach((tournamentId) => {
     if (!Object.hasOwn(player.participationByTournament, tournamentId)) player.participationByTournament[tournamentId] = true;
   });
@@ -3945,9 +4024,10 @@ function renderActiveView() {
 
 function renderMatchMeta() {
   els.tournamentSelect.innerHTML = state.tournaments
+    .filter((tournament) => !tournament.deleted || tournament.id === state.selectedTournamentId)
     .map(
       (tournament) =>
-        `<option value="${escapeHtml(tournament.id)}" ${tournament.id === state.selectedTournamentId ? "selected" : ""}>${escapeHtml(tournament.name)}</option>`,
+        `<option value="${escapeHtml(tournament.id)}" ${tournament.id === state.selectedTournamentId ? "selected" : ""} ${tournament.deleted ? "disabled" : ""}>${escapeHtml(tournament.name)}${tournament.deleted ? "（削除済み）" : ""}</option>`,
     )
     .join("");
   els.eventDateInput.value = state.eventDate;
@@ -3992,6 +4072,7 @@ function renderGameLifecycle() {
     els.tournamentSelect,
     els.addTournamentBtn,
     els.renameTournamentBtn,
+    els.deleteTournamentBtn,
     els.boardCustomNameInput,
     els.eventDateInput,
     els.openDatePickerBtn,
@@ -4006,6 +4087,10 @@ function renderGameLifecycle() {
   ].forEach((element) => {
     element.disabled = inProgress || finished;
   });
+  if (getSelectedTournament()?.deleted) {
+    els.renameTournamentBtn.disabled = true;
+    els.deleteTournamentBtn.disabled = true;
+  }
   document.querySelectorAll("[data-roster-filter]").forEach((button) => {
     button.disabled = inProgress || finished;
   });
@@ -7031,7 +7116,10 @@ function isPlayerInSelectedTournament(player) {
 
 function getRosterPlayers() {
   if (state.rosterFilter === "all") return state.players;
-  if (state.rosterFilter === "unassigned") return state.players.filter((player) => player.tournamentIds.length === 0);
+  if (state.rosterFilter === "unassigned") {
+    const selectableIds = new Set(getSelectableTournaments().map((tournament) => tournament.id));
+    return state.players.filter((player) => !player.tournamentIds.some((id) => selectableIds.has(id)));
+  }
   return getSelectedTournamentPlayers();
 }
 
@@ -7859,7 +7947,9 @@ function getRoleOptionsHtml(selectedRole = "", eventName = state.eventName, role
 
 function isRoleAvailableForEvent(role, eventName, selectedRole = "") {
   if (!EVENT_SCOPED_ROLES.has(role)) return true;
-  return normalizeEventName(eventName) === EVENT_SCOPED_ROLE_EVENT_NAME || role === selectedRole;
+  return normalizeEventName(eventName) === EVENT_SCOPED_ROLE_EVENT_NAME ||
+    state.tournaments.some((tournament) => tournament.name === normalizeEventName(eventName) && tournament.roleCatalog === "bou-koku") ||
+    role === selectedRole;
 }
 
 function getStatusOptionsHtml(selectedStatus) {
@@ -9124,6 +9214,10 @@ function applySavedState(saved) {
     ? saved.customImpressionReasons.map(normalizeImpressionReason).filter((reason) => reason?.custom)
     : [];
   state.roleSets = Array.isArray(saved.roleSets) ? saved.roleSets.map(normalizeRoleSet).filter(Boolean) : [];
+  state.builtinRoleSetOverrides = Array.isArray(saved.builtinRoleSetOverrides)
+    ? saved.builtinRoleSetOverrides.map(normalizeBuiltinRoleSetOverride).filter(Boolean)
+    : [];
+  state.bouKokuCatalogInitialized = saved.bouKokuCatalogInitialized === true;
   state.gameStatus = ["in_progress", "finished"].includes(saved.gameStatus) ? saved.gameStatus : "preparing";
   state.winner = state.gameStatus === "finished" ? normalizeCitizenText(saved.winner || "") : "";
   state.startedAt = state.gameStatus !== "preparing" ? String(saved.startedAt || "") : "";
@@ -9286,7 +9380,7 @@ function renderBoardSwitcher() {
 function renderBoardManager() {
   saveCurrentBoardSnapshot();
   const workingBoards = getWorkingBoards();
-  els.newBoardTournamentSelect.innerHTML = state.tournaments
+  els.newBoardTournamentSelect.innerHTML = getSelectableTournaments()
     .map(
       (tournament) =>
         `<option value="${escapeHtml(tournament.id)}" ${tournament.id === state.selectedTournamentId ? "selected" : ""}>${escapeHtml(tournament.name)}</option>`,
@@ -9444,6 +9538,8 @@ function resetStateToDefaults() {
     gameHistories: [],
     customImpressionReasons: [],
     roleSets: [],
+    builtinRoleSetOverrides: [],
+    bouKokuCatalogInitialized: false,
     boards: [],
   });
   activeBoardId = "";
@@ -9644,8 +9740,14 @@ function ensureMatchDefaults() {
     state.tournaments = [tournament];
     state.selectedTournamentId = tournament.id;
   }
-  if (!state.tournaments.some((tournament) => tournament.name === EVENT_SCOPED_ROLE_EVENT_NAME)) {
-    state.tournaments.push({ id: crypto.randomUUID(), name: EVENT_SCOPED_ROLE_EVENT_NAME });
+  if (!state.bouKokuCatalogInitialized) {
+    let catalogTournament = state.tournaments.find((tournament) => tournament.name === EVENT_SCOPED_ROLE_EVENT_NAME || tournament.roleCatalog === "bou-koku");
+    if (!catalogTournament) {
+      catalogTournament = { id: crypto.randomUUID(), name: EVENT_SCOPED_ROLE_EVENT_NAME };
+      state.tournaments.push(catalogTournament);
+    }
+    catalogTournament.roleCatalog = "bou-koku";
+    state.bouKokuCatalogInitialized = true;
   }
   if (!state.tournaments.some((tournament) => tournament.id === state.selectedTournamentId)) {
     state.selectedTournamentId = state.tournaments[0].id;
@@ -9840,7 +9942,20 @@ function normalizeRosterFilter(value) {
 
 function normalizeTournament(tournament) {
   if (!tournament?.id || !String(tournament.name || "").trim()) return null;
-  return { id: String(tournament.id), name: String(tournament.name).trim() };
+  return {
+    id: String(tournament.id),
+    name: String(tournament.name).trim(),
+    deleted: tournament.deleted === true,
+    roleCatalog: tournament.roleCatalog === "bou-koku" || String(tournament.name).trim() === EVENT_SCOPED_ROLE_EVENT_NAME ? "bou-koku" : "",
+  };
+}
+
+function normalizeBuiltinRoleSetOverride(override) {
+  if (!override?.id || typeof override.id !== "string") return null;
+  const normalized = { id: override.id, deleted: override.deleted === true };
+  const name = String(override.name || "").trim().slice(0, 40);
+  if (name) normalized.name = name;
+  return normalized;
 }
 
 function getTodayDateString() {

@@ -22,12 +22,21 @@ const watchdog = setTimeout(() => { console.error("UI verification timed out"); 
   try {
     browser = await chromium.launch({ headless: true, executablePath: "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" });
     const context = await browser.newContext();
+    await context.route("https://cdn.jsdelivr.net/**", (route) => route.fulfill({ contentType: "text/javascript", body: "" }));
+    const warmup = await context.newPage();
+    await warmup.goto(`http://127.0.0.1:${server.address().port}/`);
+    await warmup.evaluate(() => navigator.serviceWorker.ready);
+    await warmup.close();
     const page = await context.newPage();
     page.setDefaultTimeout(10000);
-    page.on("dialog", (dialog) => dialog.accept());
+    let promptAnswer;
+    page.on("dialog", (dialog) => {
+      const answer = promptAnswer;
+      promptAnswer = undefined;
+      return dialog.accept(answer);
+    });
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
-    await page.route("https://cdn.jsdelivr.net/**", (route) => route.fulfill({ contentType: "text/javascript", body: "" }));
     await page.goto(`http://127.0.0.1:${server.address().port}/`);
     await page.locator("#tournamentSelect").selectOption({ label: "亡国の人狼会" });
     assert.equal(await page.locator("#roleSetSelect option").count(), 93);
@@ -39,7 +48,7 @@ const watchdog = setTimeout(() => { console.error("UI verification timed out"); 
     assert.match(await page.locator("#roleCompositionSummary").innerText(), /9 \/ 9人/);
     await page.locator("#editRoleCompositionBtn").click();
     assert.equal(await page.locator("#roleSetNameInput").inputValue(), "9A（騎士）");
-    assert.equal(await page.locator("#deleteRoleSetBtn").isVisible(), false);
+    assert.equal(await page.locator("#deleteRoleSetBtn").isVisible(), true);
     assert.equal(await page.locator("#saveRoleSetBtn").isVisible(), false);
     await page.locator("#roleSetNameInput").fill("検証用9A");
     await page.locator("#saveNewRoleSetBtn").click();
@@ -68,8 +77,59 @@ const watchdog = setTimeout(() => { console.error("UI verification timed out"); 
     await page.reload();
     assert.equal(await page.locator("#roleSetSelect option").count(), 94);
     assert.equal(await page.locator("#roleSetSelect option:checked").innerText(), "亡国の人狼会 / 14A");
+    await context.setOffline(false);
+    await page.locator("#editRoleCompositionBtn").click();
+    await page.locator("#roleSetNameInput").fill("14A 改名テスト");
+    await page.locator("#renameRoleSetBtn").click();
+    await page.locator("#closeRoleCompositionBtn").click();
+    await page.evaluate(() => stateWriteQueue);
+    await page.reload();
+    assert.equal(await page.locator("#roleSetSelect option:checked").innerText(), "亡国の人狼会 / 14A 改名テスト");
+    assert.match(await page.locator("#roleCompositionSummary").innerText(), /15 \/ 9人/);
+    await page.locator("#editRoleCompositionBtn").click();
+    await page.locator("#deleteRoleSetBtn").click();
+    await page.locator("#closeRoleCompositionBtn").click();
+    await page.evaluate(() => stateWriteQueue);
+    await page.reload();
+    assert.equal(await page.locator("#roleSetSelect option").count(), 93);
+    assert.equal((await page.locator("#roleSetSelect option").allTextContents()).some((name) => name.includes("14A")), false);
+    assert.match(await page.locator("#roleCompositionSummary").innerText(), /15 \/ 9人/);
+    promptAnswer = "亡国大会・変更後";
+    await page.locator("#renameTournamentBtn").click();
+    await page.evaluate(() => stateWriteQueue);
+    await page.reload();
+    assert.equal(await page.locator("#tournamentSelect option:checked").innerText(), "亡国大会・変更後");
+    assert.equal(await page.locator("#roleSetSelect option").count(), 93);
+    assert.equal((await page.locator("#tournamentSelect option").allTextContents()).includes("亡国の人狼会"), false);
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      const bounds = await page.locator("#deleteTournamentBtn").boundingBox();
+      assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= width);
+      await page.locator("#editRoleCompositionBtn").click();
+      const renameBounds = await page.locator("#roleSetNameInput").boundingBox();
+      assert.ok(renameBounds && renameBounds.x >= 0 && renameBounds.x + renameBounds.width <= width);
+      await page.screenshot({ path: path.join(os.tmpdir(), `catalog-management-${width}.png`) });
+      await page.locator("#closeRoleCompositionBtn").click();
+    }
+    const original = await page.evaluate(() => ({ boardId: activeBoardId, tournamentId: state.selectedTournamentId, composition: JSON.stringify(state.roleComposition), players: state.players.length }));
+    await page.locator("#deleteTournamentBtn").click();
+    await page.evaluate(() => stateWriteQueue);
+    await page.reload();
+    assert.equal((await page.locator("#tournamentSelect option").allTextContents()).includes("亡国大会・変更後"), false);
+    const preserved = await page.evaluate((original) => ({
+      composition: JSON.stringify(state.boards.find((board) => board.id === original.boardId)?.payload.roleComposition),
+      players: state.players.length,
+      deleted: state.tournaments.find((tournament) => tournament.id === original.tournamentId)?.deleted,
+    }), original);
+    assert.equal(preserved.composition, original.composition);
+    assert.equal(preserved.players, original.players);
+    assert.equal(preserved.deleted, true);
+    await page.locator("#boardSwitcherBtn").click();
+    await page.locator(`[data-board-id="${original.boardId}"]`).click();
+    assert.match(await page.locator("#tournamentSelect option:checked").innerText(), /亡国大会・変更後（削除済み）/);
+    assert.match(await page.locator("#roleCompositionSummary").innerText(), /15 \/ 9人/);
     assert.equal(errors.length, 0, errors.join(" | "));
-    console.log("PASS: built-in selection, application, custom save/reload, half-wolf, source warning, desktop/mobile, offline");
+    console.log("PASS: selection, custom save, desktop/mobile, offline, rename/delete persistence, tournament rename, preserved archived board and roster");
   } finally {
     if (browser) await browser.close();
     await new Promise((resolve) => server.close(resolve));

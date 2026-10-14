@@ -405,7 +405,7 @@ textarea:focus {
 
 .tournament-controls {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -415,6 +415,16 @@ textarea:focus {
 
 .tournament-controls .secondary-button {
   padding-inline: 10px;
+}
+
+.regulation-name-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.regulation-name-controls input {
+  min-width: 0;
 }
 
 .role-composition-field {
