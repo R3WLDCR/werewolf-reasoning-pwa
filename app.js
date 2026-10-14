@@ -6,9 +6,10 @@ const STATE_DB_NAME = "werewolf-reasoning-note";
 const STATE_DB_VERSION = 1;
 const STATE_STORE_NAME = "app-state";
 const STATE_RECORD_KEY = "current";
-const APP_VERSION = "1.268";
+const APP_VERSION = "1.269";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
+  ...Object.fromEntries(Object.entries(BOUKOKU_ROLE_DEFINITIONS).map(([role, definition]) => [role, definition.label])),
   seer: "預言者",
   medium: "霊媒師",
   guard: "ボディガード",
@@ -61,14 +62,17 @@ const RIVAL_PERSPECTIVE_VALUES = new Set(["wolfSide", "werewolf", "madman"]);
 const SELF_RIVAL_GUESS_ROLES = new Set(["seer", "medium", "guard", "hunter", "nekomata"]);
 const GIDORA_CANDIDATE_ROLES = ["seer", "medium", "guard", "hunter", "nekomata"];
 const DEFAULT_GIDORA_ROLES = ["nekomata", "guard"];
-const ADDITIONAL_VILLAGER_ROLES = ["sister", "executioner", "musician", "wanderer", "mason"];
-const ADDITIONAL_WEREWOLF_ROLES = ["oldWoman", "halfWerewolf", "loneWolf", "alice", "cheshireCat", "phantom"];
-const ADDITIONAL_THIRD_ROLES = ["satan", "hunterB", "angel", "devil", "hangingWitch"];
+const BOUKOKU_ROLES_BY_CAMP = (camp) => Object.keys(BOUKOKU_ROLE_DEFINITIONS).filter((role) => BOUKOKU_ROLE_DEFINITIONS[role].camp === camp);
+const ADDITIONAL_VILLAGER_ROLES = ["sister", "executioner", "musician", "wanderer", "mason", ...BOUKOKU_ROLES_BY_CAMP("villager")];
+const ADDITIONAL_WEREWOLF_ROLES = ["oldWoman", "halfWerewolf", "loneWolf", "alice", "cheshireCat", "phantom", ...BOUKOKU_ROLES_BY_CAMP("werewolf")];
+const ADDITIONAL_THIRD_ROLES = ["satan", "hunterB", "angel", "devil", "hangingWitch", ...BOUKOKU_ROLES_BY_CAMP("third")];
+const ADDITIONAL_UNAFFILIATED_ROLES = BOUKOKU_ROLES_BY_CAMP("other");
 const EVENT_SCOPED_ROLE_EVENT_NAME = "亡国の人狼会";
 const EVENT_SCOPED_ROLES = new Set([
   ...ADDITIONAL_VILLAGER_ROLES,
   ...ADDITIONAL_WEREWOLF_ROLES,
   ...ADDITIONAL_THIRD_ROLES,
+  ...ADDITIONAL_UNAFFILIATED_ROLES,
   "hunterA",
 ]);
 const ROLE_COMPOSITION_CAMPS = [
@@ -103,7 +107,7 @@ const ROLE_COMPOSITION_CAMPS = [
   {
     key: "third",
     label: "第三陣営・その他",
-    roles: ["fox", "teruteru", "satan", "hunterA", "hunterB", "angel", "devil", "hangingWitch", "other"],
+    roles: ["fox", "teruteru", "hunterA", ...ADDITIONAL_THIRD_ROLES, ...ADDITIONAL_UNAFFILIATED_ROLES, "other"],
   },
 ];
 const ROLE_COMPOSITION_ROLES = new Set(ROLE_COMPOSITION_CAMPS.flatMap((camp) => camp.roles));
@@ -210,6 +214,7 @@ const STANDARD_IMPRESSION_REASONS = [
   { id: "standard-werewolf-not-listening", label: "話を聞いてない", side: "werewolf", custom: false },
 ];
 const ROLE_GUESS_LABELS = {
+  ...Object.fromEntries(Object.entries(BOUKOKU_ROLE_DEFINITIONS).map(([role, definition]) => [role, definition.label])),
   unknown: "不明",
   seer: "預言者",
   medium: "霊媒師",
@@ -265,6 +270,7 @@ const ROLE_GUESS_CAMPS = {
     { value: "musician", label: "音楽家" },
     { value: "wanderer", label: "風来坊" },
     { value: "mason", label: "共有者" },
+    ...BOUKOKU_ROLES_BY_CAMP("villager").map((value) => ({ value, label: ROLE_LABELS[value] })),
     { value: "confirmedWhite", label: "確定白" },
   ],
   werewolf: [
@@ -279,6 +285,7 @@ const ROLE_GUESS_CAMPS = {
     { value: "alice", label: "アリス" },
     { value: "cheshireCat", label: "チシャ猫" },
     { value: "phantom", label: "怪人" },
+    ...BOUKOKU_ROLES_BY_CAMP("werewolf").map((value) => ({ value, label: ROLE_LABELS[value] })),
   ],
   third: [
     { value: "fox", label: "妖狐" },
@@ -289,6 +296,7 @@ const ROLE_GUESS_CAMPS = {
     { value: "angel", label: "天使" },
     { value: "devil", label: "悪魔" },
     { value: "hangingWitch", label: "吊り逃れの魔女" },
+    ...[...BOUKOKU_ROLES_BY_CAMP("third"), ...ADDITIONAL_UNAFFILIATED_ROLES].map((value) => ({ value, label: ROLE_LABELS[value] })),
     { value: "unknown", label: "不明" },
     { value: "other", label: "その他" },
   ],
@@ -478,6 +486,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     "closeRoleCompositionBtn",
     "roleSetNameInput",
     "roleSetTournamentInput",
+    "roleSetNote",
+    "roleSetSetupNote",
     "roleCompositionSelfBiteInput",
     "roleCompositionNoBiteInput",
     "roleCompositionEditor",
@@ -1097,8 +1107,30 @@ function getRoleCompositionLabel(composition = state.roleComposition) {
   return labels.length ? labels.join(" / ") : "未設定";
 }
 
+function getAllRoleSets() {
+  const presets = state.tournaments
+    .filter((tournament) => tournament.name === EVENT_SCOPED_ROLE_EVENT_NAME)
+    .flatMap((tournament) => BOUKOKU_REGULATIONS.map((preset) => ({
+      id: `bou-koku-20260926-${tournament.id}-${preset.code}`,
+      name: preset.code,
+      tournamentId: tournament.id,
+      composition: preset.composition,
+      selfBiteAllowed: false,
+      noBiteAllowed: false,
+      note: [`レギュレーションブック ver.20260926 / ${preset.page}ページ`, preset.note].filter(Boolean).join("。"),
+      wolfCount: preset.wolfCount,
+      builtin: true,
+    })))
+    .filter((preset) => !state.roleSets.some((saved) => saved.tournamentId === preset.tournamentId && saved.name === preset.name));
+  return [...state.roleSets, ...presets];
+}
+
+function findRoleSet(id) {
+  return getAllRoleSets().find((roleSet) => roleSet.id === id);
+}
+
 function getVisibleRoleSets() {
-  return state.roleSets.filter(
+  return getAllRoleSets().filter(
     (roleSet) => !roleSet.tournamentId || roleSet.tournamentId === state.selectedTournamentId,
   );
 }
@@ -1115,9 +1147,11 @@ function openRoleCompositionDialog() {
     roleCompositionDraft.werewolf = normalizeWolfCount(state.wolfCount);
   }
   editingRoleSetId = state.selectedRoleSetId;
-  const selectedSet = state.roleSets.find((roleSet) => roleSet.id === editingRoleSetId);
+  const selectedSet = findRoleSet(editingRoleSetId);
   els.roleSetTournamentInput.value = getSelectedTournament()?.name || state.eventName || "共通";
   els.roleSetNameInput.value = selectedSet?.name || "";
+  els.roleSetNote.textContent = selectedSet?.note || "";
+  els.roleSetNote.hidden = !selectedSet?.note;
   els.roleCompositionSelfBiteInput.checked = selectedSet ? selectedSet.selfBiteAllowed === true : state.selfBiteAllowed;
   els.roleCompositionNoBiteInput.checked = selectedSet ? selectedSet.noBiteAllowed === true : state.noBiteAllowed;
   const attackRecorded = hasRecordedAttack();
@@ -1163,8 +1197,9 @@ function renderRoleCompositionEditor() {
   els.roleCompositionTotal.textContent = `${total} / ${activeCount}人`;
   els.roleCompositionTotal.classList.toggle("mismatch", total !== activeCount);
   els.fillRoleCompositionVillagersBtn.disabled = total >= activeCount;
-  els.saveRoleSetBtn.hidden = !editingRoleSetId;
-  els.deleteRoleSetBtn.hidden = !editingRoleSetId;
+  const editableSet = findRoleSet(editingRoleSetId);
+  els.saveRoleSetBtn.hidden = !editingRoleSetId || editableSet?.builtin;
+  els.deleteRoleSetBtn.hidden = !editingRoleSetId || editableSet?.builtin;
   els.roleCompositionError.hidden = true;
 }
 
@@ -1182,9 +1217,9 @@ function validateRoleComposition(composition = roleCompositionDraft) {
   const messages = [];
   if (!activeCount) messages.push("参加者を1人以上選んでください");
   if (total !== activeCount) messages.push(`参加者${activeCount}人に対して、使用役職は${total}人分です`);
-  if (!normalized.werewolf) messages.push("人狼を1人以上設定してください");
-  if ((normalized.werewolf || 0) > 4) messages.push("人狼は4人まで設定できます");
-  if ((normalized.werewolf || 0) >= activeCount && activeCount) messages.push("人狼数は参加者数より少なくしてください");
+  const wolfCount = getRoleCompositionWolfCount(normalized, findRoleSet(editingRoleSetId));
+  if (!wolfCount) messages.push("人狼または人狼属性の役職を1人以上設定してください");
+  if (wolfCount >= activeCount && activeCount) messages.push("人狼数は参加者数より少なくしてください");
   return { valid: messages.length === 0, messages, normalized };
 }
 
@@ -1199,12 +1234,12 @@ function applyRoleCompositionDraft() {
   const validation = validateRoleComposition();
   if (!validation.valid) return showRoleCompositionError(validation.messages);
   state.roleComposition = validation.normalized;
-  state.wolfCount = normalizeWolfCount(validation.normalized.werewolf);
+  state.wolfCount = normalizeWolfCount(getRoleCompositionWolfCount(validation.normalized, findRoleSet(editingRoleSetId)));
   if (!hasRecordedAttack()) {
     state.selfBiteAllowed = els.roleCompositionSelfBiteInput.checked;
     state.noBiteAllowed = els.roleCompositionNoBiteInput.checked;
   }
-  const selectedSet = state.roleSets.find((roleSet) => roleSet.id === editingRoleSetId);
+  const selectedSet = findRoleSet(editingRoleSetId);
   state.selectedRoleSetId = selectedSet && areRoleSetsEqual(selectedSet, validation.normalized, state.selfBiteAllowed, state.noBiteAllowed)
     ? selectedSet.id
     : "";
@@ -1244,18 +1279,23 @@ function saveRoleSetFromDraft({ overwrite }) {
   if (duplicateName) return showRoleCompositionError(["この大会には同じレギュ名の配役セットがすでにあります"]);
   const selfBiteAllowed = els.roleCompositionSelfBiteInput.checked;
   const noBiteAllowed = els.roleCompositionNoBiteInput.checked;
+  const sourceSet = findRoleSet(editingRoleSetId);
+  const draftWolfCount = getRoleCompositionWolfCount(validation.normalized, sourceSet);
   if (existing) {
     existing.name = name;
     existing.composition = validation.normalized;
     existing.tournamentId = state.selectedTournamentId;
     existing.selfBiteAllowed = selfBiteAllowed;
     existing.noBiteAllowed = noBiteAllowed;
+    existing.wolfCount = draftWolfCount;
     existing.updatedAt = new Date().toISOString();
   } else {
     editingRoleSetId = crypto.randomUUID();
     state.roleSets.push({
       id: editingRoleSetId,
       name,
+      note: sourceSet?.note || "",
+      wolfCount: draftWolfCount,
       tournamentId: state.selectedTournamentId,
       composition: validation.normalized,
       selfBiteAllowed,
@@ -1264,7 +1304,7 @@ function saveRoleSetFromDraft({ overwrite }) {
     });
   }
   state.roleComposition = validation.normalized;
-  state.wolfCount = normalizeWolfCount(validation.normalized.werewolf);
+  state.wolfCount = normalizeWolfCount(getRoleCompositionWolfCount(validation.normalized, findRoleSet(editingRoleSetId)));
   if (!hasRecordedAttack()) {
     state.selfBiteAllowed = selfBiteAllowed;
     state.noBiteAllowed = noBiteAllowed;
@@ -1291,7 +1331,7 @@ function deleteEditingRoleSet() {
 
 function applyRoleSet(roleSetId) {
   if (!roleSetId || isGameLocked()) return render();
-  const roleSet = state.roleSets.find((item) => item.id === roleSetId);
+  const roleSet = findRoleSet(roleSetId);
   if (!roleSet) return render();
   state.roleComposition = normalizeRoleComposition(roleSet.composition);
   state.selectedRoleSetId = roleSet.id;
@@ -1299,7 +1339,7 @@ function applyRoleSet(roleSetId) {
     state.selfBiteAllowed = roleSet.selfBiteAllowed === true;
     state.noBiteAllowed = roleSet.noBiteAllowed === true;
   }
-  if (state.roleComposition.werewolf) state.wolfCount = normalizeWolfCount(state.roleComposition.werewolf);
+  state.wolfCount = normalizeWolfCount(getRoleCompositionWolfCount(state.roleComposition, roleSet));
   renderAndStore();
   const total = getRoleCompositionTotal(state.roleComposition);
   const activeCount = getActivePlayers().length;
@@ -1573,7 +1613,7 @@ function createGameHistory(winner, trueRoles = new Map()) {
     gameNumber: state.gameNumber,
     wolfCount: state.wolfCount,
     roleComposition: structuredClone(state.roleComposition),
-    roleSetName: state.roleSets.find((roleSet) => roleSet.id === state.selectedRoleSetId)?.name || "",
+    roleSetName: findRoleSet(state.selectedRoleSetId)?.name || "",
     selfBiteAllowed: state.selfBiteAllowed,
     noBiteAllowed: state.noBiteAllowed,
     wolfModeActive: state.wolfModeActive,
@@ -2570,6 +2610,7 @@ function getRoleGuessClass(value) {
   if (value === "werewolf") return "role-werewolf";
   if (value === "resultVillager") return "role-villager";
   if (value === "unknown") return "role-unknown";
+  if (BOUKOKU_ROLE_DEFINITIONS[value]) return `role-${value} role-regulation-${BOUKOKU_ROLE_DEFINITIONS[value].camp}`;
   return Object.hasOwn(ROLE_LABELS, value) ? `role-${value}` : "role-unknown";
 }
 
@@ -3847,6 +3888,9 @@ function renderRoleCompositionSetup() {
     ),
   ].join("");
   if (!selectedExists) els.roleSetSelect.value = "";
+  const selectedSet = findRoleSet(state.selectedRoleSetId);
+  els.roleSetSetupNote.textContent = selectedSet?.note || "";
+  els.roleSetSetupNote.hidden = !selectedSet?.note;
   const total = getRoleCompositionTotal(state.roleComposition);
   const activeCount = getActivePlayers().length;
   els.roleCompositionSummary.innerHTML = total
@@ -6908,6 +6952,7 @@ function getAutoVillagerClass(player) {
 }
 
 function getRoleClass(player) {
+  if (BOUKOKU_ROLE_DEFINITIONS[player.role]) return getRoleGuessClass(player.role);
   return player.role && Object.hasOwn(ROLE_LABELS, player.role) ? `role-${player.role}` : "role-claim";
 }
 
@@ -9040,9 +9085,6 @@ function applySavedState(saved) {
   state.selectedTournamentId = String(saved.selectedTournamentId || "");
   state.wolfCount = normalizeWolfCount(saved.wolfCount);
   state.roleComposition = normalizeRoleComposition(saved.roleComposition);
-  if (state.roleComposition?.werewolf) {
-    state.wolfCount = normalizeWolfCount(state.roleComposition.werewolf);
-  }
   state.selectedRoleSetId = String(saved.selectedRoleSetId || "");
   state.selfBiteAllowed = saved.selfBiteAllowed === true;
   state.noBiteAllowed = saved.noBiteAllowed === true;
@@ -9602,6 +9644,9 @@ function ensureMatchDefaults() {
     state.tournaments = [tournament];
     state.selectedTournamentId = tournament.id;
   }
+  if (!state.tournaments.some((tournament) => tournament.name === EVENT_SCOPED_ROLE_EVENT_NAME)) {
+    state.tournaments.push({ id: crypto.randomUUID(), name: EVENT_SCOPED_ROLE_EVENT_NAME });
+  }
   if (!state.tournaments.some((tournament) => tournament.id === state.selectedTournamentId)) {
     state.selectedTournamentId = state.tournaments[0].id;
   }
@@ -9612,11 +9657,14 @@ function ensureMatchDefaults() {
   state.roleComposition = normalizeRoleComposition(state.roleComposition);
   state.selfBiteAllowed = state.selfBiteAllowed === true;
   state.noBiteAllowed = state.noBiteAllowed === true;
-  const selectedRoleSet = state.roleSets.find((roleSet) => roleSet.id === state.selectedRoleSetId);
+  const selectedRoleSet = findRoleSet(state.selectedRoleSetId);
   state.selectedRoleSetId =
     selectedRoleSet && areRoleSetsEqual(selectedRoleSet, state.roleComposition, state.selfBiteAllowed, state.noBiteAllowed)
       ? selectedRoleSet.id
       : "";
+  if (getRoleCompositionTotal(state.roleComposition)) {
+    state.wolfCount = normalizeWolfCount(getRoleCompositionWolfCount(state.roleComposition, selectedRoleSet));
+  }
   state.playerRelations = normalizePlayerRelations(state.playerRelations, state.players);
   state.winner = state.gameStatus === "finished" ? normalizeCitizenText(state.winner || "") : "";
   state.activeView = normalizeActiveView(state.activeView);
@@ -9687,7 +9735,7 @@ function backfillRoleClaimOrders(players) {
 
 function normalizeWolfCount(value) {
   const count = Number(value);
-  return Number.isFinite(count) ? Math.min(4, Math.max(1, Math.trunc(count))) : 2;
+  return Number.isFinite(count) ? Math.min(99, Math.max(1, Math.trunc(count))) : 2;
 }
 
 function normalizeRoleComposition(composition) {
@@ -9698,6 +9746,13 @@ function normalizeRoleComposition(composition) {
       .map(([role, count]) => [role, Math.max(0, Math.min(99, Math.trunc(Number(count) || 0)))])
       .filter(([, count]) => count > 0),
   );
+}
+
+function getRoleCompositionWolfCount(composition, roleSet) {
+  if (roleSet?.wolfCount && areRoleCompositionsEqual(roleSet.composition, composition)) return Number(roleSet.wolfCount);
+  const wolfRoles = ["werewolf", "halfWerewolf", "loneWolf", "regLongLifeWolf", "regWolfMan", "regWolfSwordsman", "regOneEyedWolf", "regDoubleWolf", "regWolfGirlA"];
+  const count = wolfRoles.reduce((total, role) => total + (Number(composition[role]) || 0), 0);
+  return count || (composition.regBoss ? 2 : composition.regController ? 1 : 0);
 }
 
 function isRoleAvailableForComposition(role, composition = state.roleComposition, selectedRole = "") {
@@ -9722,6 +9777,8 @@ function normalizeRoleSet(roleSet) {
   return {
     id: String(roleSet.id),
     name: String(roleSet.name).trim().slice(0, 40),
+    note: String(roleSet.note || "").trim().slice(0, 400),
+    wolfCount: Number(roleSet.wolfCount) >= 1 && Number(roleSet.wolfCount) <= 99 ? Math.trunc(Number(roleSet.wolfCount)) : undefined,
     tournamentId: String(roleSet.tournamentId || ""),
     composition,
     selfBiteAllowed: roleSet.selfBiteAllowed === true,
@@ -9888,9 +9945,9 @@ function normalizePlayer(player) {
       : "auto",
     blackTargetFixedRank:
       player.blackTargetPreference === "fixed"
-        ? Math.max(1, Math.min(4, Number(player.blackTargetFixedRank) || 1))
+        ? Math.max(1, Math.min(99, Number(player.blackTargetFixedRank) || 1))
         : 0,
-    blackTargetRank: Math.max(0, Math.min(4, Number(player.blackTargetRank) || 0)),
+    blackTargetRank: Math.max(0, Math.min(99, Number(player.blackTargetRank) || 0)),
     autoSelfRivalWolfSide: attackedWolfSideConfirmedMadman ? false : player.autoSelfRivalWolfSide === true,
     autoFullOutsiderVillager:
       attackedWolfSideConfirmedMadman ? false : player.autoFullOutsiderVillager === true,

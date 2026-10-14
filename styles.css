@@ -1159,6 +1159,34 @@ button.role-guess-label {
   color: #d4dedc;
 }
 
+.role-regulation-villager {
+  background: #173d38;
+  color: #9be8d2;
+}
+
+.role-regulation-werewolf {
+  background: #512028;
+  color: #ffadb5;
+}
+
+.role-regulation-third {
+  background: #3d2b55;
+  color: #dfc2ff;
+}
+
+.role-regulation-other {
+  background: #273233;
+  color: #d4dedc;
+}
+
+.regulation-note {
+  margin: 0;
+  color: #b9c8c9;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
 .role-werewolf {
   background: #5a1f27;
   color: #ff9aa5;

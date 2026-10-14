@@ -4,6 +4,30 @@ iPhone SafariとPCブラウザで使える、人狼の推理補助PWAです。�
 
 推理ロジックの基準と変更時の確認範囲は[`GAME_RULES.md`](GAME_RULES.md)にまとめています。
 
+## 亡国の標準配役
+
+参加者タブで大会を`亡国の人狼会`に切り替えると、レギュレーションブック
+ver.20260926の6人〜18人向け全92パターンを配役選択欄から選べます。
+配役を選ぶと今回の盤面へ適用されます。初期カードの構成を登録しており、
+開始前の変身や特殊能力は自動処理しません。人数不一致の原文には注記を表示します。
+
+`配役を編集`で調整し、`新規セット保存`を押すと自作セットとして保存できます。
+同じ大会・同じレギュ名では自作セットが標準配役より優先されます。
+標準データは`bou-koku-regulations.js`で管理します。
+
+配役データの検証:
+
+```powershell
+node tools/check-bou-koku-regulations.cjs
+```
+
+PlaywrightとChromeを利用できるWindows環境では、以下で保存・再読み込み・
+PC/iPhone幅・オフライン利用を一時データで検証できます。
+
+```powershell
+node tools/verify-bou-koku-ui.cjs
+```
+
 ## GitHub Pages
 
 公開URL:

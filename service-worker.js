@@ -1,10 +1,11 @@
-const CACHE_NAME = "werewolf-reasoning-note-v1268";
-const ASSET_VERSION = "1.268";
+const CACHE_NAME = "werewolf-reasoning-note-v1269";
+const ASSET_VERSION = "1.269";
 const ASSETS = [
   "./",
   "./index.html",
   `./styles.css?v=${ASSET_VERSION}`,
   `./app.js?v=${ASSET_VERSION}`,
+  `./bou-koku-regulations.js?v=${ASSET_VERSION}`,
   `./sync-config.js?v=${ASSET_VERSION}`,
   "./manifest.json",
   `./icons/icon-180.png?v=${ASSET_VERSION}`,
@@ -32,7 +33,7 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
   const networkFirst =
     event.request.mode === "navigate" ||
-    ["/index.html", "/app.js", "/styles.css", "/sync-config.js", "/manifest.json"].some((path) =>
+    ["/index.html", "/app.js", "/bou-koku-regulations.js", "/styles.css", "/sync-config.js", "/manifest.json"].some((path) =>
       url.pathname.endsWith(path),
     );
   if (networkFirst) {
