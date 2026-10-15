@@ -22,9 +22,21 @@ vm.runInContext(`
     getBuiltinRoleSets, normalizeBuiltinRoleSetOverride, normalizeTournament,
     renameEditingRoleSet, deleteEditingRoleSet, renameSelectedTournament, deleteSelectedTournament,
     getSyncPayload, getSelectableTournaments, ensureMatchDefaults,
+    isRoleGuessSelectable, getHistoryRoleGuessOptionsHtml,
   };
 `, context);
 const api = context.api;
+const guessComposition = { werewolf: 2, seer: 1, villager: 6, sister: 1 };
+for (const role of ["werewolf", "seer", "villager", "sister", "unknown", "wolfSide", "confirmedWhite"]) {
+  assert.equal(api.isRoleGuessSelectable(role, guessComposition, "おさかなじんろう"), true, role);
+}
+for (const role of ["medium", "guard", "fox", "other", "madman"]) {
+  assert.equal(api.isRoleGuessSelectable(role, guessComposition, "亡国の人狼会", role), false, role);
+}
+assert.equal(api.isRoleGuessSelectable("sister", {}, "おさかなじんろう"), false);
+const historyGuessOptions = api.getHistoryRoleGuessOptionsHtml({ id: "test", roleGuessCandidates: ["medium"], primaryRoleGuess: "medium" }, "おさかなじんろう", guessComposition);
+assert.match(historyGuessOptions, /data-role-guess="sister"/);
+assert.doesNotMatch(historyGuessOptions, /data-role-guess="medium"/);
 assert.equal(api.presets.length, 92);
 assert.equal(new Set(api.presets.map((preset) => preset.code)).size, 92);
 const mismatches = new Map([

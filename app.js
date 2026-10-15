@@ -6,7 +6,7 @@ const STATE_DB_NAME = "werewolf-reasoning-note";
 const STATE_DB_VERSION = 1;
 const STATE_STORE_NAME = "app-state";
 const STATE_RECORD_KEY = "current";
-const APP_VERSION = "1.271";
+const APP_VERSION = "1.272";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   ...Object.fromEntries(Object.entries(BOUKOKU_ROLE_DEFINITIONS).map(([role, definition]) => [role, definition.label])),
@@ -2277,8 +2277,7 @@ function renderRoleGuessDialog(player) {
     list.filter(
       (item) =>
         (!editingWolfModeMember || WOLF_MODE_COVER_ROLES.has(item.value)) &&
-        isRoleGuessAvailableForComposition(item.value) &&
-        isRoleAvailableForEvent(item.value, state.eventName, selectedValue),
+        isRoleGuessSelectable(item.value, state.roleComposition, state.eventName, selectedValue),
     );
 
   const villagerOptions = filterCamp(ROLE_GUESS_CAMPS.villager);
@@ -7567,7 +7566,7 @@ function renderHistoryEditor(history) {
           <div class="history-role-guess-edit">
             <label class="field">
               <span>役職推理候補</span>
-              <div class="history-role-guess-options">${getHistoryRoleGuessOptionsHtml(player, history.eventName)}</div>
+              <div class="history-role-guess-options">${getHistoryRoleGuessOptionsHtml(player, history.eventName, history.roleComposition)}</div>
             </label>
             <label class="field">
               <span>本命役職</span>
@@ -7704,10 +7703,10 @@ function getHistoryImpressionOptionsHtml(player) {
     .join("");
 }
 
-function getHistoryRoleGuessOptionsHtml(player, eventName = "") {
+function getHistoryRoleGuessOptionsHtml(player, eventName = "", composition = {}) {
   const selected = getRoleGuessDisplay(player).value;
   return Object.entries(ROLE_GUESS_LABELS)
-    .filter(([value]) => isRoleAvailableForEvent(value, eventName, selected))
+    .filter(([value]) => isRoleGuessSelectable(value, composition, eventName, selected))
     .map(
       ([value, label]) => `
         <label class="history-role-guess-option ${getRoleGuessClass(value)}">
@@ -9869,6 +9868,12 @@ function isRoleAvailableForComposition(role, composition = state.roleComposition
 function isRoleGuessAvailableForComposition(role, composition = state.roleComposition) {
   const configuredRoles = new Set(Object.keys(normalizeRoleComposition(composition)));
   return !configuredRoles.size || ROLE_GUESS_HELPER_VALUES.has(role) || configuredRoles.has(role);
+}
+
+function isRoleGuessSelectable(role, composition, eventName, selectedRole = "") {
+  if (!isRoleGuessAvailableForComposition(role, composition)) return false;
+  if (getRoleCompositionTotal(composition) > 0) return true;
+  return isRoleAvailableForEvent(role, eventName, selectedRole);
 }
 
 function normalizeRoleSet(roleSet) {

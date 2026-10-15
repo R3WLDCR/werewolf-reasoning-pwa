@@ -46,6 +46,18 @@ const watchdog = setTimeout(() => { console.error("UI verification timed out"); 
       await page.locator("#addPlayerForm button[type=submit]").click();
     }
     assert.match(await page.locator("#roleCompositionSummary").innerText(), /9 \/ 9人/);
+    await page.evaluate(() => openRoleGuessDialog(state.players.find((player) => player.participating).id));
+    const guessValues = await page.locator('#roleGuessCandidateOptions input[type="radio"]').evaluateAll((inputs) => inputs.map((input) => input.value));
+    assert.deepEqual([...guessValues].sort(), ["villager", "seer", "guard", "werewolf", "regBigMan", "unknown", "wolfSide", "confirmedWhite"].sort());
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      const bounds = await page.locator("#roleGuessDialog").boundingBox();
+      assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= width);
+      const screenshot = path.join(os.tmpdir(), `role-guess-composition-${width}.png`);
+      await page.screenshot({ path: screenshot });
+      console.log(`Screenshot: ${screenshot}`);
+    }
+    await page.locator("#closeRoleGuessBtn").click();
     await page.locator("#editRoleCompositionBtn").click();
     assert.equal(await page.locator("#roleSetNameInput").inputValue(), "9A（騎士）");
     assert.equal(await page.locator("#deleteRoleSetBtn").isVisible(), true);
