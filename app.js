@@ -6,7 +6,7 @@ const STATE_DB_NAME = "werewolf-reasoning-note";
 const STATE_DB_VERSION = 1;
 const STATE_STORE_NAME = "app-state";
 const STATE_RECORD_KEY = "current";
-const APP_VERSION = "1.270";
+const APP_VERSION = "1.271";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   ...Object.fromEntries(Object.entries(BOUKOKU_ROLE_DEFINITIONS).map(([role, definition]) => [role, definition.label])),
@@ -1178,8 +1178,7 @@ function getVisibleRoleSets() {
 }
 
 function getRoleSetLabel(roleSet) {
-  const tournament = state.tournaments.find((item) => item.id === roleSet.tournamentId);
-  return `${tournament?.name || (roleSet.tournamentId ? "大会未登録" : "共通")} / ${roleSet.name}`;
+  return roleSet.name;
 }
 
 function openRoleCompositionDialog() {
