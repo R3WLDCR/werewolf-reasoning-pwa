@@ -91,6 +91,7 @@ vm.runInContext(`
   els.roleSetNote = { hidden: false };
   els.roleCompositionSelfBiteInput = { checked: false };
   els.roleCompositionNoBiteInput = { checked: false };
+  els.roleCompositionRunoffTieLimitInput = { value: "0" };
 `, context);
 api.state.roleComposition = { werewolf: 2, seer: 1, guard: 1, villager: 4, regBigMan: 1 };
 api.state.gameHistories = [{ id: "history", eventName: "亡国の人狼会", roleSetName: "6A", roleComposition: { werewolf: 1, villager: 3, madman: 1, wanderer: 1 } }];

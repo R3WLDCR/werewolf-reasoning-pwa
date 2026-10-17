@@ -6,7 +6,7 @@ const STATE_DB_NAME = "werewolf-reasoning-note";
 const STATE_DB_VERSION = 1;
 const STATE_STORE_NAME = "app-state";
 const STATE_RECORD_KEY = "current";
-const APP_VERSION = "1.272";
+const APP_VERSION = "1.273";
 const SYNC_DELAY_MS = 10000;
 const ROLE_LABELS = {
   ...Object.fromEntries(Object.entries(BOUKOKU_ROLE_DEFINITIONS).map(([role, definition]) => [role, definition.label])),
@@ -346,6 +346,7 @@ const BOARD_STATE_FIELDS = [
   "selectedRoleSetId",
   "selfBiteAllowed",
   "noBiteAllowed",
+  "runoffTieLimit",
   "wolfModeActive",
   "wolfModeCoverRole",
   "reasoningPerspective",
@@ -381,6 +382,7 @@ const state = {
   selectedRoleSetId: "",
   selfBiteAllowed: false,
   noBiteAllowed: false,
+  runoffTieLimit: 0,
   wolfModeActive: false,
   wolfModeCoverRole: "",
   reasoningPerspective: "seer",
@@ -494,6 +496,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     "roleSetSetupNote",
     "roleCompositionSelfBiteInput",
     "roleCompositionNoBiteInput",
+    "roleCompositionRunoffTieLimitInput",
     "roleCompositionEditor",
     "roleCompositionTotal",
     "fillRoleCompositionVillagersBtn",
@@ -1152,6 +1155,7 @@ function getBuiltinRoleSets() {
       composition: preset.composition,
       selfBiteAllowed: false,
       noBiteAllowed: false,
+      runoffTieLimit: 0,
       note: [`レギュレーションブック ver.20260926 / ${preset.page}ページ`, preset.note].filter(Boolean).join("。"),
       wolfCount: preset.wolfCount,
       builtin: true,
@@ -1195,6 +1199,7 @@ function openRoleCompositionDialog() {
   els.roleSetNote.hidden = !selectedSet?.note;
   els.roleCompositionSelfBiteInput.checked = selectedSet ? selectedSet.selfBiteAllowed === true : state.selfBiteAllowed;
   els.roleCompositionNoBiteInput.checked = selectedSet ? selectedSet.noBiteAllowed === true : state.noBiteAllowed;
+  els.roleCompositionRunoffTieLimitInput.value = normalizeRunoffTieLimit(state.runoffTieLimit);
   const attackRecorded = hasRecordedAttack();
   els.roleCompositionSelfBiteInput.disabled = attackRecorded;
   els.roleCompositionNoBiteInput.disabled = attackRecorded;
@@ -1276,6 +1281,7 @@ function applyRoleCompositionDraft() {
   const validation = validateRoleComposition();
   if (!validation.valid) return showRoleCompositionError(validation.messages);
   state.roleComposition = validation.normalized;
+  state.runoffTieLimit = normalizeRunoffTieLimit(els.roleCompositionRunoffTieLimitInput.value);
   state.wolfCount = normalizeWolfCount(getRoleCompositionWolfCount(validation.normalized, findRoleSet(editingRoleSetId)));
   if (!hasRecordedAttack()) {
     state.selfBiteAllowed = els.roleCompositionSelfBiteInput.checked;
@@ -1296,12 +1302,13 @@ function areRoleCompositionsEqual(left, right) {
   return [...ROLE_COMPOSITION_ROLES].every((role) => (normalizedLeft[role] || 0) === (normalizedRight[role] || 0));
 }
 
-function areRoleSetsEqual(roleSet, composition, selfBiteAllowed, noBiteAllowed) {
+function areRoleSetsEqual(roleSet, composition, selfBiteAllowed, noBiteAllowed, runoffTieLimit = state.runoffTieLimit) {
   if (!roleSet) return false;
   return (
     areRoleCompositionsEqual(roleSet.composition, composition) &&
     (roleSet.selfBiteAllowed === true) === (selfBiteAllowed === true) &&
-    (roleSet.noBiteAllowed === true) === (noBiteAllowed === true)
+    (roleSet.noBiteAllowed === true) === (noBiteAllowed === true) &&
+    normalizeRunoffTieLimit(roleSet.runoffTieLimit) === normalizeRunoffTieLimit(runoffTieLimit)
   );
 }
 
@@ -1321,6 +1328,7 @@ function saveRoleSetFromDraft({ overwrite }) {
   if (duplicateName) return showRoleCompositionError(["この大会には同じレギュ名の配役セットがすでにあります"]);
   const selfBiteAllowed = els.roleCompositionSelfBiteInput.checked;
   const noBiteAllowed = els.roleCompositionNoBiteInput.checked;
+  const runoffTieLimit = normalizeRunoffTieLimit(els.roleCompositionRunoffTieLimitInput.value);
   const sourceSet = findRoleSet(editingRoleSetId);
   const draftWolfCount = getRoleCompositionWolfCount(validation.normalized, sourceSet);
   if (existing) {
@@ -1329,6 +1337,7 @@ function saveRoleSetFromDraft({ overwrite }) {
     existing.tournamentId = state.selectedTournamentId;
     existing.selfBiteAllowed = selfBiteAllowed;
     existing.noBiteAllowed = noBiteAllowed;
+    existing.runoffTieLimit = runoffTieLimit;
     existing.wolfCount = draftWolfCount;
     existing.updatedAt = new Date().toISOString();
   } else {
@@ -1342,6 +1351,7 @@ function saveRoleSetFromDraft({ overwrite }) {
       composition: validation.normalized,
       selfBiteAllowed,
       noBiteAllowed,
+      runoffTieLimit,
       updatedAt: new Date().toISOString(),
     });
   }
@@ -1352,6 +1362,7 @@ function saveRoleSetFromDraft({ overwrite }) {
     state.noBiteAllowed = noBiteAllowed;
   }
   state.selectedRoleSetId = editingRoleSetId;
+  state.runoffTieLimit = runoffTieLimit;
   renderRoleCompositionEditor();
   renderAndStore();
   toast("配役セットを保存しました");
@@ -1401,6 +1412,7 @@ function deleteEditingRoleSet() {
   els.roleSetNote.hidden = true;
   els.roleCompositionSelfBiteInput.checked = state.selfBiteAllowed;
   els.roleCompositionNoBiteInput.checked = state.noBiteAllowed;
+  els.roleCompositionRunoffTieLimitInput.value = normalizeRunoffTieLimit(state.runoffTieLimit);
   renderRoleCompositionEditor();
   renderAndStore();
   toast("配役セットを削除しました");
@@ -1412,6 +1424,7 @@ function applyRoleSet(roleSetId) {
   if (!roleSet) return render();
   state.roleComposition = normalizeRoleComposition(roleSet.composition);
   state.selectedRoleSetId = roleSet.id;
+  state.runoffTieLimit = normalizeRunoffTieLimit(roleSet.runoffTieLimit);
   if (!hasRecordedAttack()) {
     state.selfBiteAllowed = roleSet.selfBiteAllowed === true;
     state.noBiteAllowed = roleSet.noBiteAllowed === true;
@@ -1693,6 +1706,7 @@ function createGameHistory(winner, trueRoles = new Map()) {
     roleSetName: findRoleSet(state.selectedRoleSetId)?.name || "",
     selfBiteAllowed: state.selfBiteAllowed,
     noBiteAllowed: state.noBiteAllowed,
+    runoffTieLimit: normalizeRunoffTieLimit(state.runoffTieLimit),
     wolfModeActive: state.wolfModeActive,
     wolfModeCoverRole: players.find(isPriorityPlayer)?.wolfModeCoverRole || state.wolfModeCoverRole,
     winner: normalizeCitizenText(winner),
@@ -1878,6 +1892,7 @@ function createBoard(customName, tournamentId) {
     selectedRoleSetId: "",
     selfBiteAllowed: false,
     noBiteAllowed: false,
+    runoffTieLimit: 0,
     wolfModeActive: false,
     wolfModeCoverRole: "",
     reasoningPerspective: "seer",
@@ -3174,6 +3189,12 @@ function getVoteTargetsForVoter(players, voterId) {
 
 function updateVoteModeNotice(context) {
   if (!els.voteModeNotice) return;
+  if (context.noExile) {
+    els.voteModeNotice.hidden = false;
+    els.voteModeNotice.className = "vote-mode-notice";
+    els.voteModeNotice.textContent = `決選投票で${context.runoffRound}回同票のため、この日は吊りなしです。`;
+    return;
+  }
   if (context.type === "runoff") {
     const names = context.targetPlayers.map((player) => player.name).join(" / ");
     const helper = context.targetPlayers.length === 2 ? "片方の投票者を選んで決定すると、残りは反対側へ入ります。" : `投票先は ${names || "候補なし"} のみです。`;
@@ -3189,7 +3210,7 @@ function updateVoteModeNotice(context) {
 
 function renderRunoffQuickPanel(context) {
   if (!els.runoffQuickPanel) return;
-  if (context.type !== "runoff") {
+  if (context.type !== "runoff" || context.noExile) {
     els.runoffQuickPanel.hidden = true;
     els.runoffQuickPanel.innerHTML = "";
     selectedRunoffVoterIds = new Set();
@@ -3299,7 +3320,7 @@ function addSelectedRunoffVotes(context) {
   });
   selectedRunoffVoterIds = new Set();
   const autoExileMessage = applyAutoExileFromCompletedVotes(day, state.voteHistories);
-  els.voteDayInput.value = day;
+  els.voteDayInput.value = getNextVoteInputDay(day, state.voteHistories);
   renderAndStore();
   renderVoteHistoryList();
   updateVoteVoterOptions();
@@ -3377,6 +3398,7 @@ function getVoteDaySummaryHtml(votes, players, day, isSelected) {
         ${isSelected ? '<span>入力中</span>' : ""}
       </div>
       ${phaseHtml || '<span class="vote-summary-empty">投票なし</span>'}
+      ${getVoteInputContext(day, votes, players).noExile ? '<strong>同票上限により吊りなし</strong>' : ""}
     </section>
   `;
 }
@@ -3416,7 +3438,12 @@ function getVoteAvailableTargets(players, day, votes = state.voteHistories) {
   return getVoteInputContext(day, votes, players).targetPlayers;
 }
 
-function getVoteInputContext(day, votes = state.voteHistories, players = getActivePlayers()) {
+function normalizeRunoffTieLimit(value) {
+  const limit = Number(value);
+  return Number.isInteger(limit) && limit >= 1 && limit <= 5 ? limit : 0;
+}
+
+function getVoteInputContext(day, votes = state.voteHistories, players = getActivePlayers(), tieLimit = state.runoffTieLimit) {
   const normalizedDay = Number(day) || 1;
   const normalVotes = getVotesForPhase(votes, normalizedDay, "normal", 0);
   const normalVoters = getVoteAvailableVotersForPhase(players, normalizedDay, votes, "normal", 0);
@@ -3456,6 +3483,9 @@ function getVoteInputContext(day, votes = state.voteHistories, players = getActi
     }
     const runoffVotes = getVotesForPhase(votes, normalizedDay, "runoff", runoffRound);
     const nextTiedTargetIds = getTopVoteTargetIds(runoffVotes);
+    if (nextTiedTargetIds.length >= 2 && normalizeRunoffTieLimit(tieLimit) && runoffRound >= normalizeRunoffTieLimit(tieLimit)) {
+      return { type: "runoff", runoffRound, voterPlayers: [], targetPlayers: [], tiedTargetIds: nextTiedTargetIds, noExile: true };
+    }
     if (nextTiedTargetIds.length < 2) {
       return {
         type: "runoff",
@@ -3544,7 +3574,8 @@ function getNextVoteOrder(day, votes = state.voteHistories) {
 }
 
 function getDefaultVoteDialogDay() {
-  const exiledMax = getMaxStatusDay("exiled");
+  const noExileDays = getNoExileVoteDays();
+  const exiledMax = Math.max(getMaxStatusDay("exiled"), 0, ...noExileDays);
   if (exiledMax > 0) {
     for (let day = 1; day <= exiledMax; day += 1) {
       if (hasRemainingVotersForDay(day)) return day;
@@ -3560,11 +3591,18 @@ function getNextVoteInputDay(currentDay, votes = state.voteHistories) {
   const hasExileForDay = getActivePlayers().some(
     (player) => player.status === "exiled" && (Number(player.statusDay) || 1) === day,
   );
-  return hasExileForDay && !hasRemainingVotersForDay(day, votes) ? day + 1 : day;
+  return (hasExileForDay || getVoteInputContext(day, votes).noExile) && !hasRemainingVotersForDay(day, votes) ? day + 1 : day;
+}
+
+function getNoExileVoteDays(votes = state.voteHistories, players = getActivePlayers(), tieLimit = state.runoffTieLimit) {
+  if (!normalizeRunoffTieLimit(tieLimit)) return [];
+  return [...new Set(votes.map((vote) => Number(vote.day) || 1))]
+    .filter((day) => getVoteInputContext(day, votes, players, tieLimit).noExile);
 }
 
 function applyAutoExileFromCompletedVotes(day, votes = state.voteHistories) {
   const normalizedDay = Number(day) || 1;
+  if (getVoteInputContext(normalizedDay, votes).noExile) return `${normalizedDay}日目は同票上限により吊りなしです`;
   if (hasRemainingVotersForDay(normalizedDay, votes)) return "";
   const targetId = getCompletedVoteExileTargetId(normalizedDay, votes);
   if (!targetId) return "";
@@ -3581,6 +3619,7 @@ function applyAutoExileFromCompletedVotes(day, votes = state.voteHistories) {
 }
 
 function getCompletedVoteExileTargetId(day, votes = state.voteHistories) {
+  if (getVoteInputContext(day, votes).noExile) return "";
   const normalVotes = getVotesForPhase(votes, day, "normal", 0);
   const normalTop = getTopVoteTargetIds(normalVotes);
   if (normalTop.length === 1) return normalTop[0];
@@ -4890,7 +4929,7 @@ function getNextStatusDayForStatus(status, player = null) {
     }
   }
   backfillStatusDays();
-  const exiledMax = getMaxStatusDay("exiled");
+  const exiledMax = Math.max(getMaxStatusDay("exiled"), 0, ...getNoExileVoteDays());
   const attackedMax = getMaxStatusDay("attacked");
   if (status === "exiled") return exiledMax + 1;
   if (status === "attacked") return Math.max(2, exiledMax + 1, attackedMax + 1);
@@ -5442,7 +5481,8 @@ function getCurrentLogDay() {
     exiledDay > 0 && Math.max(attackedDay, guardDay) >= exiledDay
       ? exiledDay + 1
       : Math.max(exiledDay, attackedDay);
-  return Math.max(1, resultDay, actionDay, claimDay, voteDay, completedStatusDay);
+  const noExileNextDay = Math.max(0, ...getNoExileVoteDays()) + 1;
+  return Math.max(1, resultDay, actionDay, claimDay, voteDay, completedStatusDay, noExileNextDay);
 }
 
 function getNextRoleActionDay(actorId, role) {
@@ -7350,6 +7390,7 @@ function createBoardPayloadFromHistory(history) {
     selectedRoleSetId: "",
     selfBiteAllowed: history.selfBiteAllowed === true,
     noBiteAllowed: history.noBiteAllowed === true,
+    runoffTieLimit: normalizeRunoffTieLimit(history.runoffTieLimit),
     wolfModeActive: history.wolfModeActive === true,
     wolfModeCoverRole: history.wolfModeCoverRole || "",
     reasoningPerspective: "seer",
@@ -8336,6 +8377,7 @@ function buildHistoryTimeline(history) {
       });
     const voteSummary = formatVoteSummaryForDay(voteHistories, history.players, day);
     if (voteSummary) events.push(voteSummary);
+    if (getVoteInputContext(day, voteHistories, activePlayers, normalizeRunoffTieLimit(history.runoffTieLimit)).noExile) events.push("追放なし: 決選投票の同票上限");
     activePlayers
       .filter((player) => player.status === "exiled" && (Number(player.statusDay) || 1) === day)
       .forEach((player) => events.push(`追放: ${player.name}`));
@@ -8411,6 +8453,7 @@ function buildCurrentTimeline() {
       });
     const voteSummary = formatVoteSummaryForDay(voteHistories, state.players, day);
     if (voteSummary) events.push(voteSummary);
+    if (getVoteInputContext(day, voteHistories, activePlayers).noExile) events.push("追放なし: 決選投票の同票上限");
     activePlayers
       .filter((player) => player.status === "exiled" && (Number(player.statusDay) || 1) === day)
       .forEach((player) => events.push(`追放: ${player.name}`));
@@ -9176,6 +9219,7 @@ function applySavedState(saved) {
   state.selectedRoleSetId = String(saved.selectedRoleSetId || "");
   state.selfBiteAllowed = saved.selfBiteAllowed === true;
   state.noBiteAllowed = saved.noBiteAllowed === true;
+  state.runoffTieLimit = normalizeRunoffTieLimit(saved.runoffTieLimit);
   state.players = Array.isArray(saved.players) ? saved.players.map(normalizePlayer) : [];
   const legacyWolfMode =
     state.players.some((player) => player.wolfTeammate) ||
@@ -9516,6 +9560,7 @@ function resetStateToDefaults() {
     selectedRoleSetId: "",
     selfBiteAllowed: false,
     noBiteAllowed: false,
+    runoffTieLimit: 0,
     wolfModeActive: false,
     wolfModeCoverRole: "",
     reasoningPerspective: "seer",
@@ -9757,6 +9802,7 @@ function ensureMatchDefaults() {
   state.roleComposition = normalizeRoleComposition(state.roleComposition);
   state.selfBiteAllowed = state.selfBiteAllowed === true;
   state.noBiteAllowed = state.noBiteAllowed === true;
+  state.runoffTieLimit = normalizeRunoffTieLimit(state.runoffTieLimit);
   const selectedRoleSet = findRoleSet(state.selectedRoleSetId);
   state.selectedRoleSetId =
     selectedRoleSet && areRoleSetsEqual(selectedRoleSet, state.roleComposition, state.selfBiteAllowed, state.noBiteAllowed)
@@ -9889,6 +9935,7 @@ function normalizeRoleSet(roleSet) {
     composition,
     selfBiteAllowed: roleSet.selfBiteAllowed === true,
     noBiteAllowed: roleSet.noBiteAllowed === true,
+    runoffTieLimit: normalizeRunoffTieLimit(roleSet.runoffTieLimit),
     updatedAt: String(roleSet.updatedAt || ""),
   };
 }
@@ -10377,6 +10424,7 @@ function normalizeGameHistory(history) {
     roleSetName: String(history.roleSetName || "").trim().slice(0, 40),
     selfBiteAllowed: history.selfBiteAllowed === true,
     noBiteAllowed: history.noBiteAllowed === true,
+    runoffTieLimit: normalizeRunoffTieLimit(history.runoffTieLimit),
     wolfModeActive: history.wolfModeActive === true || history.players.some((player) => player.wolfTeammate === true),
     wolfModeCoverRole: WOLF_MODE_COVER_ROLES.has(history.wolfModeCoverRole) ? history.wolfModeCoverRole : "",
     winner: normalizeCitizenText(history.winner || "勝利陣営未設定"),
@@ -10424,6 +10472,7 @@ function normalizeBoard(board) {
   payload.selectedRoleSetId = String(payload.selectedRoleSetId || "");
   payload.selfBiteAllowed = payload.selfBiteAllowed === true;
   payload.noBiteAllowed = payload.noBiteAllowed === true;
+  payload.runoffTieLimit = normalizeRunoffTieLimit(payload.runoffTieLimit);
   payload.wolfModeActive = payload.wolfModeActive === true;
   payload.wolfModeCoverRole = WOLF_MODE_COVER_ROLES.has(payload.wolfModeCoverRole) ? payload.wolfModeCoverRole : "";
   payload.reasoningPerspective = normalizeReasoningPerspective(payload.reasoningPerspective);
